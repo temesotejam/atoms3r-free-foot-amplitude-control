@@ -65,6 +65,8 @@ footer{text-align:center;color:#87919c;font-size:.76rem;padding:4px 0 14px}
       <div class="metric"><span>実電流</span><b id="actual">--</b></div>
       <div class="metric"><span>バッテリー</span><b id="battery">--</b></div>
       <div class="metric"><span>残り時間</span><b id="remaining">--</b></div>
+      <div class="metric"><span>右足角度（上）</span><b id="footRight">--</b></div>
+      <div class="metric"><span>左足角度（下）</span><b id="footLeft">--</b></div>
     </div>
     <p id="systemInfo" class="note">状態を取得しています。</p>
     <p id="errorInfo" class="error"></p>
@@ -74,6 +76,7 @@ footer{text-align:center;color:#87919c;font-size:.76rem;padding:4px 0 14px}
     <h2>8° 振幅制御測定</h2>
     <div class="fixed">
       目標ピーク <b>8.0°</b> ／ 測定 <b>30秒</b> ／ 遅延補償：3 ms固定<br>
+      足角度：上マーカー＝右足、下マーカー＝左足。既存の直立・静止検知中に起動時0°のみ校正します。<br>
       測定中はWeb表示の更新を最小限にし、制御処理を優先します。
     </div>
     <button id="energy" class="primary" disabled onclick="startEnergy()">8°測定を開始</button>
@@ -84,16 +87,18 @@ footer{text-align:center;color:#87919c;font-size:.76rem;padding:4px 0 14px}
     <h2>測定データ</h2>
     <p id="logInfo" class="note">RWLOGの状態を確認しています。</p>
     <a id="rwlog" class="action disabled" href="/download/rwlog" onclick="beginDownload()">RWLOGをダウンロード</a>
+    <a id="footlog" class="action disabled" href="/download/foot-angle.csv" onclick="beginDownload()">足角度CSVをダウンロード</a>
     <button id="clear" class="secondary" disabled onclick="postClear()">測定データを消去</button>
   </div>
 </main>
-<footer>V46al-R2: A_prev control active / logger・RWLOG download = stable</footer>
+<footer>Free-foot observation layer / V46al-R2 control and RWLOG v51 retained</footer>
 <script>
 let downloading=false,lastStatus={},displayFrozen=false,refreshInFlight=false,startPending=false,controlEpoch=0;
 const energy=document.getElementById('energy');
 const stop=document.getElementById('stop');
 const clear=document.getElementById('clear');
 const rwlog=document.getElementById('rwlog');
+const footlog=document.getElementById('footlog');
 
 function lock(e,v){
   if(e.tagName==='A')e.classList.toggle('disabled',v);
@@ -168,6 +173,7 @@ function apply(j){
   lock(stop,!running);
   lock(clear,busy||running);
   lock(rwlog,busy||running||j.rwlog_downloadable!=='yes');
+  lock(footlog,busy||running||j.foot_angle_log_downloadable!=='yes');
 
   document.getElementById('stateText').textContent=stateLabel(j);
   const badge=document.getElementById('readyBadge');
@@ -179,15 +185,19 @@ function apply(j){
   document.getElementById('actual').textContent=current(j.roller_actual_current_mA);
   document.getElementById('battery').textContent=voltage(j.battery_mV);
   document.getElementById('remaining').textContent=num(j.remaining_s)===null?'--':num(j.remaining_s).toFixed(1)+' s';
+  document.getElementById('footRight').textContent=angle(j.right_foot_angle_deg);
+  document.getElementById('footLeft').textContent=angle(j.left_foot_angle_deg);
 
   const imu=j.imu_ok?'IMU OK':'IMU NG';
   const roller=j.roller_ok?'Roller OK':'Roller NG';
+  const foot=j.foot_zero_ready?'Foot 0° OK':(j.foot_camera_ok?'Foot 0° WAIT':'Foot CAM NG');
   document.getElementById('systemInfo').textContent=
-    imu+' / '+roller+' / 目標 '+Number(j.energy_control_autonomous_target_peak_deg||8).toFixed(1)+'° / 遅延補償 3 ms';
+    imu+' / '+roller+' / '+foot+' / 目標 '+Number(j.energy_control_autonomous_target_peak_deg||8).toFixed(1)+'° / 遅延補償 3 ms';
   document.getElementById('errorInfo').textContent=j.last_error||'';
 
   if(j.rwlog_downloadable==='yes'){
-    document.getElementById('logInfo').textContent='RWLOG準備完了'+(j.download_filename?'：'+j.download_filename:'');
+    const footReady=j.foot_angle_log_downloadable==='yes'?' / 足角度CSV準備完了':' / 足角度CSVなし';
+    document.getElementById('logInfo').textContent='RWLOG準備完了'+(j.download_filename?'：'+j.download_filename:'')+footReady;
   }else if(running){
     document.getElementById('logInfo').textContent='測定中です。終了後にRWLOGを保存できます。';
   }else{
@@ -196,7 +206,7 @@ function apply(j){
 }
 
 function applyFrozenState(){
-  [energy,clear,rwlog].forEach(x=>lock(x,true));
+  [energy,clear,rwlog,footlog].forEach(x=>lock(x,true));
   lock(stop,false);
   document.getElementById('stateText').textContent='測定中';
   document.getElementById('readyBadge').textContent='RUNNING';
@@ -227,7 +237,7 @@ async function refresh(){
     apply(lastStatus);
   }catch(e){
     if(!displayFrozen){
-      [energy,stop,clear,rwlog].forEach(x=>lock(x,true));
+      [energy,stop,clear,rwlog,footlog].forEach(x=>lock(x,true));
       document.getElementById('stateText').textContent='通信待ち';
     }
   }finally{
@@ -243,12 +253,13 @@ refresh();
 </html>
 )HTML";
 
-void WebUi::begin(WebServer& server, ExperimentRunner& runner, ImuManager& imu, Roller485Manager& roller, PsramLogger& logger) {
+void WebUi::begin(WebServer& server, ExperimentRunner& runner, ImuManager& imu, Roller485Manager& roller, PsramLogger& logger, FootAngleTracker& foot_angles) {
   server_ = &server;
   runner_ = &runner;
   imu_ = &imu;
   roller_ = &roller;
   logger_ = &logger;
+  foot_angles_ = &foot_angles;
 
   WiFi.mode(WIFI_AP);
   WiFi.softAP(Config::AP_SSID, Config::AP_PASS, Config::AP_CHANNEL);
@@ -259,6 +270,7 @@ void WebUi::begin(WebServer& server, ExperimentRunner& runner, ImuManager& imu, 
   server_->on("/stop", HTTP_POST, [this]() { handleStop(); });
   server_->on("/clear", HTTP_POST, [this]() { handleClear(); });
   server_->on("/download/rwlog", HTTP_GET, [this]() { handleRwLog(); });
+  server_->on("/download/foot-angle.csv", HTTP_GET, [this]() { handleFootAngleLog(); });
   server_->enableDelay(false);  // Empty HTTP polls must not add sleeps to idle acquisition.
   server_->begin();
 }
@@ -296,6 +308,8 @@ void WebUi::handleStartEnergyControlAutonomous() {
   if (run_control.active()) { server_->send(409, "text/plain", "run_in_progress"); return; }
   if (logger_->downloading()) { server_->send(409, "text/plain", "download_in_progress"); return; }
   if (!run_control.ready()) { server_->send(503, "text/plain", "run_control_worker_not_ready"); return; }
+  if (!foot_angles_ || !foot_angles_->cameraOk()) { server_->send(503, "text/plain", "foot_angle_camera_not_ready"); return; }
+  if (!foot_angles_->zeroReady()) { server_->send(409, "text/plain", "foot_angle_zero_not_ready_hold_upright"); return; }
   if (server_->hasArg("timing_ms")) {
     // Old cached pages must refresh instead of silently requesting another delay.
     server_->send(400, "text/plain", "timing_selection_removed_fixed_3ms_reload_page"); return;
@@ -396,6 +410,7 @@ void WebUi::handleClear() {
     return;
   }
   runner_->clearFinishedOrEstop();
+  if (foot_angles_) foot_angles_->clearFinishedLog();
   server_->send(200, "text/plain", "cleared");
 }
 
@@ -408,12 +423,22 @@ void WebUi::handleRwLog() {
   logger_->streamRwLog(*server_);
 }
 
+void WebUi::handleFootAngleLog() {
+  if (run_control.active()) { server_->send(409, "text/plain", "run_in_progress"); return; }
+  if (runner_->running()) { server_->send(409, "text/plain", "measurement_running"); return; }
+  if (!foot_angles_) { server_->send(503, "text/plain", "foot_angle_tracker_unavailable"); return; }
+  foot_angles_->streamCsv(*server_);
+}
+
 String WebUi::statusJson() const {
   const auto& st = runner_->status();
   const RollerTelemetry roller = roller_->telemetrySnapshot();
+  const FootAngleSnapshot foot = foot_angles_ ? foot_angles_->snapshot() : FootAngleSnapshot{};
 
   char filename[72];
   logger_->downloadFilename(filename, sizeof(filename));
+  char foot_filename[72] = {};
+  if (foot_angles_) foot_angles_->downloadFilename(foot_filename, sizeof(foot_filename));
 
   String json;
   json.reserve(768);
@@ -431,6 +456,18 @@ String WebUi::statusJson() const {
   json += ",\"rwlog_downloadable\":\"" +
           String(logger_->rwlogDownloadable() ? "yes" : "no") + "\"";
   json += ",\"download_filename\":\"" + String(filename) + "\"";
+  json += ",\"foot_angle_log_downloadable\":\"" +
+          String(foot_angles_ && foot_angles_->logDownloadable() ? "yes" : "no") + "\"";
+  json += ",\"foot_angle_download_filename\":\"" + String(foot_filename) + "\"";
+  json += ",\"foot_camera_ok\":" + String(foot.camera_ok ? "true" : "false");
+  json += ",\"foot_zero_ready\":" + String(foot.zero_ready ? "true" : "false");
+  json += ",\"right_foot_angle_deg\":" + String(foot.right_angle_deg, 3);
+  json += ",\"left_foot_angle_deg\":" + String(foot.left_angle_deg, 3);
+  json += ",\"right_foot_detected\":" + String(foot.right_detected ? "true" : "false");
+  json += ",\"left_foot_detected\":" + String(foot.left_detected ? "true" : "false");
+  json += ",\"right_foot_in_range\":" + String(foot.right_in_range ? "true" : "false");
+  json += ",\"left_foot_in_range\":" + String(foot.left_in_range ? "true" : "false");
+  json += ",\"foot_zero_samples\":" + String(foot.zero_samples);
   json += ",\"imu_ok\":" + String(imu_->ok() ? "true" : "false");
   json += ",\"roller_ok\":" + String(roller_->ok() ? "true" : "false");
   json += ",\"roller_actual_current_mA\":" + String(roller.actual_current_mA);
