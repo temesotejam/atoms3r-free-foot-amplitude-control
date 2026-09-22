@@ -40,6 +40,7 @@ jobs:
           python tools/test_v46ak_web_backend_cleanup.py
           python tools/test_v46ak_download_freeze.py
           python tools/test_v46al_r2_previous_peak_control.py
+          python tools/test_camera_coexistence.py
       - name: Run retained native acquisition, startup, control and MEKF tests
         run: |
           set -euxo pipefail

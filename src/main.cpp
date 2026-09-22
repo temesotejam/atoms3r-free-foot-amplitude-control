@@ -3,6 +3,7 @@
 #include <WebServer.h>
 
 #include "config.h"
+#include "camera_coexistence.h"
 #include "experiment_runner.h"
 #include "imu_manager.h"
 #include "psram_logger.h"
@@ -12,6 +13,7 @@
 #include "run_control_worker.h"
 
 WebServer server(Config::HTTP_PORT);
+CameraCoexistenceProbe camera_probe;
 PsramLogger logger;
 ImuManager imu;
 Roller485Manager roller;
@@ -120,6 +122,26 @@ void setup() {
   Serial.printf("IMU acquisition: %s internal_i2c=%d SDA=%d SCL=%d error=%s\n",
                 imu_ok ? "OK" : "FAILED", static_cast<int>(M5.In_I2C.getPort()),
                 M5.In_I2C.getSDA(), M5.In_I2C.getSCL(), imu.lastError());
+
+  // Phase 1 camera coexistence probe only. No marker detection, no foot angle,
+  // no control/log/UI dependency. Camera SCCB temporarily borrows I2C0 here,
+  // releases it, and only then may Roller485 take ownership of I2C0.
+  const bool camera_ok = camera_probe.begin();
+  const CameraCoexistenceSnapshot camera_boot = camera_probe.snapshot();
+  Serial.printf("Camera coexistence: %s xclk=%luHz fb=%uHz core=%d priority=%u "
+                "internal=%u->%u dma=%u->%u psram=%u->%u error=%s\n",
+                camera_ok ? "OK" : "FAILED",
+                static_cast<unsigned long>(camera_boot.xclk_hz),
+                static_cast<unsigned>(camera_boot.target_capture_hz),
+                static_cast<int>(camera_boot.consumer_core),
+                static_cast<unsigned>(camera_boot.consumer_priority),
+                static_cast<unsigned>(camera_boot.internal_free_before),
+                static_cast<unsigned>(camera_boot.internal_free_after),
+                static_cast<unsigned>(camera_boot.dma_free_before),
+                static_cast<unsigned>(camera_boot.dma_free_after),
+                static_cast<unsigned>(camera_boot.psram_free_before),
+                static_cast<unsigned>(camera_boot.psram_free_after),
+                camera_probe.lastError());
 
   const bool roller_ok = roller.begin();
   const bool roller_task_ok = roller_ok && roller.startIoTask(

@@ -1,0 +1,69 @@
+from pathlib import Path
+import hashlib
+
+ROOT = Path(__file__).resolve().parents[1]
+
+main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
+camera = (ROOT / "src/camera_coexistence.cpp").read_text(encoding="utf-8")
+header = (ROOT / "src/camera_coexistence.h").read_text(encoding="utf-8")
+
+def git_blob_sha(path):
+    data = (ROOT / path).read_bytes()
+    return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+
+# Phase 1 must not modify the controller, Web UI, logger, IMU implementation,
+# or Roller implementation. Camera is an isolated observer only.
+expected = {
+    "src/web_ui.cpp": "c63bb11581c8252fe92f151fb97c9208175bd336",
+    "src/experiment_runner.cpp": "58688977951627cdab038d73ca4d64b0c6b3d645",
+    "src/psram_logger.cpp": "e61167fba2869ad948df37d999a7bcb6e5346817",
+    "src/psram_logger.h": "63a16781660142a5e3a82721f90cadd9cc2ce9b7",
+    "src/imu_manager.cpp": "4842be2a4d91bcd8f2895cfe046489a47a3ce64c",
+    "src/roller485_manager.cpp": "c891e50cc832654034d9a6bc64848f48713741c5",
+}
+for path, sha in expected.items():
+    assert git_blob_sha(path) == sha, path
+
+# Keep the proven boot skeleton. Camera is inserted only after BMI270 startup
+# and before Roller485 takes I2C0.
+assert main.index("M5.begin(cfg);") < main.index("const bool psram_ok = logger.begin();")
+assert main.index("const bool psram_ok = logger.begin();") < main.index("const bool imu_ok = imu.begin();")
+assert main.index("const bool imu_ok = imu.begin();") < main.index("const bool camera_ok = camera_probe.begin();")
+assert main.index("const bool camera_ok = camera_probe.begin();") < main.index("const bool roller_ok = roller.begin();")
+assert main.index("const bool roller_ok = roller.begin();") < main.index("web.begin(server, runner, imu, roller, logger);")
+
+# SCCB must never touch BMI270 I2C1. It temporarily owns I2C0 and releases it
+# before Roller starts.
+assert "I2C_NUM_1" not in camera
+assert "i2c_param_config(I2C_NUM_0, &sccb)" in camera
+assert "i2c_driver_install(I2C_NUM_0" in camera
+assert "c.sccb_i2c_port = I2C_NUM_0;" in camera
+assert "c.pin_sccb_sda = -1;" in camera
+assert "c.pin_sccb_scl = -1;" in camera
+assert "i2c_driver_delete(I2C_NUM_0)" in camera
+
+# Low-load coexistence profile: S3 16 MHz direct-PSRAM DMA path, one QVGA
+# grayscale framebuffer, and an application-side 5 Hz throttle.
+assert "kCameraXclkHz = 16000000UL" in camera
+assert "PIXFORMAT_GRAYSCALE" in camera
+assert "FRAMESIZE_QVGA" in camera
+assert "c.fb_count = 1;" in camera
+assert "CAMERA_FB_IN_PSRAM" in camera
+assert "kTargetCaptureHz = 5" in camera
+assert "kFrameHoldMs = 180" in camera
+assert "kFrameReleaseMs = 20" in camera
+assert "kConsumerPriority = 1" in camera
+assert "kConsumerCore = 0" in camera
+
+# Absolutely no foot-angle/marker/control coupling in Phase 1.
+for token in ("foot_angle", "right_foot", "left_foot", "marker", "centroid", "deg_per_px"):
+    assert token not in camera.lower(), token
+
+# Memory pressure is observable at boot.
+for token in ("MALLOC_CAP_INTERNAL", "MALLOC_CAP_DMA", "MALLOC_CAP_SPIRAM",
+              "internal_free_before", "internal_free_after",
+              "dma_free_before", "dma_free_after",
+              "psram_free_before", "psram_free_after"):
+    assert token in camera + header, token
+
+print("PASS: isolated camera coexistence Phase 1")

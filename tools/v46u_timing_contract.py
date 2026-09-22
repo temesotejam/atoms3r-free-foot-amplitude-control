@@ -8,8 +8,37 @@ from v46z_comparison_zero_contract import normalize_log_types as normalize_v46z_
 from v46ak_observation_contract import normalize_file as normalize_v46ak_file
 from v46al_control_contract import normalize_file as normalize_v46al_file
 ROOT=Path(__file__).resolve().parents[1]
+
+def normalize_camera_coexistence(path, data):
+    if path != 'src/main.cpp':
+        return data
+    data=data.replace('#include "camera_coexistence.h"\n','')
+    data=data.replace('CameraCoexistenceProbe camera_probe;\n','')
+    data=data.replace('''  // Phase 1 camera coexistence probe only. No marker detection, no foot angle,
+  // no control/log/UI dependency. Camera SCCB temporarily borrows I2C0 here,
+  // releases it, and only then may Roller485 take ownership of I2C0.
+  const bool camera_ok = camera_probe.begin();
+  const CameraCoexistenceSnapshot camera_boot = camera_probe.snapshot();
+  Serial.printf("Camera coexistence: %s xclk=%luHz fb=%uHz core=%d priority=%u "
+                "internal=%u->%u dma=%u->%u psram=%u->%u error=%s\\n",
+                camera_ok ? "OK" : "FAILED",
+                static_cast<unsigned long>(camera_boot.xclk_hz),
+                static_cast<unsigned>(camera_boot.target_capture_hz),
+                static_cast<int>(camera_boot.consumer_core),
+                static_cast<unsigned>(camera_boot.consumer_priority),
+                static_cast<unsigned>(camera_boot.internal_free_before),
+                static_cast<unsigned>(camera_boot.internal_free_after),
+                static_cast<unsigned>(camera_boot.dma_free_before),
+                static_cast<unsigned>(camera_boot.dma_free_after),
+                static_cast<unsigned>(camera_boot.psram_free_before),
+                static_cast<unsigned>(camera_boot.psram_free_after),
+                camera_probe.lastError());
+
+''','')
+    return data
+
 def original_timing_file(path):
-    data=(ROOT/path).read_text()
+    data=normalize_camera_coexistence(path,(ROOT/path).read_text())
     # V46al-R1 is the declared active-control delta; remove it before retained hashes.
     data=normalize_v46al_file(path, data)
     # V46ak is observation-only; remove it before checking the retained baseline.
