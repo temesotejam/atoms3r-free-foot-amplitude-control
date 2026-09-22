@@ -31,13 +31,10 @@ constexpr int PIN_CAM_D7 = 13;
 // entire QVGA grayscale frame from internal DMA RAM into PSRAM.
 constexpr uint32_t kCameraXclkHz = 16000000UL;
 
-// Phase 1C: continuous low-rate capture with the esp32-camera internal
-// cam_task linker-wrapped down to Priority 3. This is the direct test of the
-// suspected Wi-Fi contention: keep the camera running, but never let cam_task
-// run at the Wi-Fi driver's high priority.
-constexpr uint32_t kFrameHoldMs = 180;
-constexpr uint32_t kFrameReleaseMs = 20;
-constexpr uint8_t kTargetCaptureHz = 5;
+// Phase 1D: initialization/deinitialization isolation. The camera is powered,
+ // configured, used for exactly one frame, then fully deinitialized and powered
+ // down before Roller485 and WebServer startup.
+constexpr uint8_t kTargetCaptureHz = 0;
 
 constexpr uint32_t kConsumerStackBytes = 4096;
 constexpr UBaseType_t kConsumerPriority = 1;
@@ -67,9 +64,9 @@ void CameraCoexistenceProbe::captureMemoryAfter() {
 bool CameraCoexistenceProbe::begin() {
   snapshot_ = CameraCoexistenceSnapshot{};
   snapshot_.xclk_hz = kCameraXclkHz;
-  snapshot_.target_capture_hz = kTargetCaptureHz;
-  snapshot_.consumer_core = kConsumerCore;
-  snapshot_.consumer_priority = kConsumerPriority;
+  snapshot_.target_capture_hz = 0;
+  snapshot_.consumer_core = -1;
+  snapshot_.consumer_priority = 0;
   captureMemoryBefore();
 
   if (!initCameraOnTemporaryI2c0()) {
@@ -83,20 +80,35 @@ bool CameraCoexistenceProbe::begin() {
   snapshot_.cam_task_effective_priority = task_patch.effective_priority;
   snapshot_.cam_task_core = task_patch.core;
 
-  const BaseType_t created = xTaskCreatePinnedToCore(
-      taskEntry, "camera_probe", kConsumerStackBytes, this,
-      kConsumerPriority, &task_, kConsumerCore);
-  if (created != pdPASS) {
+  // Phase 1D: prove that the sensor and DMA path can deliver one frame, then
+  // completely remove the camera runtime before Wi-Fi/WebServer is started.
+  camera_fb_t* fb = esp_camera_fb_get();
+  if (!fb) {
     esp_camera_deinit();
-    setError("camera_probe_task_create_failed");
+    digitalWrite(PIN_CAM_POWER_N, HIGH);
+    setError("camera_first_frame_failed");
     captureMemoryAfter();
     return false;
   }
 
-  portENTER_CRITICAL(&mux_);
+  snapshot_.first_frame_seen = true;
+  snapshot_.frame_count = 1;
+  snapshot_.last_frame_bytes = fb->len;
+  snapshot_.last_width = static_cast<uint16_t>(fb->width);
+  snapshot_.last_height = static_cast<uint16_t>(fb->height);
+  esp_camera_fb_return(fb);
+
+  const esp_err_t deinit_err = esp_camera_deinit();
+  digitalWrite(PIN_CAM_POWER_N, HIGH);
+  if (deinit_err != ESP_OK) {
+    setError("camera_deinit_failed");
+    captureMemoryAfter();
+    return false;
+  }
+
+  snapshot_.camera_deinitialized = true;
   snapshot_.camera_ok = true;
-  portEXIT_CRITICAL(&mux_);
-  setError("ok");
+  setError("ok_probe_complete_camera_off");
   captureMemoryAfter();
   return true;
 }
@@ -191,36 +203,13 @@ bool CameraCoexistenceProbe::initCameraOnTemporaryI2c0() {
 }
 
 void CameraCoexistenceProbe::taskEntry(void* arg) {
-  static_cast<CameraCoexistenceProbe*>(arg)->taskLoop();
+  (void)arg;
+  vTaskDelete(nullptr);
 }
 
 void CameraCoexistenceProbe::taskLoop() {
-  for (;;) {
-    camera_fb_t* fb = esp_camera_fb_get();
-    if (!fb) {
-      portENTER_CRITICAL(&mux_);
-      ++snapshot_.frame_failures;
-      portEXIT_CRITICAL(&mux_);
-      setError("camera_frame_failed");
-      vTaskDelay(pdMS_TO_TICKS(200));
-      continue;
-    }
-
-    portENTER_CRITICAL(&mux_);
-    snapshot_.first_frame_seen = true;
-    ++snapshot_.frame_count;
-    snapshot_.last_frame_bytes = fb->len;
-    snapshot_.last_width = static_cast<uint16_t>(fb->width);
-    snapshot_.last_height = static_cast<uint16_t>(fb->height);
-    portEXIT_CRITICAL(&mux_);
-
-    // fb_count=1 plus a long hold interval limits how often cam_task can run.
-    // The critical change versus the failed Phase 1 build is that cam_task
-    // itself now runs at Priority 3 instead of the Wi-Fi-class Priority 23.
-    vTaskDelay(pdMS_TO_TICKS(kFrameHoldMs));
-    esp_camera_fb_return(fb);
-    vTaskDelay(pdMS_TO_TICKS(kFrameReleaseMs));
-  }
+  // Phase 1D does not create a runtime camera consumer task.
+  vTaskDelete(nullptr);
 }
 
 CameraCoexistenceSnapshot CameraCoexistenceProbe::snapshot() const {

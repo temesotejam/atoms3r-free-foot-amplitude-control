@@ -5,6 +5,7 @@
 struct CameraCoexistenceSnapshot {
   bool camera_ok = false;
   bool first_frame_seen = false;
+  bool camera_deinitialized = false;
   uint32_t frame_count = 0;
   uint32_t frame_failures = 0;
   uint32_t last_frame_bytes = 0;

@@ -28,8 +28,8 @@
     <section class="panel important">
       <h2>Camera共存 Phase 1</h2>
       <p><strong>今回は足角度計算をまだ入れていません。</strong> 固定足完成版の制御・MEKF・RWLOG・Web UIをそのまま残し、GC0308を低負荷で動作させてもWi-Fi/Web UIが維持できるかだけを確認する版です。</p>
-      <p>Phase 1CではCameraを <code>QVGA grayscale / XCLK 16 MHz / PSRAM / 1 framebuffer / 約5 Hz</code> で<strong>連続動作</strong>させます。設定用SCCBは起動時だけI2C0を借り、設定後に解放してからRoller485を起動します。</p>
-      <p>重要な変更は、Camera内部の <code>cam_task</code> をWi-Fiと同じPriority 23のままにせず、<strong>Priority 3へ下げたこと</strong>です。これでWeb UIが復活すれば、前の症状はcam_taskとWi-Fiの優先度競合だったと強く判断できます。</p>
+      <p>Phase 1DではCameraを初期化して<strong>実際に1枚だけ画像を取得</strong>したあと、<code>esp_camera_deinit()</code> でCameraドライバを完全停止し、カメラ電源もOFFにしてからRoller485とWeb UIを起動します。</p>
+      <p>この版でWeb UIが復活すれば、SCCB/I2Cや初期化そのものではなく、CameraのDMA・割り込み・VSYNC処理などを<strong>ランタイムで維持していること</strong>がHTTP停止の原因と判断できます。</p>
       <p>Camera内部の <code>cam_task</code> は、Wi-Fiと同じ高優先度23から<strong>Priority 3</strong>へ下げています（Wi-Fi 23 / Roller 4 / cam_task 3 / Camera consumer 1）。</p>
       <p>書き込み後はまずモータを動かさず、Wi-Fi <code>AtomS3CAM_Q1_SHADOW</code>へ接続し、最初に <code>http://192.168.4.1/camera-health</code> を開いてください。短い <code>ok camera=...</code> が出たら、続いて <code>http://192.168.4.1/</code> の通常WebUIを確認します。</p>
     </section>

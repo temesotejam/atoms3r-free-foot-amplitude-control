@@ -44,20 +44,21 @@ assert "c.pin_sccb_sda = -1;" in camera
 assert "c.pin_sccb_scl = -1;" in camera
 assert "i2c_driver_delete(I2C_NUM_0)" in camera
 
-# Phase 1C keeps continuous low-rate capture running while the precompiled
-# esp32-camera cam_task is linker-wrapped to Priority 3. This directly tests
-# whether the failed HTTP path was caused by cam_task/Wi-Fi priority contention.
+# Phase 1D proves one real frame can be acquired, then removes the camera
+# runtime completely before WebServer startup. If HTTP returns on hardware,
+# persistent camera DMA/interrupt/runtime activity is the cause, not startup I2C.
 assert "kCameraXclkHz = 16000000UL" in camera
 assert "PIXFORMAT_GRAYSCALE" in camera
 assert "FRAMESIZE_QVGA" in camera
 assert "c.fb_count = 1;" in camera
 assert "CAMERA_FB_IN_PSRAM" in camera
-assert "kTargetCaptureHz = 5" in camera
-assert "kFrameHoldMs = 180" in camera
-assert "kFrameReleaseMs = 20" in camera
-assert "esp_camera_fb_return(fb)" in camera[camera.index("void CameraCoexistenceProbe::taskLoop()"):]
-assert "kConsumerPriority = 1" in camera
-assert "kConsumerCore = 0" in camera
+assert "snapshot_.frame_count = 1;" in camera
+assert "esp_camera_fb_get()" in camera
+assert "esp_camera_fb_return(fb)" in camera
+assert "esp_camera_deinit()" in camera
+assert "digitalWrite(PIN_CAM_POWER_N, HIGH)" in camera
+assert "snapshot_.camera_deinitialized = true;" in camera
+assert "xTaskCreatePinnedToCore(" not in camera
 
 # Absolutely no foot-angle/marker/control coupling in Phase 1.
 for token in ("foot_angle", "right_foot", "left_foot", "marker", "centroid", "deg_per_px"):
