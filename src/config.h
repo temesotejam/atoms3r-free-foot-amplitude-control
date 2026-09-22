@@ -6,8 +6,8 @@ namespace Config {
 
 static constexpr uint32_t SERIAL_BAUD = 115200;
 
-static constexpr char AP_SSID[] = "AtomS3R_FREEFOOT_DIAG";
-static constexpr char AP_PASS[] = "";
+static constexpr char AP_SSID[] = "AtomS3R_FREEFOOT_HTTP";
+static constexpr char AP_PASS[] = "12345678";
 static constexpr uint8_t AP_CHANNEL = 1;
 static constexpr uint16_t HTTP_PORT = 80;
 

@@ -285,6 +285,15 @@ refresh();
 </html>
 )HTML";
 
+bool WebUi::beginAccessPoint() {
+  // Keep the AP bring-up identical in spirit to the fixed-foot hardware-proven path.
+  // Starting only the AP here reserves Wi-Fi resources before camera/PSRAM work,
+  // while the HTTP listener itself is intentionally started after subsystem init.
+  WiFi.mode(WIFI_AP);
+  ap_ready_ = WiFi.softAP(Config::AP_SSID, Config::AP_PASS, Config::AP_CHANNEL);
+  return ap_ready_;
+}
+
 bool WebUi::begin(WebServer& server, ExperimentRunner& runner, ImuManager& imu, Roller485Manager& roller, PsramLogger& logger, FootAngleTracker& foot_angles) {
   server_ = &server;
   runner_ = &runner;
@@ -293,24 +302,17 @@ bool WebUi::begin(WebServer& server, ExperimentRunner& runner, ImuManager& imu, 
   logger_ = &logger;
   foot_angles_ = &foot_angles;
 
-  WiFi.persistent(false);
-  WiFi.mode(WIFI_OFF);
-  delay(20);
-  WiFi.mode(WIFI_AP);
-  ap_ready_ = false;
-  for (int attempt = 0; attempt < 3 && !ap_ready_; ++attempt) {
-    ap_ready_ = Config::AP_PASS[0]
-        ? WiFi.softAP(Config::AP_SSID, Config::AP_PASS, Config::AP_CHANNEL, false, 4)
-        : WiFi.softAP(Config::AP_SSID, nullptr, Config::AP_CHANNEL, false, 4);
-    if (!ap_ready_) {
-      WiFi.softAPdisconnect(true);
-      delay(100);
-      WiFi.mode(WIFI_AP);
-    }
-  }
-
   server_->on("/", HTTP_GET, [this]() { handleRoot(); });
   server_->on("/status.json", HTTP_GET, [this]() { handleStatus(); });
+  server_->on("/health", HTTP_GET, [this]() {
+    char body[128];
+    snprintf(body, sizeof(body), "ok ap=%u stations=%u heap=%u\n",
+             ap_ready_ ? 1U : 0U,
+             static_cast<unsigned>(WiFi.softAPgetStationNum()),
+             static_cast<unsigned>(ESP.getFreeHeap()));
+    server_->sendHeader("Cache-Control", "no-store");
+    server_->send(200, "text/plain; charset=utf-8", body);
+  });
   server_->on("/start-energy-control-autonomous", HTTP_POST, [this]() { handleStartEnergyControlAutonomous(); });
   server_->on("/stop", HTTP_POST, [this]() { handleStop(); });
   server_->on("/clear", HTTP_POST, [this]() { handleClear(); });
@@ -326,35 +328,6 @@ void WebUi::update() {
 }
 
 void WebUi::handleRoot() {
-  if (!subsystems_ready_) {
-    static const char INIT_HTML[] PROGMEM = R"HTML(
-<!doctype html><html lang="ja"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AtomS3R Free-foot</title>
-<style>body{font-family:sans-serif;max-width:520px;margin:48px auto;padding:0 20px;line-height:1.7}b{font-size:1.15rem}</style>
-</head><body>
-<b>Wi-Fi接続成功</b>
-<p>AtomS3Rの各サブシステムを初期化しています。完了すると自動的に通常のWeb UIへ切り替わります。</p>
-<p>このページが表示されていれば、Wi-Fi接続とHTTPサーバは正常です。</p>
-<script>
-setInterval(async()=>{
-  try{
-    const c=new AbortController();
-    const t=setTimeout(()=>c.abort(),800);
-    const r=await fetch('/status.json',{cache:'no-store',signal:c.signal});
-    clearTimeout(t);
-    if(!r.ok)return;
-    const j=await r.json();
-    if(j.subsystems_ready)location.reload();
-  }catch(e){}
-},1000);
-</script>
-</body></html>
-)HTML";
-    server_->sendHeader("Cache-Control", "no-store");
-    server_->send_P(200, "text/html; charset=utf-8", INIT_HTML);
-    return;
-  }
   if (run_control.active()) { server_->send(409, "text/plain", "run_in_progress"); return; }
   if (run_control.active() || runner_->running()) { server_->send(409, "text/plain", "read_after_run"); return; }
   server_->sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -363,11 +336,6 @@ setInterval(async()=>{
 }
 
 void WebUi::handleStatus() {
-  if (!subsystems_ready_) {
-    server_->send(200, "application/json",
-                  "{\"running\":false,\"state\":\"INITIALIZING\",\"ready\":false,\"subsystems_ready\":false}");
-    return;
-  }
   if (run_control.active()) {
     // Copy only immutable POD status; do not read runner/logger/imu.reading
     // while the higher-priority worker owns them. No network I/O in a lock.
@@ -385,7 +353,6 @@ void WebUi::handleStatus() {
 }
 
 void WebUi::handleStartEnergyControlAutonomous() {
-  if (!subsystems_ready_) { server_->send(503, "text/plain", "subsystems_initializing"); return; }
   if (run_control.active()) { server_->send(409, "text/plain", "run_in_progress"); return; }
   if (logger_->downloading()) { server_->send(409, "text/plain", "download_in_progress"); return; }
   if (!run_control.ready()) { server_->send(503, "text/plain", "run_control_worker_not_ready"); return; }

@@ -1,7 +1,6 @@
 #include <Arduino.h>
 #include <M5Unified.h>
 #include <WebServer.h>
-#include "esp_heap_caps.h"
 
 #include "config.h"
 #include "experiment_runner.h"
@@ -129,60 +128,14 @@ void setup() {
                 Config::ATTITUDE_VALIDATION_REVISION);
   displayLine("V46q IMU", "DUAL-CORE V7");
 
-  // Bring up the AP before camera/PSRAM/IMU worker allocations. The route
-  // handlers only run from loop(), so storing references here is safe even
-  // though the subsystems are initialized below.
-  const bool ap_ok = web.begin(server, runner, imu, roller, logger, foot_angles);
-  Serial.printf("WiFi AP: %s SSID=%s auth=%s IP=%s heap=%u largest=%u\n",
+  // Reserve Wi-Fi before camera/PSRAM allocations, but do not start the HTTP
+  // listener yet. The listener is started only after all heavy subsystems have
+  // completed initialization, matching the fixed-foot server startup order.
+  const bool ap_ok = web.beginAccessPoint();
+  Serial.printf("WiFi AP early start: %s SSID=%s auth=WPA2 IP=%s\n",
                 ap_ok ? "OK" : "FAILED", Config::AP_SSID,
-                Config::AP_PASS[0] ? "WPA2" : "OPEN",
-                WiFi.softAPIP().toString().c_str(),
-                static_cast<unsigned>(ESP.getFreeHeap()),
-                static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+                WiFi.softAPIP().toString().c_str());
   if (!ap_ok) displayLine("WiFi AP FAIL", Config::AP_SSID);
-
-  // Temporary association-isolation diagnostic:
-  // do not allocate logger/camera/IMU/Roller resources until a PC has stayed
-  // associated with the AP for 3 seconds. This separates Wi-Fi association
-  // itself from every free-foot subsystem added later in setup().
-  if (ap_ok) {
-    Serial.println("WIFI_ASSOC_DIAG: waiting for a station before subsystem init");
-    uint32_t associated_since_ms = 0;
-    uint32_t last_report_ms = 0;
-    for (;;) {
-      const uint32_t now_ms = millis();
-      const uint8_t stations = WiFi.softAPgetStationNum();
-      if (stations > 0) {
-        if (associated_since_ms == 0) {
-          associated_since_ms = now_ms;
-          Serial.printf("WIFI_ASSOC_DIAG: station seen count=%u\n",
-                        static_cast<unsigned>(stations));
-        }
-        if (static_cast<uint32_t>(now_ms - associated_since_ms) >= 3000UL) {
-          Serial.printf("WIFI_ASSOC_DIAG: stable association count=%u; continuing subsystem init\n",
-                        static_cast<unsigned>(stations));
-          break;
-        }
-      } else {
-        if (associated_since_ms != 0) {
-          Serial.println("WIFI_ASSOC_DIAG: station dropped before 3 s");
-        }
-        associated_since_ms = 0;
-      }
-      // Serve the lightweight initialization page while waiting for the
-      // first station. This proves HTTP independently from every subsystem.
-      web.update();
-
-      if (static_cast<uint32_t>(now_ms - last_report_ms) >= 1000UL) {
-        last_report_ms = now_ms;
-        Serial.printf("WIFI_ASSOC_DIAG: waiting stations=%u heap=%u largest=%u\n",
-                      static_cast<unsigned>(stations),
-                      static_cast<unsigned>(ESP.getFreeHeap()),
-                      static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
-      }
-      delay(20);
-    }
-  }
 
   const bool psram_ok = logger.begin();
   Serial.printf("PSRAM: %s total=%u free=%u sample_capacity=%u\n", psram_ok ? "OK" : "FAILED",
@@ -211,13 +164,13 @@ void setup() {
   const bool control_task_ok = run_control.begin(runControlStep, captureRunState, nullptr);
   Serial.printf("Run control worker: %s core=1 priority=4; HTTP core=1 priority=2\n",
                 control_task_ok ? "OK" : "FAILED");
-  web.setSubsystemsReady(true);
-  Serial.printf("AP SSID: %s status=%s IP=%s stations=%u heap=%u largest=%u\n",
+  web.begin(server, runner, imu, roller, logger, foot_angles);
+  Serial.printf("HTTP server started; AP SSID=%s status=%s IP=%s stations=%u heap=%u\n",
                 Config::AP_SSID, web.accessPointReady() ? "READY" : "FAILED",
                 WiFi.softAPIP().toString().c_str(),
                 static_cast<unsigned>(WiFi.softAPgetStationNum()),
-                static_cast<unsigned>(ESP.getFreeHeap()),
-                static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+                static_cast<unsigned>(ESP.getFreeHeap()));
+  Serial.println("Health check: http://192.168.4.1/health");
   Serial.println("Open http://192.168.4.1/ and start Autonomous Energy Control V7");
   if (web.accessPointReady()) displayLine("V46q / V7 ready", Config::AP_SSID);
   else displayLine("WiFi AP FAIL", Config::AP_SSID);

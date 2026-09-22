@@ -84,41 +84,33 @@ assert 'foot_camera_error' in web
 assert 'imu_error' in web
 
 
-# Wi-Fi AP is now brought up immediately after M5.begin and before heavy
-# logger/camera/IMU/roller initialization.
-ap_begin = main.index('const bool ap_ok = web.begin(')
+# Wi-Fi AP is brought up before heavy camera/PSRAM/IMU allocations, while the
+# HTTP listener is deliberately delayed until all subsystems are initialized.
+ap_begin = main.index('const bool ap_ok = web.beginAccessPoint();')
+http_begin = main.index('web.begin(server, runner, imu, roller, logger, foot_angles);')
 assert main.index('M5.begin(cfg);') < ap_begin
 assert ap_begin < main.index('const bool psram_ok = logger.begin();')
 assert ap_begin < main.index('const bool foot_ok = foot_angles.begin();')
 assert ap_begin < main.index('const bool imu_ok = imu.begin();')
+assert http_begin > main.index('const bool foot_ok = foot_angles.begin();')
+assert http_begin > main.index('const bool imu_ok = imu.begin();')
+assert http_begin > main.index('const bool roller_ok = roller.begin();')
 assert 'WiFi AP FAIL' in main
-assert 'for (int attempt = 0; attempt < 3 && !ap_ready_; ++attempt)' in web
-assert 'ap_ready_ = Config::AP_PASS[0]' in web
-assert 'WiFi.softAP(Config::AP_SSID, nullptr' in web
 
+# Use the same simple WPA2 softAP path that is proven in the fixed-foot build.
+# The fresh SSID also prevents a stale open-network profile from being reused.
+assert 'AtomS3R_FREEFOOT_HTTP' in config
+assert 'static constexpr char AP_PASS[] = "12345678";' in config
+assert 'bool WebUi::beginAccessPoint()' in web
+assert 'WiFi.mode(WIFI_AP);' in web
+assert 'WiFi.softAP(Config::AP_SSID, Config::AP_PASS, Config::AP_CHANNEL)' in web
+assert 'WIFI_OFF' not in web
+assert 'softAPdisconnect' not in web
+assert 'for (int attempt = 0; attempt < 3 && !ap_ready_; ++attempt)' not in web
 
-# Temporary Wi-Fi diagnostic AP removes cached credentials/WPA from the test.
-assert 'AtomS3R_FREEFOOT_DIAG' in config
-assert 'static constexpr char AP_PASS[] = "";' in config
-assert 'WiFi.softAP(Config::AP_SSID, nullptr' in web
-assert 'softAPgetStationNum()' in main
-assert 'heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)' in main
-
-
-# Wi-Fi association diagnostic must run before any free-foot/heavy subsystem.
-diag = main.index('WIFI_ASSOC_DIAG: waiting for a station before subsystem init')
-assert diag < main.index('const bool psram_ok = logger.begin();')
-assert diag < main.index('const bool foot_ok = foot_angles.begin();')
-assert diag < main.index('const bool imu_ok = imu.begin();')
-assert 'now_ms - associated_since_ms) >= 3000UL' in main
-assert 'softAPgetStationNum()' in main
-assert 'false, 4)' in web
-
-
-# HTTP must be usable while the association diagnostic is still in setup().
-assert 'web.update();' in main[main.index('WIFI_ASSOC_DIAG: waiting for a station before subsystem init'):main.index('const bool psram_ok = logger.begin();')]
-assert 'web.setSubsystemsReady(true);' in main
-assert 'Wi-Fi接続成功' in web
-assert 'subsystems_ready' in web
-assert 'INITIALIZING' in web
-assert 'subsystems_initializing' in web
+# HTTP is started once, after subsystem initialization, and has a minimal probe
+# independent of the full UI/status JSON.
+assert 'server_->on("/health", HTTP_GET' in web
+assert '"ok ap=%u stations=%u heap=%u\\n"' in web
+assert 'Health check: http://192.168.4.1/health' in main
+assert 'subsystems_ready' not in web

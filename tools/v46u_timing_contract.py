@@ -50,25 +50,23 @@ def normalize_free_foot_main(data):
                 foot_ok ? "OK" : "FAILED", foot_angles.lastError());
 
 ''','')
-    data=data.replace('''  // Bring up the AP before camera/PSRAM/IMU worker allocations. The route
-  // handlers only run from loop(), so storing references here is safe even
-  // though the subsystems are initialized below.
-  const bool ap_ok = web.begin(server, runner, imu, roller, logger, foot_angles);
-  Serial.printf("WiFi AP: %s SSID=%s auth=%s IP=%s heap=%u largest=%u\\n",
+    data=data.replace('''  // Reserve Wi-Fi before camera/PSRAM allocations, but do not start the HTTP
+  // listener yet. The listener is started only after all heavy subsystems have
+  // completed initialization, matching the fixed-foot server startup order.
+  const bool ap_ok = web.beginAccessPoint();
+  Serial.printf("WiFi AP early start: %s SSID=%s auth=WPA2 IP=%s\\n",
                 ap_ok ? "OK" : "FAILED", Config::AP_SSID,
-                Config::AP_PASS[0] ? "WPA2" : "OPEN",
-                WiFi.softAPIP().toString().c_str(),
-                static_cast<unsigned>(ESP.getFreeHeap()),
-                static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+                WiFi.softAPIP().toString().c_str());
   if (!ap_ok) displayLine("WiFi AP FAIL", Config::AP_SSID);
 
 ''','')
-    data=data.replace('''  Serial.printf("AP SSID: %s status=%s IP=%s stations=%u heap=%u largest=%u\\n",
+    data=data.replace('''  web.begin(server, runner, imu, roller, logger, foot_angles);
+  Serial.printf("HTTP server started; AP SSID=%s status=%s IP=%s stations=%u heap=%u\\n",
                 Config::AP_SSID, web.accessPointReady() ? "READY" : "FAILED",
                 WiFi.softAPIP().toString().c_str(),
                 static_cast<unsigned>(WiFi.softAPgetStationNum()),
-                static_cast<unsigned>(ESP.getFreeHeap()),
-                static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+                static_cast<unsigned>(ESP.getFreeHeap()));
+  Serial.println("Health check: http://192.168.4.1/health");
   Serial.println("Open http://192.168.4.1/ and start Autonomous Energy Control V7");
   if (web.accessPointReady()) displayLine("V46q / V7 ready", Config::AP_SSID);
   else displayLine("WiFi AP FAIL", Config::AP_SSID);''',
@@ -143,10 +141,8 @@ def original_timing_file(path):
     if path == "src/main.cpp":
         data=normalize_free_foot_main(data)
     if path == "src/config.h":
-        data=data.replace('static constexpr char AP_SSID[] = "AtomS3R_FREEFOOT_DIAG";',
+        data=data.replace('static constexpr char AP_SSID[] = "AtomS3R_FREEFOOT_HTTP";',
                           'static constexpr char AP_SSID[] = "AtomS3CAM_Q1_SHADOW";')
-        data=data.replace('static constexpr char AP_PASS[] = "";',
-                          'static constexpr char AP_PASS[] = "12345678";')
     # V46al-R1 is the declared active-control delta; remove it before retained hashes.
     data=normalize_v46al_file(path, data)
     # V46ak is observation-only; remove it before checking the retained baseline.
