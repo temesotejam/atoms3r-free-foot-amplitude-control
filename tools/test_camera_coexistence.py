@@ -44,22 +44,25 @@ assert "c.pin_sccb_sda = -1;" in camera
 assert "c.pin_sccb_scl = -1;" in camera
 assert "i2c_driver_delete(I2C_NUM_0)" in camera
 
-# Phase 1E keeps the esp32-camera runtime allocated after one frame but powers
-# the GC0308 sensor off. This isolates sensor-generated PCLK/VSYNC/HREF activity
-# from mere driver/DMA allocation.
+# Phase 1F is the coexistence fix candidate: GC0308 remains powered and
+# configured, while cam_start/cam_stop gate receiver activity to one frame per
+# 200 ms. SCCB is never used again after Roller485 starts.
 assert "kCameraXclkHz = 16000000UL" in camera
 assert "PIXFORMAT_GRAYSCALE" in camera
 assert "FRAMESIZE_QVGA" in camera
 assert "c.fb_count = 1;" in camera
 assert "CAMERA_FB_IN_PSRAM" in camera
-assert "snapshot_.frame_count = 1;" in camera
-assert "esp_camera_fb_get()" in camera
-assert "esp_camera_fb_return(fb)" in camera
-assert "snapshot_.camera_driver_active = true;" in camera
-assert "snapshot_.sensor_powered = false;" in camera
-assert "snapshot_.camera_deinitialized = false;" in camera
-assert 'setError("ok_driver_active_sensor_off")' in camera
-assert "xTaskCreatePinnedToCore(" not in camera
+assert "kTargetCaptureHz = 5" in camera
+assert "kCapturePeriodMs = 200" in camera
+assert 'extern "C" void cam_stop(void);' in camera
+assert 'extern "C" void cam_start(void);' in camera
+assert "cam_stop();" in camera
+assert "cam_start();" in camera
+assert camera.index("cam_stop();", camera.index("camera_fb_t* fb = esp_camera_fb_get();")) < camera.index("esp_camera_fb_return(fb)")
+assert "snapshot_.receiver_gated = true;" in camera
+assert "snapshot_.sensor_powered = true;" in camera
+assert "xTaskCreatePinnedToCore(" in camera
+assert '"camera_gate"' in camera
 
 # Absolutely no foot-angle/marker/control coupling in Phase 1.
 for token in ("foot_angle", "right_foot", "left_foot", "marker", "centroid", "deg_per_px"):
@@ -90,6 +93,6 @@ assert 'static_assert(kCameraInternalTaskPriority < Config::ROLLER_IO_TASK_PRIOR
 assert 'server.on("/camera-health", HTTP_GET' in main
 assert 'cam_task_priority=%u->%u' in main
 assert 'heap_caps_get_free_size(MALLOC_CAP_INTERNAL)' in main
-assert 'driver_active=%u sensor_powered=%u deinitialized=%u' in main
+assert 'driver_active=%u sensor_powered=%u receiver_gated=%u receiver_active=%u' in main
 
 print("PASS: camera cam_task priority isolation and minimal HTTP probe")

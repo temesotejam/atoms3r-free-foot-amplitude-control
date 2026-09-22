@@ -6,6 +6,12 @@
 #include "esp_camera.h"
 #include "esp_heap_caps.h"
 
+// esp32-camera keeps these in its private cam_hal API. They are exported by
+// the precompiled Arduino-ESP32 camera library and let us gate VSYNC/GDMA
+// reception without deinitializing the sensor or touching SCCB/I2C again.
+extern "C" void cam_stop(void);
+extern "C" void cam_start(void);
+
 namespace {
 
 // AtomS3R-CAM / GC0308 pins from the independently validated camera tracker.
@@ -31,11 +37,11 @@ constexpr int PIN_CAM_D7 = 13;
 // entire QVGA grayscale frame from internal DMA RAM into PSRAM.
 constexpr uint32_t kCameraXclkHz = 16000000UL;
 
-// Phase 1E: keep the esp32-camera driver allocated after one real frame, but
-// power the GC0308 sensor off. If HTTP remains healthy, persistent driver state
-// and allocated DMA descriptors are not sufficient to break Wi-Fi; the missing
-// PCLK/VSYNC/HREF activity becomes the decisive difference.
-constexpr uint8_t kTargetCaptureHz = 0;
+// Phase 1F / coexistence fix candidate: keep GC0308 powered and configured,
+// but gate the ESP32 camera receiver. VSYNC interrupts and GDMA are enabled
+// only long enough to acquire one frame, then stopped again.
+constexpr uint8_t kTargetCaptureHz = 5;
+constexpr uint32_t kCapturePeriodMs = 200;
 
 constexpr uint32_t kConsumerStackBytes = 4096;
 constexpr UBaseType_t kConsumerPriority = 1;
@@ -65,9 +71,9 @@ void CameraCoexistenceProbe::captureMemoryAfter() {
 bool CameraCoexistenceProbe::begin() {
   snapshot_ = CameraCoexistenceSnapshot{};
   snapshot_.xclk_hz = kCameraXclkHz;
-  snapshot_.target_capture_hz = 0;
-  snapshot_.consumer_core = -1;
-  snapshot_.consumer_priority = 0;
+  snapshot_.target_capture_hz = kTargetCaptureHz;
+  snapshot_.consumer_core = kConsumerCore;
+  snapshot_.consumer_priority = kConsumerPriority;
   captureMemoryBefore();
 
   if (!initCameraOnTemporaryI2c0()) {
@@ -77,6 +83,8 @@ bool CameraCoexistenceProbe::begin() {
 
   snapshot_.camera_driver_active = true;
   snapshot_.sensor_powered = true;
+  snapshot_.camera_deinitialized = false;
+  snapshot_.receiver_gated = true;
 
   const CameraTaskPriorityPatchSnapshot task_patch = cameraTaskPriorityPatchSnapshot();
   snapshot_.cam_task_priority_patch_observed = task_patch.observed;
@@ -84,35 +92,27 @@ bool CameraCoexistenceProbe::begin() {
   snapshot_.cam_task_effective_priority = task_patch.effective_priority;
   snapshot_.cam_task_core = task_patch.core;
 
-  // Phase 1E: prove one real frame, return it normally, then stop only the
-  // physical sensor. esp32-camera, its cam_task, queues, ISR/GDMA setup and
-  // framebuffer allocation intentionally remain alive.
-  camera_fb_t* fb = esp_camera_fb_get();
-  if (!fb) {
+  // esp_camera_init() starts continuous reception. Stop it before WebServer
+  // startup; the low-priority consumer task will open only one-frame windows.
+  cam_stop();
+  snapshot_.receiver_active = false;
+
+  const BaseType_t created = xTaskCreatePinnedToCore(
+      taskEntry, "camera_gate", kConsumerStackBytes, this,
+      kConsumerPriority, &task_, kConsumerCore);
+  if (created != pdPASS) {
     esp_camera_deinit();
     digitalWrite(PIN_CAM_POWER_N, HIGH);
     snapshot_.camera_driver_active = false;
     snapshot_.sensor_powered = false;
     snapshot_.camera_deinitialized = true;
-    setError("camera_first_frame_failed");
+    setError("camera_gate_task_create_failed");
     captureMemoryAfter();
     return false;
   }
 
-  snapshot_.first_frame_seen = true;
-  snapshot_.frame_count = 1;
-  snapshot_.last_frame_bytes = fb->len;
-  snapshot_.last_width = static_cast<uint16_t>(fb->width);
-  snapshot_.last_height = static_cast<uint16_t>(fb->height);
-  esp_camera_fb_return(fb);
-
-  // PIN_CAM_POWER_N is active-low. Keep the ESP32 camera driver initialized,
-  // but remove sensor-generated PCLK/VSYNC/HREF activity before WebServer starts.
-  digitalWrite(PIN_CAM_POWER_N, HIGH);
-  snapshot_.sensor_powered = false;
-  snapshot_.camera_deinitialized = false;
   snapshot_.camera_ok = true;
-  setError("ok_driver_active_sensor_off");
+  setError("ok_receiver_gated_5hz");
   captureMemoryAfter();
   return true;
 }
@@ -207,13 +207,48 @@ bool CameraCoexistenceProbe::initCameraOnTemporaryI2c0() {
 }
 
 void CameraCoexistenceProbe::taskEntry(void* arg) {
-  (void)arg;
-  vTaskDelete(nullptr);
+  static_cast<CameraCoexistenceProbe*>(arg)->taskLoop();
 }
 
 void CameraCoexistenceProbe::taskLoop() {
-  // Phase 1E does not create an application-side runtime camera consumer task.
-  vTaskDelete(nullptr);
+  TickType_t last_wake = xTaskGetTickCount();
+
+  for (;;) {
+    portENTER_CRITICAL(&mux_);
+    snapshot_.receiver_active = true;
+    portEXIT_CRITICAL(&mux_);
+    cam_start();
+
+    camera_fb_t* fb = esp_camera_fb_get();
+
+    // Stop VSYNC/GDMA BEFORE giving the sole framebuffer back. With fb_count=1
+    // this prevents cam_task from immediately starting a second frame.
+    cam_stop();
+    portENTER_CRITICAL(&mux_);
+    snapshot_.receiver_active = false;
+    portEXIT_CRITICAL(&mux_);
+
+    if (!fb) {
+      portENTER_CRITICAL(&mux_);
+      ++snapshot_.frame_failures;
+      portEXIT_CRITICAL(&mux_);
+      setError("camera_gated_frame_failed");
+      vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(kCapturePeriodMs));
+      continue;
+    }
+
+    portENTER_CRITICAL(&mux_);
+    snapshot_.first_frame_seen = true;
+    ++snapshot_.frame_count;
+    snapshot_.last_frame_bytes = fb->len;
+    snapshot_.last_width = static_cast<uint16_t>(fb->width);
+    snapshot_.last_height = static_cast<uint16_t>(fb->height);
+    portEXIT_CRITICAL(&mux_);
+
+    esp_camera_fb_return(fb);
+    setError("ok_receiver_gated_5hz");
+    vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(kCapturePeriodMs));
+  }
 }
 
 CameraCoexistenceSnapshot CameraCoexistenceProbe::snapshot() const {

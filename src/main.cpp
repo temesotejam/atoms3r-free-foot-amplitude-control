@@ -168,7 +168,8 @@ void setup() {
     char body[384];
     snprintf(body, sizeof(body),
         "ok camera=%u first_frame=%u frames=%lu failures=%lu "
-        "driver_active=%u sensor_powered=%u deinitialized=%u "
+        "driver_active=%u sensor_powered=%u receiver_gated=%u receiver_active=%u "
+        "deinitialized=%u target_hz=%u "
         "cam_task_patch=%u cam_task_core=%d cam_task_priority=%u->%u "
         "internal_free=%u dma_free=%u psram_free=%u\n",
         c.camera_ok ? 1U : 0U,
@@ -177,7 +178,10 @@ void setup() {
         static_cast<unsigned long>(c.frame_failures),
         c.camera_driver_active ? 1U : 0U,
         c.sensor_powered ? 1U : 0U,
+        c.receiver_gated ? 1U : 0U,
+        c.receiver_active ? 1U : 0U,
         c.camera_deinitialized ? 1U : 0U,
+        static_cast<unsigned>(c.target_capture_hz),
         c.cam_task_priority_patch_observed ? 1U : 0U,
         static_cast<int>(c.cam_task_core),
         static_cast<unsigned>(c.cam_task_original_priority),

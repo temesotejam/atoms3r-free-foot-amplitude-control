@@ -28,17 +28,17 @@
     <section class="panel important">
       <h2>Camera共存 Phase 1</h2>
       <p><strong>今回は足角度計算をまだ入れていません。</strong> 固定足完成版の制御・MEKF・RWLOG・Web UIをそのまま残し、GC0308を低負荷で動作させてもWi-Fi/Web UIが維持できるかだけを確認する版です。</p>
-      <p>Phase 1EではCameraを初期化して<strong>実際に1枚だけ画像を取得</strong>したあと、<code>esp_camera_deinit()</code> は呼びません。Cameraドライバ・cam_task・DMA/ISR設定・framebufferは残したまま、GC0308の<strong>センサ電源だけOFF</strong>にしてからRoller485とWeb UIを起動します。</p>
-      <p>この版でもWeb UIが表示されれば、Cameraドライバを保持していること自体ではなく、センサが出し続ける <strong>PCLK / VSYNC / HREF に伴うランタイム処理</strong>が原因である可能性が非常に高くなります。</p>
+      <p>Phase 1Fは対処候補です。GC0308は電源ON・設定済みのまま維持し、ESP32側のCamera受信だけを普段は停止します。<strong>200 msごとに受信START → 1枚取得 → 直ちに受信STOP</strong>として、約5 Hzで撮影します。</p>
+      <p>これによりSCCB/I2C設定は起動時1回だけで、Roller485開始後はI2C0へ一切触れません。CameraのVSYNC割り込み/GDMAが動く時間を1フレームの短い区間だけに制限し、Wi-Fi/Web UIとの共存を狙います。</p>
       <p>Camera内部の <code>cam_task</code> は、Wi-Fiと同じ高優先度23から<strong>Priority 3</strong>へ下げています（Wi-Fi 23 / Roller 4 / cam_task 3 / Camera consumer 1）。</p>
       <p>書き込み後はまずモータを動かさず、Wi-Fi <code>AtomS3CAM_Q1_SHADOW</code>へ接続し、最初に <code>http://192.168.4.1/camera-health</code> を開いてください。短い <code>ok camera=...</code> が出たら、続いて <code>http://192.168.4.1/</code> の通常WebUIを確認します。</p>
     </section>
 
     <section class="panel important">
       <h2>このページから直接書き込めます</h2>
-      <p>AtomS3R を USB でPCへ接続し、Chrome または Edge のデスクトップ版で下のボタンを押してください。<strong>Phase 1E専用のmanifest/firmwareファイル名を使用しているため、直前版のブラウザキャッシュは再利用されません。</strong></p>
-      <esp-web-install-button manifest="manifest-phase1e.json">
-        <button slot="activate" class="primary">AtomS3RへCamera Phase 1Eを書き込む</button>
+      <p>AtomS3R を USB でPCへ接続し、Chrome または Edge のデスクトップ版で下のボタンを押してください。<strong>Phase 1F専用のmanifest/firmwareファイル名を使用しているため、直前版のブラウザキャッシュは再利用されません。</strong></p>
+      <esp-web-install-button manifest="manifest-phase1f.json">
+        <button slot="activate" class="primary">AtomS3RへCamera Phase 1Fを書き込む</button>
         <span slot="unsupported" class="warning">このブラウザはWeb Serial / WebUSBに対応していません。PC版ChromeまたはEdgeを使用してください。</span>
       </esp-web-install-button>
       <details>
