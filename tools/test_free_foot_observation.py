@@ -97,13 +97,14 @@ assert http_begin > main.index('const bool imu_ok = imu.begin();')
 assert http_begin > main.index('const bool roller_ok = roller.begin();')
 assert 'WiFi AP FAIL' in main
 
-# Use the same simple WPA2 softAP path that is proven in the fixed-foot build.
-# The fresh SSID also prevents a stale open-network profile from being reused.
-assert 'AtomS3R_FREEFOOT_HTTP' in config
-assert 'static constexpr char AP_PASS[] = "12345678";' in config
+# Association regression isolation: keep the new two-phase startup, but use
+# a fresh open AP because the immediately preceding WPA2 build was visible yet
+# Windows rejected association. This changes authentication only.
+assert 'AtomS3R_FREEFOOT_OPEN' in config
+assert 'static constexpr char AP_PASS[] = "";' in config
 assert 'bool WebUi::beginAccessPoint()' in web
 assert 'WiFi.mode(WIFI_AP);' in web
-assert 'WiFi.softAP(Config::AP_SSID, Config::AP_PASS, Config::AP_CHANNEL)' in web
+assert 'WiFi.softAP(Config::AP_SSID, nullptr, Config::AP_CHANNEL)' in web
 assert 'WIFI_OFF' not in web
 assert 'softAPdisconnect' not in web
 assert 'for (int attempt = 0; attempt < 3 && !ap_ready_; ++attempt)' not in web

@@ -132,7 +132,7 @@ void setup() {
   // listener yet. The listener is started only after all heavy subsystems have
   // completed initialization, matching the fixed-foot server startup order.
   const bool ap_ok = web.beginAccessPoint();
-  Serial.printf("WiFi AP early start: %s SSID=%s auth=WPA2 IP=%s\n",
+  Serial.printf("WiFi AP early start: %s SSID=%s auth=OPEN IP=%s\n",
                 ap_ok ? "OK" : "FAILED", Config::AP_SSID,
                 WiFi.softAPIP().toString().c_str());
   if (!ap_ok) displayLine("WiFi AP FAIL", Config::AP_SSID);

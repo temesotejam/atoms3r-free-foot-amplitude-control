@@ -290,7 +290,9 @@ bool WebUi::beginAccessPoint() {
   // Starting only the AP here reserves Wi-Fi resources before camera/PSRAM work,
   // while the HTTP listener itself is intentionally started after subsystem init.
   WiFi.mode(WIFI_AP);
-  ap_ready_ = WiFi.softAP(Config::AP_SSID, Config::AP_PASS, Config::AP_CHANNEL);
+  ap_ready_ = Config::AP_PASS[0]
+      ? WiFi.softAP(Config::AP_SSID, Config::AP_PASS, Config::AP_CHANNEL)
+      : WiFi.softAP(Config::AP_SSID, nullptr, Config::AP_CHANNEL);
   return ap_ready_;
 }
 
