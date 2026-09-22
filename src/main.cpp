@@ -4,6 +4,7 @@
 
 #include "config.h"
 #include "experiment_runner.h"
+#include "foot_angle_observer.h"
 #include "imu_manager.h"
 #include "psram_logger.h"
 #include "roller485_manager.h"
@@ -16,6 +17,7 @@ PsramLogger logger;
 ImuManager imu;
 Roller485Manager roller;
 ExperimentRunner runner;
+FootAngleObserver foot_angle;
 WebUi web;
 RunControlWorker run_control;
 
@@ -70,20 +72,36 @@ static void updateStartupPoseGuide() {
   imu.setStartupGuideState(reason, false, 0);
   if (!fresh || !UprightPoseGuide::isUprightStableSample(r)) {
     startup_upright_since_ms = 0;
+    foot_angle.cancelZeroCollection();
     return;
   }
-  if (startup_upright_since_ms == 0) startup_upright_since_ms = now_ms;
+  if (startup_upright_since_ms == 0) {
+    startup_upright_since_ms = now_ms;
+    // Reuse the existing IMU-only upright detector as the gate for the
+    // startup-only foot neutral calibration. Marker X never defines upright.
+    foot_angle.startZeroCollection();
+  }
   imu.setStartupGuideState("stable_hold", false, now_ms - startup_upright_since_ms);
   if (static_cast<uint32_t>(now_ms - startup_upright_since_ms) <
       UprightPoseGuide::UPRIGHT_STABLE_HOLD_MS) {
     return;
   }
+  if (!foot_angle.lockZero()) {
+    imu.setStartupGuideState("waiting_foot_markers", false,
+                             now_ms - startup_upright_since_ms);
+    return;
+  }
   startup_upright_confirmed = true;
   imu.setStartupGuideState("upright_ready", true, now_ms - startup_upright_since_ms);
   digitalWrite(Config::SYNC_LED_PIN, LOW);
-  Serial.printf("Startup guide: upright confirmed; gravity error=%.2f deg, norm=%.3f g\n",
-                UprightPoseGuide::directionErrorDeg(r), UprightPoseGuide::accelNormG(r));
-  displayLine("Upright ready", "Start from Web UI");
+  const FootAngleSnapshot foot = foot_angle.snapshot();
+  Serial.printf(
+      "Startup guide: upright confirmed; gravity error=%.2f deg, norm=%.3f g; "
+      "foot zero right=%.3f px left=%.3f px samples=%lu\n",
+      UprightPoseGuide::directionErrorDeg(r), UprightPoseGuide::accelNormG(r),
+      foot.right_zero_x_px, foot.left_zero_x_px,
+      static_cast<unsigned long>(foot.zero_samples));
+  displayLine("Upright + feet zero", "Start from Web UI");
 }
 
 void setup() {
@@ -129,11 +147,18 @@ void setup() {
                 roller_ok ? "OK" : "FAILED", roller_task_ok ? "OK" : "FAILED",
                 Config::ROLLER_IO_TASK_CORE, Config::ROLLER_IO_TASK_PRIORITY);
 
+  const bool foot_ok = foot_angle.begin();
+  Serial.printf(
+      "Foot angle observer: %s core=%u priority=%u mapping=upper:right/lower:left error=%s\n",
+      foot_ok ? "OK" : "FAILED", FootAngleObserver::kTaskCore,
+      static_cast<unsigned>(FootAngleObserver::kTaskPriority),
+      foot_angle.lastError());
+
   runner.begin(logger, imu, roller);
   const bool control_task_ok = run_control.begin(runControlStep, captureRunState, nullptr);
   Serial.printf("Run control worker: %s core=1 priority=4; HTTP core=1 priority=2\n",
                 control_task_ok ? "OK" : "FAILED");
-  web.begin(server, runner, imu, roller, logger);
+  web.begin(server, runner, imu, roller, logger, foot_angle);
   Serial.printf("AP SSID: %s\n", Config::AP_SSID);
   Serial.println("Open http://192.168.4.1/ and start Autonomous Energy Control V7");
   displayLine("V46q / V7 ready", Config::AP_SSID);
@@ -215,6 +240,9 @@ void loop() {
   checkAcquisitionHealth();
   runner.update();
   if (!runner.running()) {
+    // The camera observer is independent of the run-control task. Close its
+    // separate log after END_SYNC/ESTOP without touching RWLOG.
+    foot_angle.endRunLog();
     M5.update();
     updateStartupPoseGuide();
   }
