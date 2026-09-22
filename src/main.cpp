@@ -4,6 +4,7 @@
 
 #include "config.h"
 #include "experiment_runner.h"
+#include "foot_angle_tracker.h"
 #include "imu_manager.h"
 #include "psram_logger.h"
 #include "roller485_manager.h"
@@ -16,6 +17,7 @@ PsramLogger logger;
 ImuManager imu;
 Roller485Manager roller;
 ExperimentRunner runner;
+FootAngleTracker foot_angles;
 WebUi web;
 RunControlWorker run_control;
 
@@ -67,8 +69,10 @@ static void updateStartupPoseGuide() {
            UprightPoseGuide::accelNormG(r) > UprightPoseGuide::UPRIGHT_MAX_ACCEL_NORM_G) reason = "accel_norm_out_of_range";
   else if (UprightPoseGuide::directionErrorDeg(r) > UprightPoseGuide::UPRIGHT_MAX_DIRECTION_ERROR_DEG) reason = "not_upright";
   else if (UprightPoseGuide::gyroNormDps(r) > UprightPoseGuide::UPRIGHT_MAX_GYRO_NORM_DPS) reason = "still_moving";
+  const bool upright_sample = fresh && UprightPoseGuide::isUprightStableSample(r);
+  foot_angles.setStartupUprightGate(upright_sample);
   imu.setStartupGuideState(reason, false, 0);
-  if (!fresh || !UprightPoseGuide::isUprightStableSample(r)) {
+  if (!upright_sample) {
     startup_upright_since_ms = 0;
     return;
   }
@@ -78,11 +82,25 @@ static void updateStartupPoseGuide() {
       UprightPoseGuide::UPRIGHT_STABLE_HOLD_MS) {
     return;
   }
+  // The existing IMU upright/still gate also defines the boot-specific foot
+  // angle zero. Marker A (upper) is the right foot; Marker B (lower) is left.
+  // Only the zero offset is calibrated here; the pixel-to-angle slopes stay frozen.
+  if (!foot_angles.lockStartupZero()) {
+    imu.setStartupGuideState("waiting_foot_markers", false,
+                             now_ms - startup_upright_since_ms);
+    displayLine("Hold upright", "Waiting foot markers");
+    return;
+  }
+  foot_angles.setStartupUprightGate(false);
   startup_upright_confirmed = true;
   imu.setStartupGuideState("upright_ready", true, now_ms - startup_upright_since_ms);
   digitalWrite(Config::SYNC_LED_PIN, LOW);
-  Serial.printf("Startup guide: upright confirmed; gravity error=%.2f deg, norm=%.3f g\n",
-                UprightPoseGuide::directionErrorDeg(r), UprightPoseGuide::accelNormG(r));
+  const FootAngleSnapshot foot = foot_angles.snapshot();
+  Serial.printf("Startup guide: upright confirmed; gravity error=%.2f deg, norm=%.3f g; "
+                "foot zero R=%.3f px L=%.3f px samples=%lu\n",
+                UprightPoseGuide::directionErrorDeg(r), UprightPoseGuide::accelNormG(r),
+                foot.zero_right_x_px, foot.zero_left_x_px,
+                static_cast<unsigned long>(foot.zero_samples));
   displayLine("Upright ready", "Start from Web UI");
 }
 
@@ -116,6 +134,10 @@ void setup() {
                 static_cast<unsigned>(logger.sampleCapacity()));
   if (!psram_ok) Serial.printf("PSRAM error: %s\n", logger.lastError());
 
+  const bool foot_ok = foot_angles.begin();
+  Serial.printf("Foot angle tracker: %s mapping=upper:right/lower:left mode=observation_only error=%s\n",
+                foot_ok ? "OK" : "FAILED", foot_angles.lastError());
+
   const bool imu_ok = imu.begin();
   Serial.printf("IMU acquisition: %s internal_i2c=%d SDA=%d SCL=%d error=%s\n",
                 imu_ok ? "OK" : "FAILED", static_cast<int>(M5.In_I2C.getPort()),
@@ -133,7 +155,7 @@ void setup() {
   const bool control_task_ok = run_control.begin(runControlStep, captureRunState, nullptr);
   Serial.printf("Run control worker: %s core=1 priority=4; HTTP core=1 priority=2\n",
                 control_task_ok ? "OK" : "FAILED");
-  web.begin(server, runner, imu, roller, logger);
+  web.begin(server, runner, imu, roller, logger, foot_angles);
   Serial.printf("AP SSID: %s\n", Config::AP_SSID);
   Serial.println("Open http://192.168.4.1/ and start Autonomous Energy Control V7");
   displayLine("V46q / V7 ready", Config::AP_SSID);
@@ -206,6 +228,12 @@ void loop() {
     return;
   }
 
+  // The camera task is observation-only and owns a sidecar log. Close that
+  // sidecar only after the run-control worker has fully released the runner.
+  if (!runner.running() && foot_angles.runActive()) {
+    foot_angles.endRun();
+  }
+
   // Idle ownership is exclusive again after the worker's final snapshot.
   const uint32_t loop_start_us = micros();
   updateAcquisitionContext();
@@ -224,6 +252,9 @@ void loop() {
   // Establish the V46p boundary after the Start HTTP response. Then transfer
   // ownership exactly once; never touch the live controller after start().
   if (runner.running()) {
+    if (!foot_angles.runActive()) {
+      foot_angles.beginRun(logger.currentRunId(), static_cast<uint32_t>(logger.runStartUs()));
+    }
     updateAcquisitionContext();
     if (!run_control.start()) {
       runner.requestEmergencyStop("run_control_worker_not_ready");
