@@ -22,12 +22,13 @@ def normalize_camera_coexistence(path, data):
                 static_cast<unsigned>(camera_boot.cam_task_effective_priority));
 
 ''','')
-    health_start='''  // Minimal HTTP probe independent of the full Web UI/status JSON.
-  server.on("/camera-health", HTTP_GET, []() {
+    health_route='''  server.on("/camera-health", HTTP_GET, []() {
 '''
-    if health_start in data:
-        start=data.index(health_start)
-        end=data.index('''  web.begin(server, runner, imu, roller, logger);''', start)
+    if health_route in data:
+        route=data.index(health_route)
+        comment=data.rfind('\n  //', 0, route)
+        start=(comment + 1) if comment >= 0 else route
+        end=data.index('''  web.begin(server, runner, imu, roller, logger);''', route)
         data=data[:start]+data[end:]
         data=data.replace(
             '                control_task_ok ? "OK" : "FAILED");\n\n  web.begin(server, runner, imu, roller, logger);',
