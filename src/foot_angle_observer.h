@@ -122,7 +122,7 @@ class FootAngleObserver {
   uint32_t rwlog_run_start_us_ = 0;
   uint16_t run_log_count_ = 0;
   bool run_log_overflow_ = false;
-  FootLogRow run_log_[kRunLogCapacity];
+  FootLogRow* run_log_ = nullptr;
 
   const char* last_error_ = "not_started";
 };
