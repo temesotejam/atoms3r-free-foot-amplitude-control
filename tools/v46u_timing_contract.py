@@ -97,6 +97,11 @@ def original_timing_file(path):
     data=(ROOT/path).read_text()
     if path == "src/main.cpp":
         data=normalize_free_foot_main(data)
+    if path == "src/config.h":
+        data=data.replace('static constexpr char AP_SSID[] = "AtomS3R_FREEFOOT_DIAG";',
+                          'static constexpr char AP_SSID[] = "AtomS3CAM_Q1_SHADOW";')
+        data=data.replace('static constexpr char AP_PASS[] = "";',
+                          'static constexpr char AP_PASS[] = "12345678";')
     # V46al-R1 is the declared active-control delta; remove it before retained hashes.
     data=normalize_v46al_file(path, data)
     # V46ak is observation-only; remove it before checking the retained baseline.
