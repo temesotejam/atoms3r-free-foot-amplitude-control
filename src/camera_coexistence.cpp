@@ -31,12 +31,13 @@ constexpr int PIN_CAM_D7 = 13;
 // entire QVGA grayscale frame from internal DMA RAM into PSRAM.
 constexpr uint32_t kCameraXclkHz = 16000000UL;
 
-// Hold the single framebuffer most of the period. With fb_count=1 this leaves
-// no free framebuffer for the internal cam_task, intentionally throttling the
-// camera while still proving continuous runtime coexistence.
-constexpr uint32_t kFrameHoldMs = 180;
-constexpr uint32_t kFrameReleaseMs = 20;
-constexpr uint8_t kTargetCaptureHz = 5;
+// Phase 1B diagnosis: take exactly one frame, then deliberately keep ownership
+// of the only framebuffer. With fb_count=1 the internal cam_task has no free
+// destination and stays quiescent after that first frame. The sensor/XCLK and
+// camera driver remain initialized, but continuous high-priority frame handling
+// cannot compete with Wi-Fi. If HTTP recovers in this build, the contention is
+// isolated to continuous camera activity rather than I2C setup or memory alone.
+constexpr uint8_t kTargetCaptureHz = 0;
 
 constexpr uint32_t kConsumerStackBytes = 4096;
 constexpr UBaseType_t kConsumerPriority = 1;
@@ -194,30 +195,29 @@ void CameraCoexistenceProbe::taskEntry(void* arg) {
 }
 
 void CameraCoexistenceProbe::taskLoop() {
-  for (;;) {
-    camera_fb_t* fb = esp_camera_fb_get();
-    if (!fb) {
-      portENTER_CRITICAL(&mux_);
-      ++snapshot_.frame_failures;
-      portEXIT_CRITICAL(&mux_);
-      vTaskDelay(pdMS_TO_TICKS(200));
-      continue;
-    }
-
+  camera_fb_t* fb = esp_camera_fb_get();
+  if (!fb) {
     portENTER_CRITICAL(&mux_);
-    snapshot_.first_frame_seen = true;
-    ++snapshot_.frame_count;
-    snapshot_.last_frame_bytes = fb->len;
-    snapshot_.last_width = static_cast<uint16_t>(fb->width);
-    snapshot_.last_height = static_cast<uint16_t>(fb->height);
+    ++snapshot_.frame_failures;
     portEXIT_CRITICAL(&mux_);
-
-    // Deliberately keep the only framebuffer unavailable most of the time.
-    // This is a coexistence probe, not yet the 15 Hz foot-angle implementation.
-    vTaskDelay(pdMS_TO_TICKS(kFrameHoldMs));
-    esp_camera_fb_return(fb);
-    vTaskDelay(pdMS_TO_TICKS(kFrameReleaseMs));
+    setError("camera_first_frame_failed");
+    vTaskSuspend(nullptr);
+    return;
   }
+
+  portENTER_CRITICAL(&mux_);
+  snapshot_.first_frame_seen = true;
+  snapshot_.frame_count = 1;
+  snapshot_.last_frame_bytes = fb->len;
+  snapshot_.last_width = static_cast<uint16_t>(fb->width);
+  snapshot_.last_height = static_cast<uint16_t>(fb->height);
+  portEXIT_CRITICAL(&mux_);
+
+  // Intentionally do NOT return fb. This is diagnostic ownership, not a leak:
+  // the only framebuffer remains checked out so cam_task has no free frame and
+  // becomes idle after the first capture. Keep this task suspended forever.
+  setError("ok_first_frame_held");
+  vTaskSuspend(nullptr);
 }
 
 CameraCoexistenceSnapshot CameraCoexistenceProbe::snapshot() const {

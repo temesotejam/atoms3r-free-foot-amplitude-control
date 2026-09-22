@@ -28,7 +28,8 @@
     <section class="panel important">
       <h2>Camera共存 Phase 1</h2>
       <p><strong>今回は足角度計算をまだ入れていません。</strong> 固定足完成版の制御・MEKF・RWLOG・Web UIをそのまま残し、GC0308を低負荷で動作させてもWi-Fi/Web UIが維持できるかだけを確認する版です。</p>
-      <p>Cameraは <code>QVGA grayscale / XCLK 16 MHz / PSRAM / 1 framebuffer / 約5 Hz</code>。設定用SCCBは起動時だけI2C0を借り、設定後に解放してからRoller485を起動します。</p>
+      <p>Phase 1BではCameraを <code>QVGA grayscale / XCLK 16 MHz / PSRAM / 1 framebuffer</code> で初期化し、<strong>最初の1枚だけ取得して、そのフレームを保持したまま連続撮像を止めます</strong>。設定用SCCBは起動時だけI2C0を借り、設定後に解放してからRoller485を起動します。</p>
+      <p>この版でWeb UIが復活すれば、I2Cやメモリ確保ではなく、連続撮像時のCamera内部タスクとWi-Fiの競合が原因と判断できます。</p>
       <p>Camera内部の <code>cam_task</code> は、Wi-Fiと同じ高優先度23から<strong>Priority 3</strong>へ下げています（Wi-Fi 23 / Roller 4 / cam_task 3 / Camera consumer 1）。</p>
       <p>書き込み後はまずモータを動かさず、Wi-Fi <code>AtomS3CAM_Q1_SHADOW</code>へ接続し、最初に <code>http://192.168.4.1/camera-health</code> を開いてください。短い <code>ok camera=...</code> が出たら、続いて <code>http://192.168.4.1/</code> の通常WebUIを確認します。</p>
     </section>
