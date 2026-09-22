@@ -64,11 +64,21 @@ assert '!!j.foot_camera_ok&&!!j.foot_zero_ready' in web
 print("Free-foot observation isolation guards PASS")
 
 
-# Camera/IMU startup ordering follows the independently validated foot tracker.
-camera_begin_pos = main.index("const bool foot_ok = foot_angles.begin();")
-m5_begin_pos = main.index("M5.begin(cfg);")
-imu_port_pos = main.index("M5.In_I2C.setPort(I2C_NUM_1, GPIO_NUM_45, GPIO_NUM_0);")
-imu_begin_pos = main.index("const bool imu_ok = imu.begin();")
-assert camera_begin_pos < m5_begin_pos < imu_port_pos < imu_begin_pos
+
+
+# Camera SCCB must never claim the BMI270 I2C1 bus.
+assert 'c.pin_sccb_sda = -1;' in tracker
+assert 'c.pin_sccb_scl = -1;' in tracker
+assert 'c.sccb_i2c_port = I2C_NUM_0;' in tracker
+assert 'i2c_param_config(I2C_NUM_0, &sccb)' in tracker
+assert 'i2c_driver_install(I2C_NUM_0' in tracker
+assert 'i2c_driver_delete(I2C_NUM_0)' in tracker
+assert 'I2C_NUM_1' not in tracker
+
+# Preserve the previously working M5/logger/camera/IMU startup order.
+assert main.index('M5.begin(cfg);') < main.index('const bool psram_ok = logger.begin();')
+assert main.index('const bool psram_ok = logger.begin();') < main.index('const bool foot_ok = foot_angles.begin();')
+assert main.index('const bool foot_ok = foot_angles.begin();') < main.index('const bool imu_ok = imu.begin();')
+
 assert 'foot_camera_error' in web
 assert 'imu_error' in web

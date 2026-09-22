@@ -117,23 +117,10 @@ void setup() {
   Serial.printf("IMU consumer: core=%d priority=%u; BMI270 reader core=1 priority=6\n",
                 xPortGetCoreID(), static_cast<unsigned>(uxTaskPriorityGet(nullptr)));
 
-  // The validated standalone foot tracker initializes the GC0308 before
-  // configuring the BMI270 I2C bus. esp32-camera SCCB owns a hardware I2C
-  // controller during camera probe/configuration, so preserve that ordering
-  // here instead of letting camera startup collide with the already-live IMU bus.
-  const bool foot_ok = foot_angles.begin();
-  Serial.printf("Foot angle tracker: %s mapping=upper:right/lower:left mode=observation_only error=%s\n",
-                foot_ok ? "OK" : "FAILED", foot_angles.lastError());
-
   auto cfg = M5.config();
   cfg.serial_baudrate = 0;
   cfg.internal_imu = false;  // ImuManager initializes once, with bounded cold-start validation/retries.
   M5.begin(cfg);
-
-  // Match atoms3r-foot-angle-tracker's validated handoff after camera init.
-  // BMI270 is physically on the AtomS3R-CAM internal I2C1 bus: SDA=45, SCL=0.
-  M5.In_I2C.setPort(I2C_NUM_1, GPIO_NUM_45, GPIO_NUM_0);
-
   Serial.printf("V46l identity: board=%d imu_type=%d M5Unified=%s M5GFX=%s AHRS=%s base=%s attitude=%s\n",
                 static_cast<int>(M5.getBoard()), static_cast<int>(M5.Imu.getType()),
                 Config::RESOLVED_M5UNIFIED_VERSION, Config::RESOLVED_M5GFX_VERSION,
@@ -146,6 +133,10 @@ void setup() {
                 static_cast<unsigned>(logger.psramTotal()), static_cast<unsigned>(logger.psramFree()),
                 static_cast<unsigned>(logger.sampleCapacity()));
   if (!psram_ok) Serial.printf("PSRAM error: %s\n", logger.lastError());
+
+  const bool foot_ok = foot_angles.begin();
+  Serial.printf("Foot angle tracker: %s mapping=upper:right/lower:left mode=observation_only error=%s\n",
+                foot_ok ? "OK" : "FAILED", foot_angles.lastError());
 
   const bool imu_ok = imu.begin();
   Serial.printf("IMU acquisition: %s internal_i2c=%d SDA=%d SCL=%d error=%s\n",

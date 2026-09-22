@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <math.h>
 #include <WiFi.h>
+#include "driver/i2c.h"
 #include "esp_camera.h"
 
 namespace {
@@ -105,12 +106,39 @@ bool FootAngleTracker::initCamera() {
   digitalWrite(PIN_CAM_POWER_N, LOW);
   delay(500);
 
+  // Keep camera SCCB off the BMI270's I2C1 bus. esp32-camera defaults
+  // SCCB_Init() to hardware I2C1, which collides with the AtomS3R-CAM
+  // internal BMI270 bus. Configure camera SCCB temporarily on I2C0, use
+  // esp_camera's "existing I2C port" path, then release I2C0 before the
+  // Roller485 task later reopens I2C0 on its own SDA/SCL pins.
+  i2c_config_t sccb = {};
+  sccb.mode = I2C_MODE_MASTER;
+  sccb.sda_io_num = static_cast<gpio_num_t>(PIN_CAM_SDA);
+  sccb.sda_pullup_en = GPIO_PULLUP_ENABLE;
+  sccb.scl_io_num = static_cast<gpio_num_t>(PIN_CAM_SCL);
+  sccb.scl_pullup_en = GPIO_PULLUP_ENABLE;
+  sccb.master.clk_speed = 100000;
+
+  // Camera startup happens before Roller485 owns I2C0. Clear only a stale
+  // controller-0 driver; never touch I2C1.
+  i2c_driver_delete(I2C_NUM_0);
+  esp_err_t sccb_err = i2c_param_config(I2C_NUM_0, &sccb);
+  if (sccb_err != ESP_OK) {
+    last_error_ = "camera_sccb_i2c0_param_config_failed";
+    return false;
+  }
+  sccb_err = i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0);
+  if (sccb_err != ESP_OK) {
+    last_error_ = "camera_sccb_i2c0_driver_install_failed";
+    return false;
+  }
+
   camera_config_t c = {};
   c.pin_pwdn = -1;
   c.pin_reset = -1;
   c.pin_xclk = PIN_CAM_XCLK;
-  c.pin_sccb_sda = PIN_CAM_SDA;
-  c.pin_sccb_scl = PIN_CAM_SCL;
+  c.pin_sccb_sda = -1;
+  c.pin_sccb_scl = -1;
   c.pin_d7 = PIN_CAM_D7;
   c.pin_d6 = PIN_CAM_D6;
   c.pin_d5 = PIN_CAM_D5;
@@ -131,21 +159,30 @@ bool FootAngleTracker::initCamera() {
   c.fb_count = 1;
   c.fb_location = CAMERA_FB_IN_PSRAM;
   c.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
-  c.sccb_i2c_port = -1;
+  c.sccb_i2c_port = I2C_NUM_0;
 
   const esp_err_t err = esp_camera_init(&c);
   if (err != ESP_OK) {
+    i2c_driver_delete(I2C_NUM_0);
     last_error_ = "esp_camera_init_failed";
     return false;
   }
   sensor_t* s = esp_camera_sensor_get();
   if (!s) {
+    i2c_driver_delete(I2C_NUM_0);
     last_error_ = "camera_sensor_missing";
     return false;
   }
   s->set_framesize(s, FRAMESIZE_QVGA);
   s->set_vflip(s, 1);
   s->set_hmirror(s, 0);
+
+  // Runtime frame capture is parallel/DMA and does not need SCCB. Release
+  // controller 0 so Roller485 can later initialize it on SDA2/SCL1.
+  if (i2c_driver_delete(I2C_NUM_0) != ESP_OK) {
+    last_error_ = "camera_sccb_i2c0_release_failed";
+    return false;
+  }
   return true;
 }
 
