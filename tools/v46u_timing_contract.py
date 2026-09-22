@@ -8,8 +8,70 @@ from v46z_comparison_zero_contract import normalize_log_types as normalize_v46z_
 from v46ak_observation_contract import normalize_file as normalize_v46ak_file
 from v46al_control_contract import normalize_file as normalize_v46al_file
 ROOT=Path(__file__).resolve().parents[1]
+def normalize_free_foot_main(data):
+    data=data.replace('#include "foot_angle_tracker.h"\n','')
+    data=data.replace('FootAngleTracker foot_angles;\n','')
+    data=data.replace('''  const bool upright_sample = fresh && UprightPoseGuide::isUprightStableSample(r);
+  foot_angles.setStartupUprightGate(upright_sample);
+  imu.setStartupGuideState(reason, false, 0);
+  if (!upright_sample) {
+    startup_upright_since_ms = 0;
+    return;
+  }
+''','''  imu.setStartupGuideState(reason, false, 0);
+  if (!fresh || !UprightPoseGuide::isUprightStableSample(r)) {
+    startup_upright_since_ms = 0;
+    return;
+  }
+''')
+    data=data.replace('''  // The existing IMU upright/still gate also defines the boot-specific foot
+  // angle zero. Marker A (upper) is the right foot; Marker B (lower) is left.
+  // Only the zero offset is calibrated here; the pixel-to-angle slopes stay frozen.
+  if (!foot_angles.lockStartupZero()) {
+    imu.setStartupGuideState("waiting_foot_markers", false,
+                             now_ms - startup_upright_since_ms);
+    displayLine("Hold upright", "Waiting foot markers");
+    return;
+  }
+  foot_angles.setStartupUprightGate(false);
+''','')
+    data=data.replace('''  const FootAngleSnapshot foot = foot_angles.snapshot();
+  Serial.printf("Startup guide: upright confirmed; gravity error=%.2f deg, norm=%.3f g; "
+                "foot zero R=%.3f px L=%.3f px samples=%lu\\n",
+                UprightPoseGuide::directionErrorDeg(r), UprightPoseGuide::accelNormG(r),
+                foot.zero_right_x_px, foot.zero_left_x_px,
+                static_cast<unsigned long>(foot.zero_samples));
+''','''  Serial.printf("Startup guide: upright confirmed; gravity error=%.2f deg, norm=%.3f g\\n",
+                UprightPoseGuide::directionErrorDeg(r), UprightPoseGuide::accelNormG(r));
+''')
+    data=data.replace('''  const bool foot_ok = foot_angles.begin();
+  Serial.printf("Foot angle tracker: %s mapping=upper:right/lower:left mode=observation_only error=%s\\n",
+                foot_ok ? "OK" : "FAILED", foot_angles.lastError());
+
+''','')
+    data=data.replace('  web.begin(server, runner, imu, roller, logger, foot_angles);',
+                      '  web.begin(server, runner, imu, roller, logger);')
+    data=data.replace('''  // The camera task is observation-only and owns a sidecar log. Close that
+  // sidecar only after the run-control worker has fully released the runner.
+  if (!runner.running() && foot_angles.runActive()) {
+    foot_angles.endRun();
+  }
+
+''','')
+    data=data.replace('''  if (runner.running()) {
+    if (!foot_angles.runActive()) {
+      foot_angles.beginRun(logger.currentRunId(), static_cast<uint32_t>(logger.runStartUs()));
+    }
+    updateAcquisitionContext();
+''','''  if (runner.running()) {
+    updateAcquisitionContext();
+''')
+    return data
+
 def original_timing_file(path):
     data=(ROOT/path).read_text()
+    if path == "src/main.cpp":
+        data=normalize_free_foot_main(data)
     # V46al-R1 is the declared active-control delta; remove it before retained hashes.
     data=normalize_v46al_file(path, data)
     # V46ak is observation-only; remove it before checking the retained baseline.
