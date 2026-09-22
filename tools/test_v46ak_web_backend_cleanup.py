@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 web = (ROOT / "src/web_ui.cpp").read_text(encoding="utf-8")
 header = (ROOT / "src/web_ui.h").read_text(encoding="utf-8")
 
-begin = web[web.index("void WebUi::begin("):web.index("void WebUi::update()")]
+begin = web[web.index("WebUi::begin("):web.index("void WebUi::update()")]
 status = web[web.index("String WebUi::statusJson() const"):]
 
 # Only routes used by the current simplified device UI remain.
