@@ -31,13 +31,13 @@ constexpr int PIN_CAM_D7 = 13;
 // entire QVGA grayscale frame from internal DMA RAM into PSRAM.
 constexpr uint32_t kCameraXclkHz = 16000000UL;
 
-// Phase 1B diagnosis: take exactly one frame, then deliberately keep ownership
-// of the only framebuffer. With fb_count=1 the internal cam_task has no free
-// destination and stays quiescent after that first frame. The sensor/XCLK and
-// camera driver remain initialized, but continuous high-priority frame handling
-// cannot compete with Wi-Fi. If HTTP recovers in this build, the contention is
-// isolated to continuous camera activity rather than I2C setup or memory alone.
-constexpr uint8_t kTargetCaptureHz = 0;
+// Phase 1C: continuous low-rate capture with the esp32-camera internal
+// cam_task linker-wrapped down to Priority 3. This is the direct test of the
+// suspected Wi-Fi contention: keep the camera running, but never let cam_task
+// run at the Wi-Fi driver's high priority.
+constexpr uint32_t kFrameHoldMs = 180;
+constexpr uint32_t kFrameReleaseMs = 20;
+constexpr uint8_t kTargetCaptureHz = 5;
 
 constexpr uint32_t kConsumerStackBytes = 4096;
 constexpr UBaseType_t kConsumerPriority = 1;
@@ -195,29 +195,32 @@ void CameraCoexistenceProbe::taskEntry(void* arg) {
 }
 
 void CameraCoexistenceProbe::taskLoop() {
-  camera_fb_t* fb = esp_camera_fb_get();
-  if (!fb) {
+  for (;;) {
+    camera_fb_t* fb = esp_camera_fb_get();
+    if (!fb) {
+      portENTER_CRITICAL(&mux_);
+      ++snapshot_.frame_failures;
+      portEXIT_CRITICAL(&mux_);
+      setError("camera_frame_failed");
+      vTaskDelay(pdMS_TO_TICKS(200));
+      continue;
+    }
+
     portENTER_CRITICAL(&mux_);
-    ++snapshot_.frame_failures;
+    snapshot_.first_frame_seen = true;
+    ++snapshot_.frame_count;
+    snapshot_.last_frame_bytes = fb->len;
+    snapshot_.last_width = static_cast<uint16_t>(fb->width);
+    snapshot_.last_height = static_cast<uint16_t>(fb->height);
     portEXIT_CRITICAL(&mux_);
-    setError("camera_first_frame_failed");
-    vTaskSuspend(nullptr);
-    return;
+
+    // fb_count=1 plus a long hold interval limits how often cam_task can run.
+    // The critical change versus the failed Phase 1 build is that cam_task
+    // itself now runs at Priority 3 instead of the Wi-Fi-class Priority 23.
+    vTaskDelay(pdMS_TO_TICKS(kFrameHoldMs));
+    esp_camera_fb_return(fb);
+    vTaskDelay(pdMS_TO_TICKS(kFrameReleaseMs));
   }
-
-  portENTER_CRITICAL(&mux_);
-  snapshot_.first_frame_seen = true;
-  snapshot_.frame_count = 1;
-  snapshot_.last_frame_bytes = fb->len;
-  snapshot_.last_width = static_cast<uint16_t>(fb->width);
-  snapshot_.last_height = static_cast<uint16_t>(fb->height);
-  portEXIT_CRITICAL(&mux_);
-
-  // Intentionally do NOT return fb. This is diagnostic ownership, not a leak:
-  // the only framebuffer remains checked out so cam_task has no free frame and
-  // becomes idle after the first capture. Keep this task suspended forever.
-  setError("ok_first_frame_held");
-  vTaskSuspend(nullptr);
 }
 
 CameraCoexistenceSnapshot CameraCoexistenceProbe::snapshot() const {

@@ -44,19 +44,18 @@ assert "c.pin_sccb_sda = -1;" in camera
 assert "c.pin_sccb_scl = -1;" in camera
 assert "i2c_driver_delete(I2C_NUM_0)" in camera
 
-# Phase 1B isolates continuous camera activity. S3 16 MHz direct-PSRAM DMA,
-# one QVGA grayscale framebuffer, then exactly one frame is held forever so the
-# internal cam_task cannot continue competing with Wi-Fi.
+# Phase 1C keeps continuous low-rate capture running while the precompiled
+# esp32-camera cam_task is linker-wrapped to Priority 3. This directly tests
+# whether the failed HTTP path was caused by cam_task/Wi-Fi priority contention.
 assert "kCameraXclkHz = 16000000UL" in camera
 assert "PIXFORMAT_GRAYSCALE" in camera
 assert "FRAMESIZE_QVGA" in camera
 assert "c.fb_count = 1;" in camera
 assert "CAMERA_FB_IN_PSRAM" in camera
-assert "kTargetCaptureHz = 0" in camera
-assert "snapshot_.frame_count = 1;" in camera
-assert "do NOT return fb" in camera
-assert "esp_camera_fb_return(fb)" not in camera[camera.index("void CameraCoexistenceProbe::taskLoop()"):]
-assert "vTaskSuspend(nullptr);" in camera
+assert "kTargetCaptureHz = 5" in camera
+assert "kFrameHoldMs = 180" in camera
+assert "kFrameReleaseMs = 20" in camera
+assert "esp_camera_fb_return(fb)" in camera[camera.index("void CameraCoexistenceProbe::taskLoop()"):]
 assert "kConsumerPriority = 1" in camera
 assert "kConsumerCore = 0" in camera
 
