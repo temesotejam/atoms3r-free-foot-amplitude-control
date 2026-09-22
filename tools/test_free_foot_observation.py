@@ -51,14 +51,13 @@ assert "foot_angle_zero_not_ready_hold_upright" in web
 assert "beginRun(logger.currentRunId()" in main
 assert "foot_angles.endRun()" in main
 
-print("Free-foot observation isolation guards PASS")
-
-
 # Startup diagnostics expose exactly what blocks the initial foot-zero lock.
-assert '"startup":' in web
+assert '\\"startup\\":' in web
 assert 'startupDiagnosticsJson()' in web
 assert 'right_foot_cx_px' in web and 'left_foot_cx_px' in web
 assert 'foot_frame_count' in web and 'foot_camera_failures' in web
 assert 'startupReasonLabel' in web
 assert '左右足マーカー待ち' in web
 assert '!!j.foot_camera_ok&&!!j.foot_zero_ready' in web
+
+print("Free-foot observation isolation guards PASS")

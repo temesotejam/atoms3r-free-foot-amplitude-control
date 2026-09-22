@@ -12,7 +12,7 @@ assert(!source.includes('setTimingCompensation'));assert(!source.includes('timin
 const context=vm.createContext({document:{getElementById:get,activeElement:null},fetch:(url,options)=>new Promise(resolve=>requests.push({url,options,resolve})),setTimeout:()=>1,clearTimeout(){},setInterval(){},AbortController,alert(){},confirm:()=>true,console});
 const run=code=>vm.runInContext(code,context);
 const tick=async()=>{for(let i=0;i<10;i++)await Promise.resolve();};
-const ready={state:'FINISHED',running:false,autonomous_timing_compensation_ms:3,autonomous_timing_compensation_selectable:false};
+const ready={state:'FINISHED',running:false,ready:true,foot_camera_ok:true,foot_zero_ready:true,right_foot_detected:true,left_foot_detected:true,foot_zero_samples:8,startup:{guide_reason:'upright_ready',stable_hold_ms:500},autonomous_timing_compensation_ms:3,autonomous_timing_compensation_selectable:false};
 async function reply(req,data,ok=true){assert(req);req.resolve({ok,json:async()=>data,text:async()=>String(data)});await tick();}
 (async()=>{
  vm.runInContext(source,context);
