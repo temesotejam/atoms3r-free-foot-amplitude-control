@@ -9,6 +9,7 @@ from v46ak_observation_contract import normalize_file as normalize_v46ak_file
 from v46al_control_contract import normalize_file as normalize_v46al_file
 ROOT=Path(__file__).resolve().parents[1]
 def normalize_free_foot_main(data):
+    data=data.replace('#include "esp_heap_caps.h"\n','')
     data=data.replace('#include "foot_angle_tracker.h"\n','')
     data=data.replace('FootAngleTracker foot_angles;\n','')
     data=data.replace('''  const bool upright_sample = fresh && UprightPoseGuide::isUprightStableSample(r);
