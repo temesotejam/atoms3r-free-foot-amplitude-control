@@ -1,4 +1,5 @@
 #include "camera_coexistence.h"
+#include "camera_task_priority_patch.h"
 
 #include <Arduino.h>
 #include "driver/i2c.h"
@@ -74,6 +75,12 @@ bool CameraCoexistenceProbe::begin() {
     captureMemoryAfter();
     return false;
   }
+
+  const CameraTaskPriorityPatchSnapshot task_patch = cameraTaskPriorityPatchSnapshot();
+  snapshot_.cam_task_priority_patch_observed = task_patch.observed;
+  snapshot_.cam_task_original_priority = task_patch.original_priority;
+  snapshot_.cam_task_effective_priority = task_patch.effective_priority;
+  snapshot_.cam_task_core = task_patch.core;
 
   const BaseType_t created = xTaskCreatePinnedToCore(
       taskEntry, "camera_probe", kConsumerStackBytes, this,
