@@ -31,9 +31,10 @@ constexpr int PIN_CAM_D7 = 13;
 // entire QVGA grayscale frame from internal DMA RAM into PSRAM.
 constexpr uint32_t kCameraXclkHz = 16000000UL;
 
-// Phase 1D: initialization/deinitialization isolation. The camera is powered,
- // configured, used for exactly one frame, then fully deinitialized and powered
- // down before Roller485 and WebServer startup.
+// Phase 1E: keep the esp32-camera driver allocated after one real frame, but
+// power the GC0308 sensor off. If HTTP remains healthy, persistent driver state
+// and allocated DMA descriptors are not sufficient to break Wi-Fi; the missing
+// PCLK/VSYNC/HREF activity becomes the decisive difference.
 constexpr uint8_t kTargetCaptureHz = 0;
 
 constexpr uint32_t kConsumerStackBytes = 4096;
@@ -74,18 +75,25 @@ bool CameraCoexistenceProbe::begin() {
     return false;
   }
 
+  snapshot_.camera_driver_active = true;
+  snapshot_.sensor_powered = true;
+
   const CameraTaskPriorityPatchSnapshot task_patch = cameraTaskPriorityPatchSnapshot();
   snapshot_.cam_task_priority_patch_observed = task_patch.observed;
   snapshot_.cam_task_original_priority = task_patch.original_priority;
   snapshot_.cam_task_effective_priority = task_patch.effective_priority;
   snapshot_.cam_task_core = task_patch.core;
 
-  // Phase 1D: prove that the sensor and DMA path can deliver one frame, then
-  // completely remove the camera runtime before Wi-Fi/WebServer is started.
+  // Phase 1E: prove one real frame, return it normally, then stop only the
+  // physical sensor. esp32-camera, its cam_task, queues, ISR/GDMA setup and
+  // framebuffer allocation intentionally remain alive.
   camera_fb_t* fb = esp_camera_fb_get();
   if (!fb) {
     esp_camera_deinit();
     digitalWrite(PIN_CAM_POWER_N, HIGH);
+    snapshot_.camera_driver_active = false;
+    snapshot_.sensor_powered = false;
+    snapshot_.camera_deinitialized = true;
     setError("camera_first_frame_failed");
     captureMemoryAfter();
     return false;
@@ -98,17 +106,13 @@ bool CameraCoexistenceProbe::begin() {
   snapshot_.last_height = static_cast<uint16_t>(fb->height);
   esp_camera_fb_return(fb);
 
-  const esp_err_t deinit_err = esp_camera_deinit();
+  // PIN_CAM_POWER_N is active-low. Keep the ESP32 camera driver initialized,
+  // but remove sensor-generated PCLK/VSYNC/HREF activity before WebServer starts.
   digitalWrite(PIN_CAM_POWER_N, HIGH);
-  if (deinit_err != ESP_OK) {
-    setError("camera_deinit_failed");
-    captureMemoryAfter();
-    return false;
-  }
-
-  snapshot_.camera_deinitialized = true;
+  snapshot_.sensor_powered = false;
+  snapshot_.camera_deinitialized = false;
   snapshot_.camera_ok = true;
-  setError("ok_probe_complete_camera_off");
+  setError("ok_driver_active_sensor_off");
   captureMemoryAfter();
   return true;
 }
@@ -208,7 +212,7 @@ void CameraCoexistenceProbe::taskEntry(void* arg) {
 }
 
 void CameraCoexistenceProbe::taskLoop() {
-  // Phase 1D does not create a runtime camera consumer task.
+  // Phase 1E does not create an application-side runtime camera consumer task.
   vTaskDelete(nullptr);
 }
 

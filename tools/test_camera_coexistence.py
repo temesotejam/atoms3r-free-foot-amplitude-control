@@ -44,9 +44,9 @@ assert "c.pin_sccb_sda = -1;" in camera
 assert "c.pin_sccb_scl = -1;" in camera
 assert "i2c_driver_delete(I2C_NUM_0)" in camera
 
-# Phase 1D proves one real frame can be acquired, then removes the camera
-# runtime completely before WebServer startup. If HTTP returns on hardware,
-# persistent camera DMA/interrupt/runtime activity is the cause, not startup I2C.
+# Phase 1E keeps the esp32-camera runtime allocated after one frame but powers
+# the GC0308 sensor off. This isolates sensor-generated PCLK/VSYNC/HREF activity
+# from mere driver/DMA allocation.
 assert "kCameraXclkHz = 16000000UL" in camera
 assert "PIXFORMAT_GRAYSCALE" in camera
 assert "FRAMESIZE_QVGA" in camera
@@ -55,9 +55,10 @@ assert "CAMERA_FB_IN_PSRAM" in camera
 assert "snapshot_.frame_count = 1;" in camera
 assert "esp_camera_fb_get()" in camera
 assert "esp_camera_fb_return(fb)" in camera
-assert "esp_camera_deinit()" in camera
-assert "digitalWrite(PIN_CAM_POWER_N, HIGH)" in camera
-assert "snapshot_.camera_deinitialized = true;" in camera
+assert "snapshot_.camera_driver_active = true;" in camera
+assert "snapshot_.sensor_powered = false;" in camera
+assert "snapshot_.camera_deinitialized = false;" in camera
+assert 'setError("ok_driver_active_sensor_off")' in camera
 assert "xTaskCreatePinnedToCore(" not in camera
 
 # Absolutely no foot-angle/marker/control coupling in Phase 1.
@@ -89,5 +90,6 @@ assert 'static_assert(kCameraInternalTaskPriority < Config::ROLLER_IO_TASK_PRIOR
 assert 'server.on("/camera-health", HTTP_GET' in main
 assert 'cam_task_priority=%u->%u' in main
 assert 'heap_caps_get_free_size(MALLOC_CAP_INTERNAL)' in main
+assert 'driver_active=%u sensor_powered=%u deinitialized=%u' in main
 
 print("PASS: camera cam_task priority isolation and minimal HTTP probe")
