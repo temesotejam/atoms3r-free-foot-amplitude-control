@@ -129,10 +129,25 @@ bool OneShotCamera::begin() {
   snapshot_.cam_task_effective_priority = task_patch.effective_priority;
   snapshot_.cam_task_core = task_patch.core;
 
-  // esp_camera_init starts continuous capture by default. Convert it to our
-  // idle one-shot state immediately: receiver OFF, XCLK OFF, queue empty.
+  // esp_camera_init starts continuous capture by default. First complete one
+  // boot frame while the sole framebuffer is checked out; this forces cam_task
+  // back to its IDLE state. Only then enter the true one-shot idle condition.
+  camera_fb_t* boot_frame = cam_take(pdMS_TO_TICKS(kCaptureTimeoutMs));
+  if (!boot_frame) {
+    cam_stop();
+    setXclkEnabled(false);
+    esp_camera_deinit();
+    digitalWrite(PIN_CAM_POWER_N, HIGH);
+    snapshot_.camera_driver_active = false;
+    snapshot_.sensor_powered = false;
+    snapshot_.camera_deinitialized = true;
+    setError("camera_boot_frame_failed");
+    captureMemoryAfter();
+    return false;
+  }
   cam_stop();
   setXclkEnabled(false);
+  cam_give(boot_frame);
   flushQueuedFrames();
 
   const BaseType_t created = xTaskCreatePinnedToCore(
@@ -312,6 +327,10 @@ void OneShotCamera::taskEntry(void* arg) {
 }
 
 void OneShotCamera::taskLoop() {
+  // Let Roller485, Wi-Fi AP and WebServer finish startup before the first
+  // one-shot window opens.
+  vTaskDelay(pdMS_TO_TICKS(1500));
+
   for (;;) {
     camera_fb_t* fb = acquire(kCaptureTimeoutMs);
     if (fb) {
