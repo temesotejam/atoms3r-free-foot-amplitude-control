@@ -12,8 +12,23 @@ ROOT=Path(__file__).resolve().parents[1]
 def normalize_camera_coexistence(path, data):
     if path != 'src/main.cpp':
         return data
+    data=data.replace('#include "esp_heap_caps.h"\n','')
     data=data.replace('#include "camera_coexistence.h"\n','')
     data=data.replace('CameraCoexistenceProbe camera_probe;\n','')
+    data=data.replace('''  Serial.printf("Camera internal cam_task: patch=%s core=%d priority=%u->%u\\n",
+                camera_boot.cam_task_priority_patch_observed ? "YES" : "NO",
+                static_cast<int>(camera_boot.cam_task_core),
+                static_cast<unsigned>(camera_boot.cam_task_original_priority),
+                static_cast<unsigned>(camera_boot.cam_task_effective_priority));
+
+''','')
+    health_start='''  // Minimal HTTP probe independent of the full Web UI/status JSON.
+  server.on("/camera-health", HTTP_GET, []() {
+'''
+    if health_start in data:
+        start=data.index(health_start)
+        end=data.index('''  web.begin(server, runner, imu, roller, logger);''', start)
+        data=data[:start]+data[end:]
     data=data.replace('''  // Phase 1 camera coexistence probe only. No marker detection, no foot angle,
   // no control/log/UI dependency. Camera SCCB temporarily borrows I2C0 here,
   // releases it, and only then may Roller485 take ownership of I2C0.
