@@ -113,3 +113,12 @@ assert diag < main.index('const bool imu_ok = imu.begin();')
 assert 'now_ms - associated_since_ms) >= 3000UL' in main
 assert 'softAPgetStationNum()' in main
 assert 'false, 4)' in web
+
+
+# HTTP must be usable while the association diagnostic is still in setup().
+assert 'web.update();' in main[main.index('WIFI_ASSOC_DIAG: waiting for a station before subsystem init'):main.index('const bool psram_ok = logger.begin();')]
+assert 'web.setSubsystemsReady(true);' in main
+assert 'Wi-Fi接続成功' in web
+assert 'subsystems_ready' in web
+assert 'INITIALIZING' in web
+assert 'subsystems_initializing' in web

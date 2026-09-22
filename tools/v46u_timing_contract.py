@@ -104,6 +104,10 @@ def normalize_free_foot_main(data):
         }
         associated_since_ms = 0;
       }
+      // Serve the lightweight initialization page while waiting for the
+      // first station. This proves HTTP independently from every subsystem.
+      web.update();
+
       if (static_cast<uint32_t>(now_ms - last_report_ms) >= 1000UL) {
         last_report_ms = now_ms;
         Serial.printf("WIFI_ASSOC_DIAG: waiting stations=%u heap=%u largest=%u\\n",
@@ -116,6 +120,7 @@ def normalize_free_foot_main(data):
   }
 
 ''','')
+    data=data.replace('  web.setSubsystemsReady(true);\n','')
     data=data.replace('''  // The camera task is observation-only and owns a sidecar log. Close that
   // sidecar only after the run-control worker has fully released the runner.
   if (!runner.running() && foot_angles.runActive()) {

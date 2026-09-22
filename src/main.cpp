@@ -169,6 +169,10 @@ void setup() {
         }
         associated_since_ms = 0;
       }
+      // Serve the lightweight initialization page while waiting for the
+      // first station. This proves HTTP independently from every subsystem.
+      web.update();
+
       if (static_cast<uint32_t>(now_ms - last_report_ms) >= 1000UL) {
         last_report_ms = now_ms;
         Serial.printf("WIFI_ASSOC_DIAG: waiting stations=%u heap=%u largest=%u\n",
@@ -207,6 +211,7 @@ void setup() {
   const bool control_task_ok = run_control.begin(runControlStep, captureRunState, nullptr);
   Serial.printf("Run control worker: %s core=1 priority=4; HTTP core=1 priority=2\n",
                 control_task_ok ? "OK" : "FAILED");
+  web.setSubsystemsReady(true);
   Serial.printf("AP SSID: %s status=%s IP=%s stations=%u heap=%u largest=%u\n",
                 Config::AP_SSID, web.accessPointReady() ? "READY" : "FAILED",
                 WiFi.softAPIP().toString().c_str(),
