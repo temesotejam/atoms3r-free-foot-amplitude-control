@@ -62,6 +62,7 @@ jobs:
           pio pkg install -e atoms3cam
           pio run -e atoms3cam
           test -s bmi270-build-patch.json
+          "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-nm" .pio/build/atoms3cam/firmware.elf | grep -q '__wrap_xTaskCreatePinnedToCore'
       - name: Assemble verified web flasher
         run: |
           set -euxo pipefail
