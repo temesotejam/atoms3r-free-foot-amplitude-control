@@ -93,7 +93,8 @@ assert ap_begin < main.index('const bool foot_ok = foot_angles.begin();')
 assert ap_begin < main.index('const bool imu_ok = imu.begin();')
 assert 'WiFi AP FAIL' in main
 assert 'for (int attempt = 0; attempt < 3 && !ap_ready_; ++attempt)' in web
-assert 'ap_ready_ = WiFi.softAP' in web
+assert 'ap_ready_ = Config::AP_PASS[0]' in web
+assert 'WiFi.softAP(Config::AP_SSID, nullptr' in web
 
 
 # Temporary Wi-Fi diagnostic AP removes cached credentials/WPA from the test.
