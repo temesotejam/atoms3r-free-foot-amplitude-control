@@ -125,6 +125,13 @@ static constexpr char ATTITUDE_VALIDATION_REVISION[] = "v46aj_fixed_3ms_compensa
 static constexpr char AMPLITUDE_CONTROL_OBSERVATION_REVISION[] = "v46ak_pre_input_state_observation_20260920";
 // V46al-R2 previous-peak active control begin
 static constexpr char AMPLITUDE_CONTROL_REVISION[] = "v46alr2_previous_peak_active_control_stable_rwlog_20260921";
+// V46am adds observation only: body-relative right/left foot angles from the
+// AtomS3R-CAM. It does not feed any controller, solver, peak detector or Q decision.
+static constexpr char FREE_FOOT_OBSERVATION_REVISION[] =
+    "v46am_free_foot_angle_observation_20260922";
+static constexpr char FREE_FOOT_TRACKER_SOURCE[] =
+    "atoms3r-foot-angle-tracker@ac6df8caf59c93956b87cba57521903c25ff9f00";
+static constexpr char FREE_FOOT_MARKER_MAPPING[] = "upper=right;lower=left";
 static constexpr char AMPLITUDE_CONTROL_BASELINE_SOURCE[] =
     "atoms3r-amplitude-control-v46ak-stable@bb9c5ed07c5ca8b3c6c6b5813b6c2f1b1f57a6ec";
 static constexpr char ENERGY_CONTROL_AUTONOMOUS_PREVIOUS_PEAK_MODEL_REVISION[] =
