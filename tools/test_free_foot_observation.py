@@ -103,3 +103,13 @@ assert 'static constexpr char AP_PASS[] = "";' in config
 assert 'WiFi.softAP(Config::AP_SSID, nullptr' in web
 assert 'softAPgetStationNum()' in main
 assert 'heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)' in main
+
+
+# Wi-Fi association diagnostic must run before any free-foot/heavy subsystem.
+diag = main.index('WIFI_ASSOC_DIAG: waiting for a station before subsystem init')
+assert diag < main.index('const bool psram_ok = logger.begin();')
+assert diag < main.index('const bool foot_ok = foot_angles.begin();')
+assert diag < main.index('const bool imu_ok = imu.begin();')
+assert 'now_ms - associated_since_ms) >= 3000UL' in main
+assert 'softAPgetStationNum()' in main
+assert 'false, 4)' in web
