@@ -4,10 +4,11 @@
 #include <WebServer.h>
 
 #include "experiment_runner.h"
+#include "foot_angle_observer.h"
 
 class WebUi {
 public:
-  void begin(WebServer& server, ExperimentRunner& runner, ImuManager& imu, Roller485Manager& roller, PsramLogger& logger);
+  void begin(WebServer& server, ExperimentRunner& runner, ImuManager& imu, Roller485Manager& roller, PsramLogger& logger, FootAngleObserver& foot);
   void update();
 
 private:
@@ -23,6 +24,7 @@ private:
   void handleStop();
   void handleClear();
   void handleRwLog();
+  void handleFootLog();
   String statusJson() const;
 
   WebServer* server_ = nullptr;
@@ -30,5 +32,6 @@ private:
   ImuManager* imu_ = nullptr;
   Roller485Manager* roller_ = nullptr;
   PsramLogger* logger_ = nullptr;
+  FootAngleObserver* foot_ = nullptr;
 };
 
