@@ -100,6 +100,7 @@ struct FootAngle {
 };
 struct WebUi {
  Server* server_; ExperimentRunner* runner_; Logger* logger_; Imu* imu_; FootAngle* foot_angles_;
+ bool subsystems_ready_=true;
  void handleStartEnergyControlAutonomous();
 };
 HTTP_START
