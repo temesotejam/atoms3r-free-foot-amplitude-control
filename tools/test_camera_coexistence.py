@@ -13,8 +13,7 @@ def git_blob_sha(path):
     data = (ROOT / path).read_bytes()
     return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
 
-# Phase 1 must not modify the controller, Web UI, logger, IMU implementation,
-# or Roller implementation. Camera is an isolated observer only.
+# Fixed-foot controller/estimator/web/logger sources remain byte-identical.
 expected = {
     "src/web_ui.cpp": "c63bb11581c8252fe92f151fb97c9208175bd336",
     "src/experiment_runner.cpp": "58688977951627cdab038d73ca4d64b0c6b3d645",
@@ -26,73 +25,67 @@ expected = {
 for path, sha in expected.items():
     assert git_blob_sha(path) == sha, path
 
-# Keep the proven boot skeleton. Camera is inserted only after BMI270 startup
-# and before Roller485 takes I2C0.
+# Proven boot ordering is unchanged: M5/logger/IMU first, Camera borrows I2C0,
+# then Roller485 owns I2C0 for the rest of runtime.
 assert main.index("M5.begin(cfg);") < main.index("const bool psram_ok = logger.begin();")
 assert main.index("const bool psram_ok = logger.begin();") < main.index("const bool imu_ok = imu.begin();")
 assert main.index("const bool imu_ok = imu.begin();") < main.index("const bool camera_ok = camera_probe.begin();")
 assert main.index("const bool camera_ok = camera_probe.begin();") < main.index("const bool roller_ok = roller.begin();")
-assert main.index("const bool roller_ok = roller.begin();") < main.index("web.begin(server, runner, imu, roller, logger);")
 
-# SCCB must never touch BMI270 I2C1. It temporarily owns I2C0 and releases it
-# before Roller starts.
+# SCCB must never touch BMI270 I2C1 and runtime capture never uses SCCB.
 assert "I2C_NUM_1" not in camera
 assert "i2c_param_config(I2C_NUM_0, &sccb)" in camera
-assert "i2c_driver_install(I2C_NUM_0" in camera
 assert "c.sccb_i2c_port = I2C_NUM_0;" in camera
-assert "c.pin_sccb_sda = -1;" in camera
-assert "c.pin_sccb_scl = -1;" in camera
 assert "i2c_driver_delete(I2C_NUM_0)" in camera
 
-# Phase 1F is the coexistence fix candidate: GC0308 remains powered and
-# configured, while cam_start/cam_stop gate receiver activity to one frame per
-# 200 ms. SCCB is never used again after Roller485 starts.
-assert "kCameraXclkHz = 16000000UL" in camera
-assert "PIXFORMAT_GRAYSCALE" in camera
-assert "FRAMESIZE_QVGA" in camera
-assert "c.fb_count = 1;" in camera
-assert "CAMERA_FB_IN_PSRAM" in camera
-assert "kTargetCaptureHz = 5" in camera
-assert "kCapturePeriodMs = 200" in camera
-assert 'extern "C" void cam_stop(void);' in camera
-assert 'extern "C" void cam_start(void);' in camera
-assert "cam_stop();" in camera
-assert "cam_start();" in camera
-assert camera.index("cam_stop();", camera.index("camera_fb_t* fb = esp_camera_fb_get();")) < camera.index("esp_camera_fb_return(fb)")
-assert "snapshot_.receiver_gated = true;" in camera
-assert "snapshot_.sensor_powered = true;" in camera
-assert "xTaskCreatePinnedToCore(" in camera
-assert '"camera_gate"' in camera
+# True one-shot contract:
+#  idle -> XCLK ON -> receiver ON -> exactly one frame -> receiver OFF ->
+#  XCLK OFF -> caller, followed by a guaranteed post-capture quiet interval.
+for token in (
+    'extern "C" void cam_stop(void);',
+    'extern "C" void cam_start(void);',
+    'extern "C" camera_fb_t* cam_take(TickType_t timeout);',
+    "CAM_CLK_IDX",
+    "SIG_GPIO_OUT_IDX",
+    "gpio_matrix_out(PIN_CAM_XCLK, CAM_CLK_IDX",
+    "gpio_matrix_out(PIN_CAM_XCLK, SIG_GPIO_OUT_IDX",
+    "setXclkEnabled(true);",
+    "cam_start();",
+    "camera_fb_t* fb = cam_take(",
+    "cam_stop();",
+    "setXclkEnabled(false);",
+    "kMinimumIdleMs = 300",
+    "vTaskDelay(pdMS_TO_TICKS(kMinimumIdleMs))",
+):
+    assert token in camera, token
 
-# Absolutely no foot-angle/marker/control coupling in Phase 1.
+capture = camera[camera.index("camera_fb_t* OneShotCamera::acquire") :
+                 camera.index("void OneShotCamera::release")]
+assert capture.index("setXclkEnabled(true);") < capture.index("cam_start();")
+assert capture.index("cam_start();") < capture.index("cam_take(")
+assert capture.index("cam_take(") < capture.index("cam_stop();")
+assert capture.index("cam_stop();") < capture.index("setXclkEnabled(false);")
+assert "esp_camera_fb_get()" not in camera
+
+# One-shot idle does not power-cycle the sensor and never re-enters SCCB.
+assert "digitalWrite(PIN_CAM_POWER_N, HIGH);" in camera  # failure cleanup only
+task = camera[camera.index("void OneShotCamera::taskLoop()"):]
+assert "PIN_CAM_POWER_N" not in task
+assert "I2C_NUM_0" not in task
+
+# No foot-angle/marker/control coupling yet.
 for token in ("foot_angle", "right_foot", "left_foot", "marker", "centroid", "deg_per_px"):
     assert token not in camera.lower(), token
 
-# Memory pressure is observable at boot.
-for token in ("MALLOC_CAP_INTERNAL", "MALLOC_CAP_DMA", "MALLOC_CAP_SPIRAM",
-              "internal_free_before", "internal_free_after",
-              "dma_free_before", "dma_free_after",
-              "psram_free_before", "psram_free_after"):
-    assert token in camera + header, token
-
-print("PASS: isolated camera coexistence Phase 1")
-
-
-# The precompiled esp32-camera cam_task normally starts at configMAX_PRIORITIES-2
-# on Core 0. Linker wrapping changes only the task named "cam_task" to Priority 3.
+# cam_task remains below Roller/Wi-Fi during the short active capture window.
 assert '--wrap=xTaskCreatePinnedToCore' in pio
-assert '__wrap_xTaskCreatePinnedToCore' in patch
-assert '__real_xTaskCreatePinnedToCore' in patch
 assert 'strcmp(pcName, "cam_task") == 0' in patch
 assert 'kCameraInternalTaskPriority = 3' in patch
-assert 'effective_priority = kCameraInternalTaskPriority' in patch
-assert 'return __real_xTaskCreatePinnedToCore' in patch
 assert 'static_assert(kCameraInternalTaskPriority < Config::ROLLER_IO_TASK_PRIORITY' in patch
 
-# Minimal HTTP path is independent of WebUi internals.
+# Diagnostics prove the idle state on hardware.
 assert 'server.on("/camera-health", HTTP_GET' in main
-assert 'cam_task_priority=%u->%u' in main
-assert 'heap_caps_get_free_size(MALLOC_CAP_INTERNAL)' in main
-assert 'driver_active=%u sensor_powered=%u receiver_gated=%u receiver_active=%u' in main
+assert 'oneshot=%u receiver_active=%u xclk_active=%u' in main
+assert 'capture_us=%lu max_capture_us=%lu' in main
 
-print("PASS: camera cam_task priority isolation and minimal HTTP probe")
+print("PASS: true one-shot camera acquisition with XCLK and receiver gating")

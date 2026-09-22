@@ -14,7 +14,7 @@ def normalize_camera_coexistence(path, data):
         return data
     data=data.replace('#include "esp_heap_caps.h"\n','')
     data=data.replace('#include "camera_coexistence.h"\n','')
-    data=data.replace('CameraCoexistenceProbe camera_probe;\n','')
+    data=data.replace('OneShotCamera camera_probe;\n','')
     data=data.replace('''  Serial.printf("Camera internal cam_task: patch=%s core=%d priority=%u->%u\\n",
                 camera_boot.cam_task_priority_patch_observed ? "YES" : "NO",
                 static_cast<int>(camera_boot.cam_task_core),
@@ -32,7 +32,7 @@ def normalize_camera_coexistence(path, data):
         data=data.replace(
             '                control_task_ok ? "OK" : "FAILED");\n\n  web.begin(server, runner, imu, roller, logger);',
             '                control_task_ok ? "OK" : "FAILED");\n  web.begin(server, runner, imu, roller, logger);')
-    camera_start='''  // Phase 1 camera coexistence probe only. No marker detection, no foot angle,
+    camera_start='''  // Camera one-shot integration proof only. No marker detection or foot angle.
 '''
     if camera_start in data:
         start=data.index(camera_start)

@@ -1,23 +1,30 @@
 #pragma once
 
 #include <Arduino.h>
+#include "esp_camera.h"
+#include "freertos/semphr.h"
 
-struct CameraCoexistenceSnapshot {
+struct CameraOneShotSnapshot {
   bool camera_ok = false;
   bool first_frame_seen = false;
   bool camera_driver_active = false;
   bool sensor_powered = false;
-  bool receiver_gated = false;
+  bool one_shot_mode = false;
   bool receiver_active = false;
+  bool xclk_active = false;
   bool camera_deinitialized = false;
+
   uint32_t frame_count = 0;
   uint32_t frame_failures = 0;
   uint32_t last_frame_bytes = 0;
   uint16_t last_width = 0;
   uint16_t last_height = 0;
+  uint32_t last_capture_us = 0;
+  uint32_t max_capture_us = 0;
 
   uint32_t xclk_hz = 16000000UL;
-  uint8_t target_capture_hz = 5;
+  uint16_t xclk_warmup_ms = 20;
+  uint16_t minimum_idle_ms = 300;
   int8_t consumer_core = 0;
   uint8_t consumer_priority = 1;
 
@@ -36,22 +43,31 @@ struct CameraCoexistenceSnapshot {
   uint32_t psram_free_after = 0;
 };
 
-class CameraCoexistenceProbe {
+class OneShotCamera {
  public:
   bool begin();
-  CameraCoexistenceSnapshot snapshot() const;
+
+  // True one-shot API: the receiver and XCLK are normally OFF. acquire()
+  // enables them only for one frame and disables both before returning.
+  camera_fb_t* acquire(uint32_t timeout_ms = 500);
+  void release(camera_fb_t* fb);
+
+  CameraOneShotSnapshot snapshot() const;
   const char* lastError() const { return last_error_; }
 
  private:
   static void taskEntry(void* arg);
   void taskLoop();
   bool initCameraOnTemporaryI2c0();
+  void setXclkEnabled(bool enabled);
+  void flushQueuedFrames();
   void captureMemoryBefore();
   void captureMemoryAfter();
   void setError(const char* error);
 
   mutable portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
+  SemaphoreHandle_t capture_mutex_ = nullptr;
   TaskHandle_t task_ = nullptr;
-  CameraCoexistenceSnapshot snapshot_;
+  CameraOneShotSnapshot snapshot_;
   char last_error_[64] = "not_initialized";
 };

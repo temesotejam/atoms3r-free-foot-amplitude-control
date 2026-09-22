@@ -14,7 +14,7 @@
 #include "run_control_worker.h"
 
 WebServer server(Config::HTTP_PORT);
-CameraCoexistenceProbe camera_probe;
+OneShotCamera camera_probe;
 PsramLogger logger;
 ImuManager imu;
 Roller485Manager roller;
@@ -124,16 +124,15 @@ void setup() {
                 imu_ok ? "OK" : "FAILED", static_cast<int>(M5.In_I2C.getPort()),
                 M5.In_I2C.getSDA(), M5.In_I2C.getSCL(), imu.lastError());
 
-  // Phase 1 camera coexistence probe only. No marker detection, no foot angle,
-  // no control/log/UI dependency. Camera SCCB temporarily borrows I2C0 here,
-  // releases it, and only then may Roller485 take ownership of I2C0.
+  // Camera one-shot integration proof only. No marker detection or foot angle.
+  // SCCB borrows I2C0 only during boot; runtime capture never touches I2C.
   const bool camera_ok = camera_probe.begin();
-  const CameraCoexistenceSnapshot camera_boot = camera_probe.snapshot();
-  Serial.printf("Camera coexistence: %s xclk=%luHz fb=%uHz core=%d priority=%u "
+  const CameraOneShotSnapshot camera_boot = camera_probe.snapshot();
+  Serial.printf("Camera true-one-shot: %s xclk=%luHz idle=%ums core=%d priority=%u "
                 "internal=%u->%u dma=%u->%u psram=%u->%u error=%s\n",
                 camera_ok ? "OK" : "FAILED",
                 static_cast<unsigned long>(camera_boot.xclk_hz),
-                static_cast<unsigned>(camera_boot.target_capture_hz),
+                static_cast<unsigned>(camera_boot.minimum_idle_ms),
                 static_cast<int>(camera_boot.consumer_core),
                 static_cast<unsigned>(camera_boot.consumer_priority),
                 static_cast<unsigned>(camera_boot.internal_free_before),
@@ -162,14 +161,14 @@ void setup() {
   Serial.printf("Run control worker: %s core=1 priority=4; HTTP core=1 priority=2\n",
                 control_task_ok ? "OK" : "FAILED");
 
-  // Minimal HTTP probe independent of the full Web UI/status JSON.
+  // Minimal one-shot camera probe independent of the full Web UI/status JSON.
   server.on("/camera-health", HTTP_GET, []() {
-    const CameraCoexistenceSnapshot c = camera_probe.snapshot();
+    const CameraOneShotSnapshot c = camera_probe.snapshot();
     char body[384];
     snprintf(body, sizeof(body),
         "ok camera=%u first_frame=%u frames=%lu failures=%lu "
-        "driver_active=%u sensor_powered=%u receiver_gated=%u receiver_active=%u "
-        "deinitialized=%u target_hz=%u "
+        "driver_active=%u sensor_powered=%u oneshot=%u receiver_active=%u xclk_active=%u "
+        "deinitialized=%u idle_ms=%u capture_us=%lu max_capture_us=%lu "
         "cam_task_patch=%u cam_task_core=%d cam_task_priority=%u->%u "
         "internal_free=%u dma_free=%u psram_free=%u\n",
         c.camera_ok ? 1U : 0U,
@@ -178,10 +177,13 @@ void setup() {
         static_cast<unsigned long>(c.frame_failures),
         c.camera_driver_active ? 1U : 0U,
         c.sensor_powered ? 1U : 0U,
-        c.receiver_gated ? 1U : 0U,
+        c.one_shot_mode ? 1U : 0U,
         c.receiver_active ? 1U : 0U,
+        c.xclk_active ? 1U : 0U,
         c.camera_deinitialized ? 1U : 0U,
-        static_cast<unsigned>(c.target_capture_hz),
+        static_cast<unsigned>(c.minimum_idle_ms),
+        static_cast<unsigned long>(c.last_capture_us),
+        static_cast<unsigned long>(c.max_capture_us),
         c.cam_task_priority_patch_observed ? 1U : 0U,
         static_cast<int>(c.cam_task_core),
         static_cast<unsigned>(c.cam_task_original_priority),

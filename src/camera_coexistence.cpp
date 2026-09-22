@@ -2,19 +2,21 @@
 #include "camera_task_priority_patch.h"
 
 #include <Arduino.h>
+#include "driver/gpio.h"
 #include "driver/i2c.h"
 #include "esp_camera.h"
 #include "esp_heap_caps.h"
+#include "soc/gpio_sig_map.h"
 
-// esp32-camera keeps these in its private cam_hal API. They are exported by
-// the precompiled Arduino-ESP32 camera library and let us gate VSYNC/GDMA
-// reception without deinitializing the sensor or touching SCCB/I2C again.
+// Private esp32-camera primitives intentionally wrapped by OneShotCamera.
+// The rest of the application never calls these directly.
 extern "C" void cam_stop(void);
 extern "C" void cam_start(void);
+extern "C" camera_fb_t* cam_take(TickType_t timeout);
+extern "C" void cam_give(camera_fb_t* fb);
 
 namespace {
 
-// AtomS3R-CAM / GC0308 pins from the independently validated camera tracker.
 constexpr int PIN_CAM_POWER_N = 18;
 constexpr int PIN_CAM_SDA = 12;
 constexpr int PIN_CAM_SCL = 9;
@@ -31,50 +33,85 @@ constexpr int PIN_CAM_D5 = 17;
 constexpr int PIN_CAM_D6 = 11;
 constexpr int PIN_CAM_D7 = 13;
 
-// Important for coexistence:
-// On the ESP32-S3 camera driver used by Arduino-ESP32 2.x, 16 MHz XCLK selects
-// the PSRAM direct-DMA path. This avoids the high-priority cam_task copying an
-// entire QVGA grayscale frame from internal DMA RAM into PSRAM.
 constexpr uint32_t kCameraXclkHz = 16000000UL;
+constexpr uint32_t kCaptureTimeoutMs = 500;
+constexpr uint32_t kXclkWarmupMs = 20;
 
-// Phase 1F / coexistence fix candidate: keep GC0308 powered and configured,
-// but gate the ESP32 camera receiver. VSYNC interrupts and GDMA are enabled
-// only long enough to acquire one frame, then stopped again.
-constexpr uint8_t kTargetCaptureHz = 5;
-constexpr uint32_t kCapturePeriodMs = 200;
+// The first proof deliberately guarantees a long quiet window. This is not a
+// 5 Hz scheduler: the 300 ms starts only AFTER one-shot capture has completed.
+constexpr uint32_t kMinimumIdleMs = 300;
 
 constexpr uint32_t kConsumerStackBytes = 4096;
 constexpr UBaseType_t kConsumerPriority = 1;
 constexpr BaseType_t kConsumerCore = 0;
 
+static_assert(CAM_CLK_IDX == 149, "Unexpected ESP32-S3 CAM clock matrix signal");
+static_assert(SIG_GPIO_OUT_IDX == 256, "Unexpected ESP32-S3 GPIO output matrix signal");
+
 }  // namespace
 
-void CameraCoexistenceProbe::setError(const char* error) {
+void OneShotCamera::setError(const char* error) {
   if (!error) error = "unknown";
   snprintf(last_error_, sizeof(last_error_), "%s", error);
 }
 
-void CameraCoexistenceProbe::captureMemoryBefore() {
+void OneShotCamera::captureMemoryBefore() {
   snapshot_.internal_free_before = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
   snapshot_.internal_largest_before = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
   snapshot_.dma_free_before = heap_caps_get_free_size(MALLOC_CAP_DMA);
   snapshot_.psram_free_before = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 }
 
-void CameraCoexistenceProbe::captureMemoryAfter() {
+void OneShotCamera::captureMemoryAfter() {
   snapshot_.internal_free_after = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
   snapshot_.internal_largest_after = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
   snapshot_.dma_free_after = heap_caps_get_free_size(MALLOC_CAP_DMA);
   snapshot_.psram_free_after = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 }
 
-bool CameraCoexistenceProbe::begin() {
-  snapshot_ = CameraCoexistenceSnapshot{};
+void OneShotCamera::setXclkEnabled(bool enabled) {
+  const gpio_num_t pin = static_cast<gpio_num_t>(PIN_CAM_XCLK);
+  gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+
+  if (enabled) {
+    // ESP32-S3 esp32-camera generates XCLK in LCD_CAM and routes CAM_CLK_IDX
+    // through the GPIO matrix. Reconnect that signal only for a capture.
+    gpio_matrix_out(PIN_CAM_XCLK, CAM_CLK_IDX, false, false);
+  } else {
+    // Disconnect CAM_CLK_IDX and drive GPIO21 low. GC0308 remains powered, so
+    // its register configuration is retained while PCLK/VSYNC/HREF stop.
+    gpio_matrix_out(PIN_CAM_XCLK, SIG_GPIO_OUT_IDX, false, false);
+    gpio_set_level(pin, 0);
+  }
+
+  portENTER_CRITICAL(&mux_);
+  snapshot_.xclk_active = enabled;
+  portEXIT_CRITICAL(&mux_);
+}
+
+void OneShotCamera::flushQueuedFrames() {
+  for (;;) {
+    camera_fb_t* stale = cam_take(0);
+    if (!stale) break;
+    cam_give(stale);
+  }
+}
+
+bool OneShotCamera::begin() {
+  snapshot_ = CameraOneShotSnapshot{};
   snapshot_.xclk_hz = kCameraXclkHz;
-  snapshot_.target_capture_hz = kTargetCaptureHz;
+  snapshot_.xclk_warmup_ms = kXclkWarmupMs;
+  snapshot_.minimum_idle_ms = kMinimumIdleMs;
   snapshot_.consumer_core = kConsumerCore;
   snapshot_.consumer_priority = kConsumerPriority;
   captureMemoryBefore();
+
+  capture_mutex_ = xSemaphoreCreateMutex();
+  if (!capture_mutex_) {
+    setError("camera_capture_mutex_create_failed");
+    captureMemoryAfter();
+    return false;
+  }
 
   if (!initCameraOnTemporaryI2c0()) {
     captureMemoryAfter();
@@ -84,7 +121,7 @@ bool CameraCoexistenceProbe::begin() {
   snapshot_.camera_driver_active = true;
   snapshot_.sensor_powered = true;
   snapshot_.camera_deinitialized = false;
-  snapshot_.receiver_gated = true;
+  snapshot_.one_shot_mode = true;
 
   const CameraTaskPriorityPatchSnapshot task_patch = cameraTaskPriorityPatchSnapshot();
   snapshot_.cam_task_priority_patch_observed = task_patch.observed;
@@ -92,13 +129,14 @@ bool CameraCoexistenceProbe::begin() {
   snapshot_.cam_task_effective_priority = task_patch.effective_priority;
   snapshot_.cam_task_core = task_patch.core;
 
-  // esp_camera_init() starts continuous reception. Stop it before WebServer
-  // startup; the low-priority consumer task will open only one-frame windows.
+  // esp_camera_init starts continuous capture by default. Convert it to our
+  // idle one-shot state immediately: receiver OFF, XCLK OFF, queue empty.
   cam_stop();
-  snapshot_.receiver_active = false;
+  setXclkEnabled(false);
+  flushQueuedFrames();
 
   const BaseType_t created = xTaskCreatePinnedToCore(
-      taskEntry, "camera_gate", kConsumerStackBytes, this,
+      taskEntry, "camera_oneshot", kConsumerStackBytes, this,
       kConsumerPriority, &task_, kConsumerCore);
   if (created != pdPASS) {
     esp_camera_deinit();
@@ -106,25 +144,90 @@ bool CameraCoexistenceProbe::begin() {
     snapshot_.camera_driver_active = false;
     snapshot_.sensor_powered = false;
     snapshot_.camera_deinitialized = true;
-    setError("camera_gate_task_create_failed");
+    setError("camera_oneshot_task_create_failed");
     captureMemoryAfter();
     return false;
   }
 
   snapshot_.camera_ok = true;
-  setError("ok_receiver_gated_5hz");
+  setError("ok_true_oneshot_idle");
   captureMemoryAfter();
   return true;
 }
 
-bool CameraCoexistenceProbe::initCameraOnTemporaryI2c0() {
+camera_fb_t* OneShotCamera::acquire(uint32_t timeout_ms) {
+  if (!snapshot_.camera_ok || !capture_mutex_) return nullptr;
+  if (xSemaphoreTake(capture_mutex_, pdMS_TO_TICKS(timeout_ms + 100)) != pdTRUE) {
+    setError("camera_capture_mutex_timeout");
+    return nullptr;
+  }
+
+  const uint32_t started_us = micros();
+
+  setXclkEnabled(true);
+  delay(kXclkWarmupMs);
+
+  portENTER_CRITICAL(&mux_);
+  snapshot_.receiver_active = true;
+  portEXIT_CRITICAL(&mux_);
+
+  cam_start();
+  camera_fb_t* fb = cam_take(pdMS_TO_TICKS(timeout_ms ? timeout_ms : kCaptureTimeoutMs));
+
+  // The one-shot guarantee: receiver and sensor clock are OFF before acquire()
+  // returns to the caller, even on failure.
+  cam_stop();
+  portENTER_CRITICAL(&mux_);
+  snapshot_.receiver_active = false;
+  portEXIT_CRITICAL(&mux_);
+  setXclkEnabled(false);
+
+  const uint32_t elapsed_us = static_cast<uint32_t>(micros() - started_us);
+
+  if (!fb) {
+    portENTER_CRITICAL(&mux_);
+    ++snapshot_.frame_failures;
+    snapshot_.last_capture_us = elapsed_us;
+    if (elapsed_us > snapshot_.max_capture_us) snapshot_.max_capture_us = elapsed_us;
+    portEXIT_CRITICAL(&mux_);
+    setError("camera_oneshot_frame_timeout");
+    xSemaphoreGive(capture_mutex_);
+    return nullptr;
+  }
+
+  // cam_take is the private primitive used by esp_camera_fb_get, so populate
+  // the public frame metadata explicitly.
+  fb->width = 320;
+  fb->height = 240;
+  fb->format = PIXFORMAT_GRAYSCALE;
+
+  portENTER_CRITICAL(&mux_);
+  snapshot_.first_frame_seen = true;
+  ++snapshot_.frame_count;
+  snapshot_.last_frame_bytes = fb->len;
+  snapshot_.last_width = static_cast<uint16_t>(fb->width);
+  snapshot_.last_height = static_cast<uint16_t>(fb->height);
+  snapshot_.last_capture_us = elapsed_us;
+  if (elapsed_us > snapshot_.max_capture_us) snapshot_.max_capture_us = elapsed_us;
+  portEXIT_CRITICAL(&mux_);
+
+  setError("ok_true_oneshot");
+  return fb;
+}
+
+void OneShotCamera::release(camera_fb_t* fb) {
+  if (!capture_mutex_) return;
+  if (fb) cam_give(fb);
+  xSemaphoreGive(capture_mutex_);
+}
+
+bool OneShotCamera::initCameraOnTemporaryI2c0() {
   pinMode(PIN_CAM_POWER_N, OUTPUT);
   digitalWrite(PIN_CAM_POWER_N, LOW);
   delay(500);
 
-  // Roller485 owns I2C0 during normal runtime. At this point Roller has not
-  // started yet, so Camera SCCB may temporarily own I2C0 on GPIO12/9.
-  // Never touch I2C1: the already-running BMI270 reader owns it on GPIO45/0.
+  // Camera SCCB borrows I2C0 only before Roller485 starts.
+  // BMI270 remains on I2C1 (GPIO45/0) and is never touched.
   (void)i2c_driver_delete(I2C_NUM_0);
 
   i2c_config_t sccb = {};
@@ -190,8 +293,6 @@ bool CameraCoexistenceProbe::initCameraOnTemporaryI2c0() {
     return false;
   }
 
-  // These are the only runtime sensor writes in Phase 1. After this point SCCB
-  // is intentionally unavailable because Roller485 needs I2C0.
   sensor->set_framesize(sensor, FRAMESIZE_QVGA);
   sensor->set_vflip(sensor, 1);
   sensor->set_hmirror(sensor, 0);
@@ -206,54 +307,28 @@ bool CameraCoexistenceProbe::initCameraOnTemporaryI2c0() {
   return true;
 }
 
-void CameraCoexistenceProbe::taskEntry(void* arg) {
-  static_cast<CameraCoexistenceProbe*>(arg)->taskLoop();
+void OneShotCamera::taskEntry(void* arg) {
+  static_cast<OneShotCamera*>(arg)->taskLoop();
 }
 
-void CameraCoexistenceProbe::taskLoop() {
-  TickType_t last_wake = xTaskGetTickCount();
-
+void OneShotCamera::taskLoop() {
   for (;;) {
-    portENTER_CRITICAL(&mux_);
-    snapshot_.receiver_active = true;
-    portEXIT_CRITICAL(&mux_);
-    cam_start();
-
-    camera_fb_t* fb = esp_camera_fb_get();
-
-    // Stop VSYNC/GDMA BEFORE giving the sole framebuffer back. With fb_count=1
-    // this prevents cam_task from immediately starting a second frame.
-    cam_stop();
-    portENTER_CRITICAL(&mux_);
-    snapshot_.receiver_active = false;
-    portEXIT_CRITICAL(&mux_);
-
-    if (!fb) {
-      portENTER_CRITICAL(&mux_);
-      ++snapshot_.frame_failures;
-      portEXIT_CRITICAL(&mux_);
-      setError("camera_gated_frame_failed");
-      vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(kCapturePeriodMs));
-      continue;
+    camera_fb_t* fb = acquire(kCaptureTimeoutMs);
+    if (fb) {
+      // Phase 1G only proves true one-shot acquisition. Foot-marker processing
+      // will be inserted here after coexistence is confirmed on hardware.
+      release(fb);
     }
 
-    portENTER_CRITICAL(&mux_);
-    snapshot_.first_frame_seen = true;
-    ++snapshot_.frame_count;
-    snapshot_.last_frame_bytes = fb->len;
-    snapshot_.last_width = static_cast<uint16_t>(fb->width);
-    snapshot_.last_height = static_cast<uint16_t>(fb->height);
-    portEXIT_CRITICAL(&mux_);
-
-    esp_camera_fb_return(fb);
-    setError("ok_receiver_gated_5hz");
-    vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(kCapturePeriodMs));
+    // This is a guaranteed quiet interval AFTER capture completion. During the
+    // entire delay both receiver_active and xclk_active are false.
+    vTaskDelay(pdMS_TO_TICKS(kMinimumIdleMs));
   }
 }
 
-CameraCoexistenceSnapshot CameraCoexistenceProbe::snapshot() const {
+CameraOneShotSnapshot OneShotCamera::snapshot() const {
   portENTER_CRITICAL(&mux_);
-  const CameraCoexistenceSnapshot copy = snapshot_;
+  const CameraOneShotSnapshot copy = snapshot_;
   portEXIT_CRITICAL(&mux_);
   return copy;
 }
