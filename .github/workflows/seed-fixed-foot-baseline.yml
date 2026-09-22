@@ -1,0 +1,36 @@
+name: Seed fixed-foot baseline
+
+on:
+  issues:
+    types:
+      - opened
+
+permissions:
+  contents: write
+
+jobs:
+  seed:
+    if: github.repository == 'temesotejam/atoms3r-free-foot-amplitude-control'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Seed fixed-foot baseline blobs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: 61eeef0036a2e2ed7d38283724a163b9378c20df
+          TARGET_REPO: ${{ github.repository }}
+        run: |
+          set -euxo pipefail
+          git clone --no-tags https://github.com/temesotejam/atoms3r-amplitude-control-v46al-r2-stable.git source
+          cd source
+          git checkout "$SOURCE_SHA"
+          if [ -d .github/workflows ]; then
+            mv .github/workflows .github/workflows-baseline-seed
+          fi
+          rm -rf .git
+          git init -b baseline-import
+          git config user.name "baseline-import"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Seed fixed-foot V46al-R2 baseline blobs"
+          git remote add target "https://x-access-token:${GH_TOKEN}@github.com/${TARGET_REPO}.git"
+          git push --force target HEAD:refs/heads/baseline-import
