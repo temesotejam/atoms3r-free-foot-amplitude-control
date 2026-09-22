@@ -315,7 +315,7 @@ void OneShotCamera::taskLoop() {
   for (;;) {
     camera_fb_t* fb = acquire(kCaptureTimeoutMs);
     if (fb) {
-      // Phase 1G only proves true one-shot acquisition. Foot-marker processing
+      // Phase 1G only proves true one-shot acquisition. Image analysis
       // will be inserted here after coexistence is confirmed on hardware.
       release(fb);
     }
