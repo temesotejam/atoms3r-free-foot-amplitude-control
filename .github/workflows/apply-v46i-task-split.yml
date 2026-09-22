@@ -1,0 +1,38 @@
+name: apply-v46i-task-split
+
+# Historical one-time migration. Regression checks remain in build.yml/pages.yml.
+# Do not reapply an old source migration when newer release tests are updated.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Apply V46i dual-core task split
+        run: |
+          python tools/apply_v46i_task_split_patch.py
+          python tools/fix_v46i_snapshot_guard.py
+      - name: Run V46i source guards
+        run: python tools/test_v46i_task_split_source_guards.py
+      - name: Commit V46i core
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src tools site
+          if git diff --cached --quiet; then
+            echo 'No changes to commit'
+            exit 0
+          fi
+          git commit -m 'Split Roller I/O from MEKF control task'
+          git push origin HEAD:main

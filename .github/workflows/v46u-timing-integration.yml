@@ -1,0 +1,70 @@
+name: v46u-timing-integration
+on:
+  push:
+    branches: [feature/v46u-timing-reader]
+    paths:
+      - tools/apply_v46u_timing.py
+      - tools/patch_bmi270_timing.py
+      - src/bmi270_timing_reader.h
+      - .github/workflows/v46u-timing-integration.yml
+permissions:
+  contents: write
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply timing-only changes and native regression tests
+        run: |
+          set -euxo pipefail
+          python tools/apply_v46u_timing.py
+          python tools/test_v46u_timing.py
+          python tools/test_v46t_current_observation.py
+          python tools/test_v46s_solver_audit.py
+          python tools/test_current_audit_source_guards.py
+          python tools/test_v46g_highrate_source_guards.py
+          python tools/test_v46i_task_split_source_guards.py
+          python tools/test_rwlog_v46_converter.py
+          g++ -std=c++11 -O2 tools/test_v46n_acquisition.cpp -o /tmp/acq
+          /tmp/acq
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_v46o_startup.cpp -o /tmp/startup
+          /tmp/startup
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_v46p_run_control.cpp -o /tmp/control
+          /tmp/control
+          g++ -std=c++17 -O2 tools/test_mekf_host.cpp src/mekf6.cpp -o /tmp/mekf
+          /tmp/mekf
+      - name: Build actual ESP32-S3 firmware with verified BMI270 patch
+        run: |
+          set -euxo pipefail
+          pip install platformio
+          pio pkg install -e atoms3cam
+          pio run -e atoms3cam
+          test -s bmi270-build-patch.json
+          cat bmi270-build-patch.json
+      - name: Commit and preserve tested sources and firmware
+        run: |
+          set -euxo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src tools site docs platformio.ini .gitignore
+          git diff --cached --check
+          git commit -m 'Integrate verified V46u selective BMI270 reader and strict deadline accounting'
+          git push origin HEAD:feature/v46u-timing-reader
+          mkdir -p verified/source
+          git archive HEAD | tar -x -C verified/source
+          git rev-parse HEAD > verified/source-sha.txt
+          cp .pio/build/atoms3cam/{firmware.bin,firmware.elf} verified/
+          cp bmi270-build-patch.json verified/
+          cp .pio/libdeps/atoms3cam/M5Unified/src/utility/imu/BMI270_Class.cpp* verified/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v46u-tested-source
+          path: verified/
+          include-hidden-files: true
+          retention-days: 14

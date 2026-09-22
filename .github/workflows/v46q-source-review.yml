@@ -1,0 +1,22 @@
+name: v46q-source-review
+on:
+  push:
+    branches: [feature/v46q-imu-lightweight]
+    paths: ['.github/workflows/v46q-source-review.yml']
+permissions:
+  contents: read
+jobs:
+  source-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive exact review source
+        run: |
+          mkdir -p review
+          git archive --format=zip HEAD > review/source.zip
+          git rev-parse HEAD > review/source-sha.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v46q-source-baseline
+          path: review/
+          retention-days: 7

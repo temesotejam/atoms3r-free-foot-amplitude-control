@@ -1,0 +1,60 @@
+name: apply-v46l-fast-solver-shadow
+
+# Historical one-time migration; build.yml/pages.yml run its regression tests.
+# New releases must not reapply the V46k-to-V46l source conversion on push.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+      - name: Apply V46l fast-solver shadow
+        run: |
+          python tools/apply_v46l_fast_solver_shadow.py
+          python tools/fix_v46l_metadata_float_helper.py
+      - name: Run V46l fast-solver shadow guard
+        run: python tools/test_v46l_fast_solver_shadow.py
+      - name: Run inherited V46k timing guard
+        run: python tools/test_v46k_timing_probe_source_guards.py
+      - name: Run inherited high-rate guard
+        run: python tools/test_v46g_highrate_source_guards.py
+      - name: Run inherited task/recovery guard
+        run: python tools/test_v46i_task_split_source_guards.py
+      - name: Run inherited motor safety guard
+        run: python tools/test_v46_motor_validation_source_guards.py
+      - name: Run current-audit safety guard
+        run: python tools/test_current_audit_source_guards.py
+      - name: Run RWLOG v46 regression
+        run: python tools/test_rwlog_v46_converter.py
+      - name: Check V46 analysis tool
+        run: python -m py_compile tools/analyze_v46_attitude_validation.py
+      - name: Run native MEKF dynamics test
+        run: |
+          g++ -std=c++17 -O2 tools/test_mekf_host.cpp src/mekf6.cpp -o /tmp/test_mekf_host
+          /tmp/test_mekf_host
+      - name: Build V46l firmware before commit
+        run: pio run -e atoms3cam
+      - name: Commit V46l diagnostic firmware
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src tools site
+          if git diff --cached --quiet; then
+            echo 'No changes to commit'
+            exit 0
+          fi
+          git commit -m 'Add V46l fast-solver shadow validation'
+          git push origin HEAD:main

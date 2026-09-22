@@ -1,0 +1,76 @@
+name: integrate-v46n-release
+on:
+  push:
+    branches: [feature/v46n-imu-release]
+    paths:
+      - '.github/workflows/integrate-v46n-release.yml'
+      - 'tools/integrate_v46n_release.py'
+      - 'tools/test_v46n*'
+      - 'tools/test_v46k_timing_probe_source_guards.py'
+      - 'src/imu_manager*'
+      - 'src/imu_acquisition_audit.h'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: integrate-v46n-release
+  cancel-in-progress: true
+jobs:
+  integrate-test-build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Integrate release metadata and identity
+        run: |
+          python tools/integrate_v46n_release.py
+          git diff --exit-code -- .github/workflows/build.yml .github/workflows/pages.yml
+      - name: Verify acquisition ownership and exact controller baseline
+        run: python tools/test_v46n_acquisition_source.py
+      - name: Run native and inherited regression tests
+        run: |
+          g++ -std=c++11 -O2 tools/test_v46n_acquisition.cpp -o /tmp/test_acq
+          /tmp/test_acq
+          python tools/test_current_audit_source_guards.py
+          python tools/test_v46_motor_validation_source_guards.py
+          python tools/test_v46g_highrate_source_guards.py
+          python tools/test_v46i_task_split_source_guards.py
+          python tools/test_v46k_timing_probe_source_guards.py
+          python tools/test_v46l_fast_solver_shadow.py
+          python tools/test_rwlog_v46_converter.py
+          g++ -std=c++17 -O2 tools/test_mekf_host.cpp src/mekf6.cpp -o /tmp/test_mekf
+          /tmp/test_mekf
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Build V46n with real V7 motor control
+        run: pio run -e atoms3cam
+      - name: Record resolved driver and task settings
+        run: |
+          grep -n -A 18 -B 6 'in_port = I2C_NUM_1' .pio/libdeps/atoms3cam/M5Unified/src/M5Unified.cpp
+          grep -n -A 45 'void M5Unified::update' .pio/libdeps/atoms3cam/M5Unified/src/M5Unified.cpp
+          git diff --check
+      - name: Commit tested source integration
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src site tools/test_v46i_task_split_source_guards.py tools/test_v46k_timing_probe_source_guards.py tools/test_v46l_fast_solver_shadow.py
+          if ! git diff --cached --quiet; then
+            git commit -m 'Integrate tested V46n priority acquisition; retain V46l controller'
+            git push origin HEAD:feature/v46n-imu-release
+          fi
+      - name: Preserve integrated source identity and binary
+        run: |
+          mkdir -p dist
+          cp .pio/build/atoms3cam/{firmware.bin,firmware.elf} dist/
+          git rev-parse HEAD > dist/build-sha.txt
+          sha256sum dist/firmware.bin > dist/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v46n-integration-verified
+          path: dist/
+          if-no-files-found: error

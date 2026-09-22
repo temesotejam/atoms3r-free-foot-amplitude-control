@@ -1,0 +1,37 @@
+name: apply-v46f-core
+
+on:
+  push:
+    paths:
+      - .github/workflows/apply-v46f-core.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply V46f calibrated gyro patch
+        run: |
+          # V46f calibrates the sensor input before MEKF prediction.
+          python tools/apply_v46f_gyro_calibration_patch.py
+          python tools/fix_v46f_guard.py
+          git diff --check
+          python tools/test_v46_motor_validation_source_guards.py
+          g++ -std=c++17 -O2 tools/test_mekf_host.cpp src/mekf6.cpp -o /tmp/test_mekf_host
+          /tmp/test_mekf_host
+      - name: Commit V46f core patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/config.h src/experiment_runner.cpp src/psram_logger.cpp src/main.cpp \
+                  tools/test_mekf_host.cpp tools/test_v46_motor_validation_source_guards.py \
+                  site/index.html site/manifest.json \
+                  docs/MEKF_DYNAMIC_COMPARE_V46.md docs/FIRST_V46_DYNAMIC_VALIDATION.md
+          git commit -m "Calibrate V46f MEKF gyro Y input"
+          git push origin HEAD:main

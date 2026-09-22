@@ -1,0 +1,69 @@
+name: integrate-v46q-acquisition
+on:
+  push:
+    branches: [feature/v46q-imu-lightweight]
+    paths:
+      - 'tools/integrate_v46q_acquisition.py'
+      - '.github/workflows/integrate-v46q-acquisition.yml'
+permissions:
+  contents: write
+jobs:
+  integrate-test-build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply exact reviewed acquisition changes
+        run: python tools/integrate_v46q_acquisition.py
+      - name: Run source and functional regressions
+        run: |
+          set -euxo pipefail
+          python tools/test_v46n_acquisition_source.py
+          python tools/run_v46q_tests.py
+          python tools/test_v46p_run_control_source.py
+          python tools/test_current_audit_source_guards.py
+          python tools/test_v46_motor_validation_source_guards.py
+          python tools/test_v46g_highrate_source_guards.py
+          python tools/test_v46i_task_split_source_guards.py
+          python tools/test_v46k_timing_probe_source_guards.py
+          python tools/test_v46l_fast_solver_shadow.py
+          python tools/test_rwlog_v46_converter.py
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_v46o_startup.cpp -o /tmp/startup
+          /tmp/startup
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_v46p_run_control.cpp -o /tmp/control
+          /tmp/control
+          g++ -std=c++11 -O2 tools/test_v46n_acquisition.cpp -o /tmp/acq
+          /tmp/acq
+          g++ -std=c++17 -O2 tools/test_mekf_host.cpp src/mekf6.cpp -o /tmp/mekf
+          /tmp/mekf
+      - name: Build real ESP32-S3 firmware
+        run: |
+          pip install platformio
+          pio run -e atoms3cam
+      - name: Commit only tested application source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # GITHUB_TOKEN has contents access, not workflows permission.
+          # Workflow files are reviewed and committed separately via the repository connection.
+          git add src site tools docs
+          git diff --cached --check
+          git commit -m 'Integrate verified V46q lightweight IMU acquisition and stage profiling'
+          git push origin HEAD:feature/v46q-imu-lightweight
+      - name: Preserve exact tested source
+        run: |
+          mkdir -p reviewed/workflows
+          git archive --format=zip HEAD > reviewed/source.zip
+          git rev-parse HEAD > reviewed/source-sha.txt
+          cp .github/workflows/{build.yml,pages.yml} reviewed/workflows/
+          cp .pio/build/atoms3cam/firmware.bin reviewed/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v46q-tested-source
+          path: reviewed/
+          retention-days: 7

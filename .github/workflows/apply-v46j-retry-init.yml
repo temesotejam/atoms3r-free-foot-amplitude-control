@@ -1,0 +1,43 @@
+name: apply-v46j-retry-init
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/apply_v46j_retry_init_patch.py'
+      - '.github/workflows/apply-v46j-retry-init.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Apply V46j retry/recovery patch
+        run: python tools/apply_v46j_retry_init_patch.py
+      - name: Run V46j task guards
+        run: python tools/test_v46i_task_split_source_guards.py
+      - name: Run V46j high-rate guard
+        run: python tools/test_v46g_highrate_source_guards.py
+      - name: Run V46j motor safety guard
+        run: python tools/test_v46_motor_validation_source_guards.py
+      - name: Commit V46j recovery
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src tools
+          if git diff --cached --quiet; then
+            echo 'No changes to commit'
+            exit 0
+          fi
+          git commit -m 'Retry Roller initialization and recover automatically'
+          git push origin HEAD:main

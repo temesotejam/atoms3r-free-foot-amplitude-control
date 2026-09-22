@@ -1,0 +1,153 @@
+name: pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build-site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify V46al-R2 active layer and retained V46ak/V46aj safety guards
+        run: |
+          set -euxo pipefail
+          python tools/test_v46u_timing.py
+          python tools/test_v46t_current_observation.py
+          python tools/test_v46r_fast_solver_control.py
+          python tools/test_v46s_solver_audit.py
+          python tools/test_current_audit_source_guards.py
+          python tools/test_v46g_highrate_source_guards.py
+          python tools/test_v46i_task_split_source_guards.py
+          python tools/test_rwlog_v46_converter.py
+          python tools/test_v46z_comparison_zero.py
+          python tools/test_v46aa_control_zero.py
+          python tools/test_v46ab_no_prediction.py
+          python tools/test_v46ac_delay_compensation.py
+          python tools/test_v46aj_fixed_timing.py
+          python tools/test_v46ae_mekf_amplitude.py
+          python tools/test_v46ai_rate_only.py
+          python tools/test_v46ak_pre_input_observation.py
+          python tools/test_v46ak_web_backend_cleanup.py
+          python tools/test_v46ak_download_freeze.py
+          python tools/test_v46al_r2_previous_peak_control.py
+          g++ -std=c++11 -O2 tools/test_v46n_acquisition.cpp -o /tmp/test_acq
+          /tmp/test_acq
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_v46o_startup.cpp -o /tmp/test_v46o
+          /tmp/test_v46o
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_v46p_run_control.cpp -o /tmp/test_v46p
+          /tmp/test_v46p
+          g++ -std=c++17 -O2 tools/test_mekf_host.cpp src/mekf6.cpp -o /tmp/test_mekf
+          /tmp/test_mekf
+          python -m json.tool site/manifest.json >/dev/null
+          grep -q 'V46al-R2 / 0.46.42' site/index.html
+          grep -q 'v46aj_fixed_3ms_compensation_20260920' src/config.h
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Build V46al-R2 firmware on frozen V46ak/V46aj baseline
+        run: |
+          set -euxo pipefail
+          pio pkg install -e atoms3cam
+          pio run -e atoms3cam
+          test -s bmi270-build-patch.json
+      - name: Assemble verified web flasher
+        run: |
+          set -euxo pipefail
+          mkdir -p _site/firmware
+          cp -R site/. _site/
+          cp .pio/build/atoms3cam/{bootloader.bin,partitions.bin,firmware.bin} _site/firmware/
+          cp "$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" _site/firmware/
+          cp bmi270-build-patch.json _site/
+          printf '%s\n' "$GITHUB_SHA" > _site/build-sha.txt
+          (cd _site/firmware && sha256sum *.bin > SHA256SUMS.txt)
+          git diff --exit-code
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+  deploy:
+    needs: build-site
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
+      - name: Verify live Web Flasher identity, driver provenance and binary hashes
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, time, urllib.request
+          base = os.environ['PAGE_URL'].rstrip('/') + '/'
+          expected = os.environ['EXPECTED_SHA']
+          def get(path):
+              request = urllib.request.Request(base + path + '?verify=' + expected,
+                                               headers={'Cache-Control': 'no-cache'})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return response.read()
+          last_error = None
+          for attempt in range(8):
+              try:
+                  published = get('build-sha.txt').decode().strip()
+                  if published != expected:
+                      raise ValueError('Published build SHA differs: ' + published)
+                  manifest = json.loads(get('manifest.json'))
+                  if manifest['version'] != '0.46.42':
+                      raise ValueError('Unexpected firmware version')
+                  if 'V46al-R2 / 0.46.42' not in get('index.html').decode():
+                      raise ValueError('Published page label differs')
+                  provenance = json.loads(get('bmi270-build-patch.json'))
+                  if provenance['upstream_git_blob'] != '41732382bbdfe413be758748bca24d9a15a3a1d8':
+                      raise ValueError('Unexpected upstream BMI270 source')
+                  if provenance['patched_sha256'] != '54bf8f7c9016033cee6015331ed65a35b56e74375040ba4994fbb06cee0b430b':
+                      raise ValueError('Unexpected BMI270 transport patch')
+                  if provenance['header_sha256'] != 'bfdb1485c7fbfe3ecc0953a4b0d617863b3649b766581bd7ac8ab668be10a633':
+                      raise ValueError('Unexpected selective reader')
+                  builds = manifest['builds']
+                  if len(builds) != 1 or builds[0]['chipFamily'] != 'ESP32-S3':
+                      raise ValueError('Unexpected chip manifest')
+                  expected_parts = {'firmware/bootloader.bin': 0,
+                                    'firmware/partitions.bin': 32768,
+                                    'firmware/boot_app0.bin': 57344,
+                                    'firmware/firmware.bin': 65536}
+                  parts = builds[0]['parts']
+                  if len(parts) != 4 or {p['path']: p['offset'] for p in parts} != expected_parts:
+                      raise ValueError('Unexpected flash paths or offsets')
+                  hashes = {}
+                  for line in get('firmware/SHA256SUMS.txt').decode().splitlines():
+                      digest, name = line.split(maxsplit=1)
+                      hashes[name.lstrip('*')] = digest
+                  verified = {}
+                  for path in expected_parts:
+                      content = get(path)
+                      digest = hashlib.sha256(content).hexdigest()
+                      if not content or digest != hashes[path.split('/')[-1]]:
+                          raise ValueError('Published binary checksum mismatch: ' + path)
+                      verified[path] = {'bytes': len(content), 'sha256': digest}
+                  print(json.dumps({'published_sha': published, 'version': manifest['version'],
+                                    'driver': provenance, 'verified_assets': verified}, indent=2))
+                  break
+              except Exception as error:
+                  last_error = error
+                  print('Publication check attempt', attempt + 1, 'failed:', error, flush=True)
+                  if attempt < 7:
+                      time.sleep(10)
+          else:
+              raise SystemExit('Live Web Flasher verification failed: ' + str(last_error))
+          PY

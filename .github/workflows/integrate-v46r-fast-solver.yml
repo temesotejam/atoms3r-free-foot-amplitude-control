@@ -1,0 +1,67 @@
+name: integrate-v46r-fast-solver
+on:
+  push:
+    branches: [feature/v46r-fast-solver-control]
+    paths:
+      - 'tools/apply_v46r_fast_solver_control.py'
+      - 'tools/refine_v46r_selected_zero_baseline.py'
+      - 'tools/test_v46r_fast_solver_control.py'
+      - 'tools/test_v46g_highrate_source_guards.py'
+      - 'tools/test_v46i_task_split_source_guards.py'
+      - '.github/workflows/integrate-v46r-fast-solver.yml'
+permissions:
+  contents: write
+jobs:
+  integrate-test-build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply reviewed V46r fast-solver control change
+        run: |
+          python tools/apply_v46r_fast_solver_control.py
+          python tools/refine_v46r_selected_zero_baseline.py
+      - name: Verify V46r control and retained safety envelope
+        run: |
+          set -euxo pipefail
+          python tools/test_v46r_fast_solver_control.py
+          python tools/test_current_audit_source_guards.py
+          python tools/test_v46g_highrate_source_guards.py
+          python tools/test_v46i_task_split_source_guards.py
+          python tools/test_rwlog_v46_converter.py
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_v46o_startup.cpp -o /tmp/startup
+          /tmp/startup
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_v46p_run_control.cpp -o /tmp/control
+          /tmp/control
+          g++ -std=c++11 -O2 tools/test_v46n_acquisition.cpp -o /tmp/acq
+          /tmp/acq
+          g++ -std=c++17 -O2 tools/test_mekf_host.cpp src/mekf6.cpp -o /tmp/mekf
+          /tmp/mekf
+          python -m json.tool site/manifest.json >/dev/null
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Build real ESP32-S3 firmware
+        run: pio run -e atoms3cam
+      - name: Commit only tested application source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src site tools docs
+          git diff --cached --check
+          git commit -m 'Integrate V46r bounded fast solver into autonomous control'
+          git push origin HEAD:feature/v46r-fast-solver-control
+      - name: Preserve tested firmware
+        run: |
+          mkdir -p reviewed
+          git rev-parse HEAD > reviewed/source-sha.txt
+          cp .pio/build/atoms3cam/firmware.bin reviewed/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v46r-tested-source
+          path: reviewed/
+          retention-days: 7

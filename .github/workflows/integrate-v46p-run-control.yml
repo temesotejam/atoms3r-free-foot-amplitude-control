@@ -1,0 +1,67 @@
+name: integrate-v46p-run-control
+on:
+  push:
+    branches: [feature/v46p-run-control]
+    paths:
+      - 'tools/integrate_v46p_run_control.py'
+      - '.github/workflows/integrate-v46p-run-control.yml'
+permissions:
+  contents: write
+jobs:
+  integrate-test-build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Integrate exact V46p source on review branch
+        run: |
+          python tools/integrate_v46p_run_control.py
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          p = Path('src/web_ui.cpp')
+          data = p.read_bytes()
+          assert hashlib.sha256(data).hexdigest() == '9f46bc1293d2c99f1a2818593a6f546d41c54d906eef90de4ea8fe603877187b'
+          # Only remove the extra blank EOF line, before all tests and compilation.
+          data = data.rstrip(b'\n') + b'\n'
+          assert hashlib.sha256(data).hexdigest() == 'ee3d342e1db96a286b4bc557b95d74ce4a5a97034e48a78280e8a3cf4e634627'
+          p.write_bytes(data)
+          PY
+      - name: Verify physical baseline and exclusive ownership
+        run: |
+          python tools/test_v46n_acquisition_source.py
+          python tools/test_v46p_run_control_source.py
+          python tools/test_current_audit_source_guards.py
+          python tools/test_v46_motor_validation_source_guards.py
+          python tools/test_v46g_highrate_source_guards.py
+          python tools/test_v46i_task_split_source_guards.py
+          python tools/test_v46k_timing_probe_source_guards.py
+          python tools/test_v46l_fast_solver_shadow.py
+          python tools/test_rwlog_v46_converter.py
+      - name: Native startup, acquisition, owner and MEKF regression
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_v46o_startup.cpp -o /tmp/startup
+          /tmp/startup
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_v46p_run_control.cpp -o /tmp/worker
+          /tmp/worker
+          g++ -std=c++11 -O2 tools/test_v46n_acquisition.cpp -o /tmp/acq
+          /tmp/acq
+          g++ -std=c++17 -O2 tools/test_mekf_host.cpp src/mekf6.cpp -o /tmp/mekf
+          /tmp/mekf
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Build real ESP32-S3 V7 motor firmware
+        run: pio run -e atoms3cam
+      - name: Commit tested application source only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src site tools/test_v46n_acquisition_source.py tools/test_v46i_task_split_source_guards.py tools/test_v46k_timing_probe_source_guards.py tools/test_v46l_fast_solver_shadow.py
+          git diff --cached --check
+          git commit -m 'Integrate tested V46p run-control worker and snapshot-only HTTP'
+          git push origin HEAD:feature/v46p-run-control

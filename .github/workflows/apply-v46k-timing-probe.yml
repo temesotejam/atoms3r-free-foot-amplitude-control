@@ -1,0 +1,56 @@
+name: apply-v46k-timing-probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/apply_v46k_timing_probe_patch.py'
+      - 'tools/fix_v46k_timing_probe_postpatch.py'
+      - '.github/workflows/apply-v46k-timing-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+      - name: Apply V46k timing probe
+        run: |
+          python tools/apply_v46k_timing_probe_patch.py
+          python tools/fix_v46k_timing_probe_postpatch.py
+      - name: Run V46k timing probe guard
+        run: python tools/test_v46k_timing_probe_source_guards.py
+      - name: Run inherited high-rate guard
+        run: python tools/test_v46g_highrate_source_guards.py
+      - name: Run inherited task/recovery guard
+        run: python tools/test_v46i_task_split_source_guards.py
+      - name: Run inherited motor safety guard
+        run: python tools/test_v46_motor_validation_source_guards.py
+      - name: Run current-audit safety guard
+        run: python tools/test_current_audit_source_guards.py
+      - name: Run RWLOG v46 regression
+        run: python tools/test_rwlog_v46_converter.py
+      - name: Build V46k firmware before commit
+        run: pio run -e atoms3cam
+      - name: Commit V46k diagnostic firmware
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src tools site
+          if git diff --cached --quiet; then
+            echo 'No changes to commit'
+            exit 0
+          fi
+          git commit -m 'Add V46k pulse-start timing probe'
+          git push origin HEAD:main

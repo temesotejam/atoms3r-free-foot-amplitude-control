@@ -1,0 +1,32 @@
+name: v46o-startup-regression
+on:
+  push:
+    branches: [feature/v46o-startup-fix]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Preserve exact review sources and baseline
+        run: |
+          mkdir -p review
+          git archive HEAD -o review/current.tar
+          git archive d6206986fd4bc5f4b11700907e1ad2494e1ecbfa -o review/v46n-baseline.tar
+          git archive 50c9e049ab4c2dc73852aa6ccb2fd988ad18852c -o review/v46l-baseline.tar
+          git rev-parse HEAD > review/build-sha.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v46o-review-source
+          path: review/
+          retention-days: 7
+      - name: Run startup regression when implemented
+        run: |
+          if test -f tools/test_v46o_startup.cpp; then
+            g++ -std=c++17 -O2 -Wall -Wextra -Werror tools/test_v46o_startup.cpp -o /tmp/test_v46o
+            /tmp/test_v46o
+          fi

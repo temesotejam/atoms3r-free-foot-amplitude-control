@@ -1,0 +1,35 @@
+name: apply-v46g-core
+
+on:
+  push:
+    paths:
+      - .github/workflows/apply-v46g-core.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply V46g patches
+        run: |
+          python tools/apply_v46g_imu_patch.py
+          python tools/apply_v46g_filter_patch.py
+          python tools/apply_v46g_meta_patch.py
+          git diff --check
+          python tools/test_v46g_highrate_source_guards.py
+          python tools/test_v46_motor_validation_source_guards.py
+          g++ -std=c++17 -O2 tools/test_mekf_host.cpp src/mekf6.cpp -o /tmp/test_mekf_host
+          /tmp/test_mekf_host
+      - name: Commit V46g core
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src tools site docs
+          git commit -m "Run MEKF at 400 Hz with predicted control angle"
+          git push origin HEAD:main

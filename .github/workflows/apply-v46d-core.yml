@@ -1,0 +1,33 @@
+name: apply-v46d-core
+
+on:
+  push:
+    paths:
+      - .github/workflows/apply-v46d-core.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply V46d core patch
+        run: |
+          python tools/apply_v46d_video_calibration_patch.py
+          git diff --check
+          python tools/test_v46_motor_validation_source_guards.py
+      - name: Commit V46d core patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/config.h src/experiment_runner.cpp src/experiment_runner.h src/main.cpp \
+                  tools/test_v46_motor_validation_source_guards.py \
+                  site/index.html site/manifest.json \
+                  docs/MEKF_DYNAMIC_COMPARE_V46.md docs/FIRST_V46_DYNAMIC_VALIDATION.md
+          git commit -m "Calibrate V46d MEKF comparison output to video"
+          git push origin HEAD:main

@@ -1,0 +1,32 @@
+name: apply-v46h-timing
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - tools/apply_v46h_timing_patch.py
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply V46h timing patch
+        run: python tools/apply_v46h_timing_patch.py
+      - name: Run V46h high-rate guard
+        run: python tools/test_v46g_highrate_source_guards.py
+      - name: Run native MEKF test
+        run: |
+          g++ -std=c++17 -O2 tools/test_mekf_host.cpp src/mekf6.cpp -o /tmp/test_mekf_host
+          /tmp/test_mekf_host
+      - name: Commit V46h timing fix
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+temesotejam@users.noreply.github.com
+          git add src/config.h src/experiment_runner.cpp src/web_ui.cpp src/main.cpp site/index.html site/manifest.json tools/test_v46g_highrate_source_guards.py
+          git diff --cached --quiet && exit 0
+          git commit -m "Remove web stalls from high-rate MEKF loop"
+          git push
