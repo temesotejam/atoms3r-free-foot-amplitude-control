@@ -58,6 +58,9 @@ def normalize_free_foot_main(data):
   M5.In_I2C.setPort(I2C_NUM_1, GPIO_NUM_45, GPIO_NUM_0);
 
 ''','')
+    # The injected handoff block sat between M5.begin and the following identity
+    # print. Removing it must also restore the baseline's single newline exactly.
+    data=data.replace('  M5.begin(cfg);\n\n  Serial.printf(', '  M5.begin(cfg);\n  Serial.printf(')
     data=data.replace('  web.begin(server, runner, imu, roller, logger, foot_angles);',
                       '  web.begin(server, runner, imu, roller, logger);')
     data=data.replace('''  // The camera task is observation-only and owns a sidecar log. Close that
