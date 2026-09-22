@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <M5Unified.h>
 #include <WebServer.h>
+#include "esp_heap_caps.h"
 
 #include "config.h"
 #include "experiment_runner.h"
@@ -132,9 +133,12 @@ void setup() {
   // handlers only run from loop(), so storing references here is safe even
   // though the subsystems are initialized below.
   const bool ap_ok = web.begin(server, runner, imu, roller, logger, foot_angles);
-  Serial.printf("WiFi AP: %s SSID=%s IP=%s\n",
+  Serial.printf("WiFi AP: %s SSID=%s auth=%s IP=%s heap=%u largest=%u\n",
                 ap_ok ? "OK" : "FAILED", Config::AP_SSID,
-                WiFi.softAPIP().toString().c_str());
+                Config::AP_PASS[0] ? "WPA2" : "OPEN",
+                WiFi.softAPIP().toString().c_str(),
+                static_cast<unsigned>(ESP.getFreeHeap()),
+                static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
   if (!ap_ok) displayLine("WiFi AP FAIL", Config::AP_SSID);
 
   const bool psram_ok = logger.begin();
@@ -164,9 +168,12 @@ void setup() {
   const bool control_task_ok = run_control.begin(runControlStep, captureRunState, nullptr);
   Serial.printf("Run control worker: %s core=1 priority=4; HTTP core=1 priority=2\n",
                 control_task_ok ? "OK" : "FAILED");
-  Serial.printf("AP SSID: %s status=%s IP=%s\n",
+  Serial.printf("AP SSID: %s status=%s IP=%s stations=%u heap=%u largest=%u\n",
                 Config::AP_SSID, web.accessPointReady() ? "READY" : "FAILED",
-                WiFi.softAPIP().toString().c_str());
+                WiFi.softAPIP().toString().c_str(),
+                static_cast<unsigned>(WiFi.softAPgetStationNum()),
+                static_cast<unsigned>(ESP.getFreeHeap()),
+                static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
   Serial.println("Open http://192.168.4.1/ and start Autonomous Energy Control V7");
   if (web.accessPointReady()) displayLine("V46q / V7 ready", Config::AP_SSID);
   else displayLine("WiFi AP FAIL", Config::AP_SSID);

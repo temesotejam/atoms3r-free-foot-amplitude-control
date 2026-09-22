@@ -299,7 +299,9 @@ bool WebUi::begin(WebServer& server, ExperimentRunner& runner, ImuManager& imu, 
   WiFi.mode(WIFI_AP);
   ap_ready_ = false;
   for (int attempt = 0; attempt < 3 && !ap_ready_; ++attempt) {
-    ap_ready_ = WiFi.softAP(Config::AP_SSID, Config::AP_PASS, Config::AP_CHANNEL);
+    ap_ready_ = Config::AP_PASS[0]
+        ? WiFi.softAP(Config::AP_SSID, Config::AP_PASS, Config::AP_CHANNEL, false, 1)
+        : WiFi.softAP(Config::AP_SSID, nullptr, Config::AP_CHANNEL, false, 1);
     if (!ap_ready_) {
       WiFi.softAPdisconnect(true);
       delay(100);

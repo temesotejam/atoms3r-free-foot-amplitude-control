@@ -94,3 +94,11 @@ assert ap_begin < main.index('const bool imu_ok = imu.begin();')
 assert 'WiFi AP FAIL' in main
 assert 'for (int attempt = 0; attempt < 3 && !ap_ready_; ++attempt)' in web
 assert 'ap_ready_ = WiFi.softAP' in web
+
+
+# Temporary Wi-Fi diagnostic AP removes cached credentials/WPA from the test.
+assert 'AtomS3R_FREEFOOT_DIAG' in config
+assert 'static constexpr char AP_PASS[] = "";' in config
+assert 'WiFi.softAP(Config::AP_SSID, nullptr' in web
+assert 'softAPgetStationNum()' in main
+assert 'heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)' in main
