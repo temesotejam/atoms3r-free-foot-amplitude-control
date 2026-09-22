@@ -16,6 +16,11 @@ struct CameraCoexistenceSnapshot {
   int8_t consumer_core = 0;
   uint8_t consumer_priority = 1;
 
+  bool cam_task_priority_patch_observed = false;
+  uint8_t cam_task_original_priority = 0;
+  uint8_t cam_task_effective_priority = 0;
+  int8_t cam_task_core = -1;
+
   uint32_t internal_free_before = 0;
   uint32_t internal_free_after = 0;
   uint32_t internal_largest_before = 0;
