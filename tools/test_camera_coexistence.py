@@ -6,6 +6,8 @@ ROOT = Path(__file__).resolve().parents[1]
 main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
 camera = (ROOT / "src/camera_coexistence.cpp").read_text(encoding="utf-8")
 header = (ROOT / "src/camera_coexistence.h").read_text(encoding="utf-8")
+patch = (ROOT / "src/camera_task_priority_patch.cpp").read_text(encoding="utf-8")
+pio = (ROOT / "platformio.ini").read_text(encoding="utf-8")
 
 def git_blob_sha(path):
     data = (ROOT / path).read_bytes()
@@ -67,3 +69,22 @@ for token in ("MALLOC_CAP_INTERNAL", "MALLOC_CAP_DMA", "MALLOC_CAP_SPIRAM",
     assert token in camera + header, token
 
 print("PASS: isolated camera coexistence Phase 1")
+
+
+# The precompiled esp32-camera cam_task normally starts at configMAX_PRIORITIES-2
+# on Core 0. Linker wrapping changes only the task named "cam_task" to Priority 3.
+assert '--wrap=xTaskCreatePinnedToCore' in pio
+assert '__wrap_xTaskCreatePinnedToCore' in patch
+assert '__real_xTaskCreatePinnedToCore' in patch
+assert 'strcmp(pcName, "cam_task") == 0' in patch
+assert 'kCameraInternalTaskPriority = 3' in patch
+assert 'effective_priority = kCameraInternalTaskPriority' in patch
+assert 'return __real_xTaskCreatePinnedToCore' in patch
+assert 'static_assert(kCameraInternalTaskPriority < Config::ROLLER_IO_TASK_PRIORITY' in patch
+
+# Minimal HTTP path is independent of WebUi internals.
+assert 'server.on("/camera-health", HTTP_GET' in main
+assert 'cam_task_priority=%u->%u' in main
+assert 'heap_caps_get_free_size(MALLOC_CAP_INTERNAL)' in main
+
+print("PASS: camera cam_task priority isolation and minimal HTTP probe")
