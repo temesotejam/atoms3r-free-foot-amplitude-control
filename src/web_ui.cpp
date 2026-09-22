@@ -221,7 +221,11 @@ function apply(j){
     ' / L='+(j.left_foot_detected?'OK':'NG')+
     ' / samples='+samples;
 
-  document.getElementById('errorInfo').textContent=j.last_error||'';
+  const errors=[];
+  if(j.last_error)errors.push(j.last_error);
+  if(!j.foot_camera_ok&&j.foot_camera_error)errors.push('Foot: '+j.foot_camera_error);
+  if(!j.imu_ok&&j.imu_error)errors.push('IMU: '+j.imu_error);
+  document.getElementById('errorInfo').textContent=errors.join(' / ');
 
   if(j.rwlog_downloadable==='yes'){
     const footReady=j.foot_angle_log_downloadable==='yes'?' / 足角度CSV準備完了':' / 足角度CSVなし';
@@ -488,6 +492,7 @@ String WebUi::statusJson() const {
           String(foot_angles_ && foot_angles_->logDownloadable() ? "yes" : "no") + "\"";
   json += ",\"foot_angle_download_filename\":\"" + String(foot_filename) + "\"";
   json += ",\"foot_camera_ok\":" + String(foot.camera_ok ? "true" : "false");
+  json += ",\"foot_camera_error\":\"" + String(foot_angles_ ? foot_angles_->lastError() : "not_available") + "\"";
   json += ",\"foot_zero_ready\":" + String(foot.zero_ready ? "true" : "false");
   json += ",\"right_foot_angle_deg\":" + String(foot.right_angle_deg, 3);
   json += ",\"left_foot_angle_deg\":" + String(foot.left_angle_deg, 3);
@@ -497,6 +502,7 @@ String WebUi::statusJson() const {
   json += ",\"left_foot_in_range\":" + String(foot.left_in_range ? "true" : "false");
   json += ",\"foot_zero_samples\":" + String(foot.zero_samples);
   json += ",\"imu_ok\":" + String(imu_->ok() ? "true" : "false");
+  json += ",\"imu_error\":\"" + String(imu_->lastError()) + "\"";
   json += ",\"roller_ok\":" + String(roller_->ok() ? "true" : "false");
   json += ",\"roller_actual_current_mA\":" + String(roller.actual_current_mA);
   json += ",\"battery_mV\":" + String(roller.battery_mV);

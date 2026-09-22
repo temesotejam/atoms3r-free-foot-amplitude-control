@@ -62,3 +62,13 @@ assert '左足（下側）の白マーカー' in web
 assert '!!j.foot_camera_ok&&!!j.foot_zero_ready' in web
 
 print("Free-foot observation isolation guards PASS")
+
+
+# Camera/IMU startup ordering follows the independently validated foot tracker.
+camera_begin_pos = main.index("const bool foot_ok = foot_angles.begin();")
+m5_begin_pos = main.index("M5.begin(cfg);")
+imu_port_pos = main.index("M5.In_I2C.setPort(I2C_NUM_1, GPIO_NUM_45, GPIO_NUM_0);")
+imu_begin_pos = main.index("const bool imu_ok = imu.begin();")
+assert camera_begin_pos < m5_begin_pos < imu_port_pos < imu_begin_pos
+assert 'foot_camera_error' in web
+assert 'imu_error' in web

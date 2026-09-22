@@ -44,9 +44,18 @@ def normalize_free_foot_main(data):
 ''','''  Serial.printf("Startup guide: upright confirmed; gravity error=%.2f deg, norm=%.3f g\\n",
                 UprightPoseGuide::directionErrorDeg(r), UprightPoseGuide::accelNormG(r));
 ''')
-    data=data.replace('''  const bool foot_ok = foot_angles.begin();
+    data=data.replace('''  // The validated standalone foot tracker initializes the GC0308 before
+  // configuring the BMI270 I2C bus. esp32-camera SCCB owns a hardware I2C
+  // controller during camera probe/configuration, so preserve that ordering
+  // here instead of letting camera startup collide with the already-live IMU bus.
+  const bool foot_ok = foot_angles.begin();
   Serial.printf("Foot angle tracker: %s mapping=upper:right/lower:left mode=observation_only error=%s\\n",
                 foot_ok ? "OK" : "FAILED", foot_angles.lastError());
+
+''','')
+    data=data.replace('''  // Match atoms3r-foot-angle-tracker's validated handoff after camera init.
+  // BMI270 is physically on the AtomS3R-CAM internal I2C1 bus: SDA=45, SCL=0.
+  M5.In_I2C.setPort(I2C_NUM_1, GPIO_NUM_45, GPIO_NUM_0);
 
 ''','')
     data=data.replace('  web.begin(server, runner, imu, roller, logger, foot_angles);',
