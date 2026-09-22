@@ -69,6 +69,7 @@ footer{text-align:center;color:#87919c;font-size:.76rem;padding:4px 0 14px}
       <div class="metric"><span>左足角度（下）</span><b id="footLeft">--</b></div>
     </div>
     <p id="systemInfo" class="note">状態を取得しています。</p>
+    <p id="startupInfo" class="note">初期姿勢と足マーカーの状態を取得しています。</p>
     <p id="errorInfo" class="error"></p>
   </div>
 
@@ -156,8 +157,30 @@ function beginDownload(){
   },3000);
 }
 
+function startupReasonLabel(reason){
+  const labels={
+    initializing:'起動初期化中',
+    imu_init_or_latched_fault:'IMU異常',
+    waiting_fresh_imu:'IMU更新待ち',
+    accel_norm_out_of_range:'静止姿勢待ち',
+    not_upright:'直立姿勢待ち',
+    still_moving:'静止待ち',
+    stable_hold:'初期姿勢を確認中',
+    waiting_foot_markers:'左右足マーカー待ち',
+    upright_ready:'初期0°校正完了'
+  };
+  return labels[reason]||reason||'初期状態を確認中';
+}
+
 function stateLabel(j){
   if(j.running)return '測定中';
+  if(!j.foot_camera_ok)return '足角度カメラ異常';
+  if(!j.foot_zero_ready){
+    if(j.right_foot_detected&&!j.left_foot_detected)return '左足マーカー待ち';
+    if(!j.right_foot_detected&&j.left_foot_detected)return '右足マーカー待ち';
+    if(!j.right_foot_detected&&!j.left_foot_detected)return '左右足マーカー待ち';
+    return startupReasonLabel(j.startup&&j.startup.guide_reason);
+  }
   if(j.state==='READY_TO_MEASURE')return '測定可能';
   if(j.state==='FINISHED')return '測定完了';
   if(j.state==='ESTOP')return '非常停止';
@@ -167,7 +190,8 @@ function stateLabel(j){
 function apply(j){
   const running=!!j.running;
   const busy=downloading||!!j.downloading||startPending;
-  const canStart=j.state==='READY_TO_MEASURE'||j.state==='FINISHED';
+  const canStart=(j.state==='READY_TO_MEASURE'||j.state==='FINISHED')&&
+                 !!j.foot_camera_ok&&!!j.foot_zero_ready;
 
   lock(energy,busy||running||!canStart);
   lock(stop,!running);
@@ -177,7 +201,8 @@ function apply(j){
 
   document.getElementById('stateText').textContent=stateLabel(j);
   const badge=document.getElementById('readyBadge');
-  badge.textContent=j.ready?'READY':'NOT READY';
+  const systemReady=!!j.ready&&!!j.foot_camera_ok&&!!j.foot_zero_ready;
+  badge.textContent=systemReady?'READY':'NOT READY';
 
   document.getElementById('angle').textContent=angle(j.pitch_mekf_control_deg);
   document.getElementById('rate').textContent=rate(j.physical_roll_rate_dps);
@@ -191,9 +216,30 @@ function apply(j){
   const imu=j.imu_ok?'IMU OK':'IMU NG';
   const roller=j.roller_ok?'Roller OK':'Roller NG';
   const foot=j.foot_zero_ready?'Foot 0° OK':(j.foot_camera_ok?'Foot 0° WAIT':'Foot CAM NG');
+  const rdet=j.right_foot_detected?'R:検出':'R:未検出';
+  const ldet=j.left_foot_detected?'L:検出':'L:未検出';
+  const samples=Number(j.foot_zero_samples||0);
   document.getElementById('systemInfo').textContent=
-    imu+' / '+roller+' / '+foot+' / 目標 '+Number(j.energy_control_autonomous_target_peak_deg||8).toFixed(1)+'° / 遅延補償 3 ms';
-  document.getElementById('errorInfo').textContent=j.last_error||'';
+    imu+' / '+roller+' / '+foot+' / '+rdet+' / '+ldet+' / zero samples '+samples+
+    ' / 目標 '+Number(j.energy_control_autonomous_target_peak_deg||8).toFixed(1)+'° / 遅延補償 3 ms';
+
+  const s=j.startup||{};
+  const rx=num(j.right_foot_cx_px),lx=num(j.left_foot_cx_px);
+  const rxText=rx===null?'--':rx.toFixed(2)+' px';
+  const lxText=lx===null?'--':lx.toFixed(2)+' px';
+  document.getElementById('startupInfo').textContent=
+    '初期姿勢: '+startupReasonLabel(s.guide_reason)+
+    ' / IMU保持 '+Number(s.stable_hold_ms||0)+' ms'+
+    ' / 右 '+(j.right_foot_detected?'検出 ':'未検出 ')+rxText+
+    ' / 左 '+(j.left_foot_detected?'検出 ':'未検出 ')+lxText+
+    ' / 足0°サンプル '+samples+
+    ' / camera frames '+Number(j.foot_frame_count||0)+
+    ' / failures '+Number(j.foot_camera_failures||0);
+
+  const errors=[];
+  if(j.last_error)errors.push(j.last_error);
+  if(!j.foot_camera_ok&&j.foot_camera_error)errors.push(j.foot_camera_error);
+  document.getElementById('errorInfo').textContent=errors.join(' / ');
 
   if(j.rwlog_downloadable==='yes'){
     const footReady=j.foot_angle_log_downloadable==='yes'?' / 足角度CSV準備完了':' / 足角度CSVなし';
@@ -441,7 +487,7 @@ String WebUi::statusJson() const {
   if (foot_angles_) foot_angles_->downloadFilename(foot_filename, sizeof(foot_filename));
 
   String json;
-  json.reserve(768);
+  json.reserve(1536);
   json += "{";
   json += "\"running\":" + String(runner_->running() ? "true" : "false");
   json += ",\"downloading\":" + String(logger_->downloading() ? "true" : "false");
@@ -460,14 +506,22 @@ String WebUi::statusJson() const {
           String(foot_angles_ && foot_angles_->logDownloadable() ? "yes" : "no") + "\"";
   json += ",\"foot_angle_download_filename\":\"" + String(foot_filename) + "\"";
   json += ",\"foot_camera_ok\":" + String(foot.camera_ok ? "true" : "false");
+  json += ",\"foot_camera_error\":\"" + String(foot_angles_ ? foot_angles_->lastError() : "not_available") + "\"";
   json += ",\"foot_zero_ready\":" + String(foot.zero_ready ? "true" : "false");
+  json += ",\"foot_collecting_zero\":" + String(foot.collecting_zero ? "true" : "false");
   json += ",\"right_foot_angle_deg\":" + String(foot.right_angle_deg, 3);
   json += ",\"left_foot_angle_deg\":" + String(foot.left_angle_deg, 3);
+  json += ",\"right_foot_cx_px\":" + String(foot.right_cx_px, 3);
+  json += ",\"left_foot_cx_px\":" + String(foot.left_cx_px, 3);
   json += ",\"right_foot_detected\":" + String(foot.right_detected ? "true" : "false");
   json += ",\"left_foot_detected\":" + String(foot.left_detected ? "true" : "false");
   json += ",\"right_foot_in_range\":" + String(foot.right_in_range ? "true" : "false");
   json += ",\"left_foot_in_range\":" + String(foot.left_in_range ? "true" : "false");
   json += ",\"foot_zero_samples\":" + String(foot.zero_samples);
+  json += ",\"foot_frame_count\":" + String(foot.frame_count);
+  json += ",\"foot_camera_failures\":" + String(foot.camera_failures);
+  json += ",\"foot_vision_us\":" + String(foot.vision_us);
+  json += ",\"startup\":" + imu_->startupDiagnosticsJson();
   json += ",\"imu_ok\":" + String(imu_->ok() ? "true" : "false");
   json += ",\"roller_ok\":" + String(roller_->ok() ? "true" : "false");
   json += ",\"roller_actual_current_mA\":" + String(roller.actual_current_mA);
