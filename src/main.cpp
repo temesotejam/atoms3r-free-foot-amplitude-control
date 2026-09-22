@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <M5Unified.h>
 #include <WebServer.h>
+#include "esp_heap_caps.h"
 
 #include "config.h"
 #include "camera_coexistence.h"
@@ -142,6 +143,11 @@ void setup() {
                 static_cast<unsigned>(camera_boot.psram_free_before),
                 static_cast<unsigned>(camera_boot.psram_free_after),
                 camera_probe.lastError());
+  Serial.printf("Camera internal cam_task: patch=%s core=%d priority=%u->%u\n",
+                camera_boot.cam_task_priority_patch_observed ? "YES" : "NO",
+                static_cast<int>(camera_boot.cam_task_core),
+                static_cast<unsigned>(camera_boot.cam_task_original_priority),
+                static_cast<unsigned>(camera_boot.cam_task_effective_priority));
 
   const bool roller_ok = roller.begin();
   const bool roller_task_ok = roller_ok && roller.startIoTask(
@@ -155,6 +161,30 @@ void setup() {
   const bool control_task_ok = run_control.begin(runControlStep, captureRunState, nullptr);
   Serial.printf("Run control worker: %s core=1 priority=4; HTTP core=1 priority=2\n",
                 control_task_ok ? "OK" : "FAILED");
+
+  // Minimal HTTP probe independent of the full Web UI/status JSON.
+  server.on("/camera-health", HTTP_GET, []() {
+    const CameraCoexistenceSnapshot c = camera_probe.snapshot();
+    char body[384];
+    snprintf(body, sizeof(body),
+        "ok camera=%u first_frame=%u frames=%lu failures=%lu "
+        "cam_task_patch=%u cam_task_core=%d cam_task_priority=%u->%u "
+        "internal_free=%u dma_free=%u psram_free=%u\n",
+        c.camera_ok ? 1U : 0U,
+        c.first_frame_seen ? 1U : 0U,
+        static_cast<unsigned long>(c.frame_count),
+        static_cast<unsigned long>(c.frame_failures),
+        c.cam_task_priority_patch_observed ? 1U : 0U,
+        static_cast<int>(c.cam_task_core),
+        static_cast<unsigned>(c.cam_task_original_priority),
+        static_cast<unsigned>(c.cam_task_effective_priority),
+        static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+        static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_DMA)),
+        static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM)));
+    server.sendHeader("Cache-Control", "no-store");
+    server.send(200, "text/plain; charset=utf-8", body);
+  });
+
   web.begin(server, runner, imu, roller, logger);
   Serial.printf("AP SSID: %s\n", Config::AP_SSID);
   Serial.println("Open http://192.168.4.1/ and start Autonomous Energy Control V7");
