@@ -8,7 +8,8 @@
 
 class WebUi {
 public:
-  void begin(WebServer& server, ExperimentRunner& runner, ImuManager& imu, Roller485Manager& roller, PsramLogger& logger, FootAngleTracker& foot_angles);
+  bool begin(WebServer& server, ExperimentRunner& runner, ImuManager& imu, Roller485Manager& roller, PsramLogger& logger, FootAngleTracker& foot_angles);
+  bool accessPointReady() const { return ap_ready_; }
   void update();
 
 private:
@@ -33,5 +34,6 @@ private:
   Roller485Manager* roller_ = nullptr;
   PsramLogger* logger_ = nullptr;
   FootAngleTracker* foot_angles_ = nullptr;
+  bool ap_ready_ = false;
 };
 

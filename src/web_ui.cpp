@@ -285,7 +285,7 @@ refresh();
 </html>
 )HTML";
 
-void WebUi::begin(WebServer& server, ExperimentRunner& runner, ImuManager& imu, Roller485Manager& roller, PsramLogger& logger, FootAngleTracker& foot_angles) {
+bool WebUi::begin(WebServer& server, ExperimentRunner& runner, ImuManager& imu, Roller485Manager& roller, PsramLogger& logger, FootAngleTracker& foot_angles) {
   server_ = &server;
   runner_ = &runner;
   imu_ = &imu;
@@ -293,8 +293,19 @@ void WebUi::begin(WebServer& server, ExperimentRunner& runner, ImuManager& imu, 
   logger_ = &logger;
   foot_angles_ = &foot_angles;
 
+  WiFi.persistent(false);
+  WiFi.mode(WIFI_OFF);
+  delay(20);
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(Config::AP_SSID, Config::AP_PASS, Config::AP_CHANNEL);
+  ap_ready_ = false;
+  for (int attempt = 0; attempt < 3 && !ap_ready_; ++attempt) {
+    ap_ready_ = WiFi.softAP(Config::AP_SSID, Config::AP_PASS, Config::AP_CHANNEL);
+    if (!ap_ready_) {
+      WiFi.softAPdisconnect(true);
+      delay(100);
+      WiFi.mode(WIFI_AP);
+    }
+  }
 
   server_->on("/", HTTP_GET, [this]() { handleRoot(); });
   server_->on("/status.json", HTTP_GET, [this]() { handleStatus(); });
@@ -305,6 +316,7 @@ void WebUi::begin(WebServer& server, ExperimentRunner& runner, ImuManager& imu, 
   server_->on("/download/foot-angle.csv", HTTP_GET, [this]() { handleFootAngleLog(); });
   server_->enableDelay(false);  // Empty HTTP polls must not add sleeps to idle acquisition.
   server_->begin();
+  return ap_ready_;
 }
 
 void WebUi::update() {

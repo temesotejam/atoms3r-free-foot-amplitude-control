@@ -82,3 +82,15 @@ assert main.index('const bool foot_ok = foot_angles.begin();') < main.index('con
 
 assert 'foot_camera_error' in web
 assert 'imu_error' in web
+
+
+# Wi-Fi AP is now brought up immediately after M5.begin and before heavy
+# logger/camera/IMU/roller initialization.
+ap_begin = main.index('const bool ap_ok = web.begin(')
+assert main.index('M5.begin(cfg);') < ap_begin
+assert ap_begin < main.index('const bool psram_ok = logger.begin();')
+assert ap_begin < main.index('const bool foot_ok = foot_angles.begin();')
+assert ap_begin < main.index('const bool imu_ok = imu.begin();')
+assert 'WiFi AP FAIL' in main
+assert 'for (int attempt = 0; attempt < 3 && !ap_ready_; ++attempt)' in web
+assert 'ap_ready_ = WiFi.softAP' in web

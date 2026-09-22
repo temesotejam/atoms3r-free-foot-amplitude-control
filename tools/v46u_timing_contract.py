@@ -49,8 +49,26 @@ def normalize_free_foot_main(data):
                 foot_ok ? "OK" : "FAILED", foot_angles.lastError());
 
 ''','')
-    data=data.replace('  web.begin(server, runner, imu, roller, logger, foot_angles);',
-                      '  web.begin(server, runner, imu, roller, logger);')
+    data=data.replace('''  // Bring up the AP before camera/PSRAM/IMU worker allocations. The route
+  // handlers only run from loop(), so storing references here is safe even
+  // though the subsystems are initialized below.
+  const bool ap_ok = web.begin(server, runner, imu, roller, logger, foot_angles);
+  Serial.printf("WiFi AP: %s SSID=%s IP=%s\\n",
+                ap_ok ? "OK" : "FAILED", Config::AP_SSID,
+                WiFi.softAPIP().toString().c_str());
+  if (!ap_ok) displayLine("WiFi AP FAIL", Config::AP_SSID);
+
+''','')
+    data=data.replace('''  Serial.printf("AP SSID: %s status=%s IP=%s\\n",
+                Config::AP_SSID, web.accessPointReady() ? "READY" : "FAILED",
+                WiFi.softAPIP().toString().c_str());
+  Serial.println("Open http://192.168.4.1/ and start Autonomous Energy Control V7");
+  if (web.accessPointReady()) displayLine("V46q / V7 ready", Config::AP_SSID);
+  else displayLine("WiFi AP FAIL", Config::AP_SSID);''',
+                      '''  web.begin(server, runner, imu, roller, logger);
+  Serial.printf("AP SSID: %s\\n", Config::AP_SSID);
+  Serial.println("Open http://192.168.4.1/ and start Autonomous Energy Control V7");
+  displayLine("V46q / V7 ready", Config::AP_SSID);''')
     data=data.replace('''  // The camera task is observation-only and owns a sidecar log. Close that
   // sidecar only after the run-control worker has fully released the runner.
   if (!runner.running() && foot_angles.runActive()) {

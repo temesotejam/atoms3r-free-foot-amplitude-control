@@ -128,6 +128,15 @@ void setup() {
                 Config::ATTITUDE_VALIDATION_REVISION);
   displayLine("V46q IMU", "DUAL-CORE V7");
 
+  // Bring up the AP before camera/PSRAM/IMU worker allocations. The route
+  // handlers only run from loop(), so storing references here is safe even
+  // though the subsystems are initialized below.
+  const bool ap_ok = web.begin(server, runner, imu, roller, logger, foot_angles);
+  Serial.printf("WiFi AP: %s SSID=%s IP=%s\n",
+                ap_ok ? "OK" : "FAILED", Config::AP_SSID,
+                WiFi.softAPIP().toString().c_str());
+  if (!ap_ok) displayLine("WiFi AP FAIL", Config::AP_SSID);
+
   const bool psram_ok = logger.begin();
   Serial.printf("PSRAM: %s total=%u free=%u sample_capacity=%u\n", psram_ok ? "OK" : "FAILED",
                 static_cast<unsigned>(logger.psramTotal()), static_cast<unsigned>(logger.psramFree()),
@@ -155,10 +164,12 @@ void setup() {
   const bool control_task_ok = run_control.begin(runControlStep, captureRunState, nullptr);
   Serial.printf("Run control worker: %s core=1 priority=4; HTTP core=1 priority=2\n",
                 control_task_ok ? "OK" : "FAILED");
-  web.begin(server, runner, imu, roller, logger, foot_angles);
-  Serial.printf("AP SSID: %s\n", Config::AP_SSID);
+  Serial.printf("AP SSID: %s status=%s IP=%s\n",
+                Config::AP_SSID, web.accessPointReady() ? "READY" : "FAILED",
+                WiFi.softAPIP().toString().c_str());
   Serial.println("Open http://192.168.4.1/ and start Autonomous Energy Control V7");
-  displayLine("V46q / V7 ready", Config::AP_SSID);
+  if (web.accessPointReady()) displayLine("V46q / V7 ready", Config::AP_SSID);
+  else displayLine("WiFi AP FAIL", Config::AP_SSID);
 }
 
 static void updateAcquisitionContext() {
