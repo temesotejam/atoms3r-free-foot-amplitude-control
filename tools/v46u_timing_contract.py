@@ -29,6 +29,9 @@ def normalize_camera_coexistence(path, data):
         start=data.index(health_start)
         end=data.index('''  web.begin(server, runner, imu, roller, logger);''', start)
         data=data[:start]+data[end:]
+        data=data.replace(
+            '                control_task_ok ? "OK" : "FAILED");\n\n  web.begin(server, runner, imu, roller, logger);',
+            '                control_task_ok ? "OK" : "FAILED");\n  web.begin(server, runner, imu, roller, logger);')
     data=data.replace('''  // Phase 1 camera coexistence probe only. No marker detection, no foot angle,
   // no control/log/UI dependency. Camera SCCB temporarily borrows I2C0 here,
   // releases it, and only then may Roller485 take ownership of I2C0.
