@@ -93,13 +93,18 @@ struct Server {
  std::string arg(const char* k){return args.at(k);}
  void send(int code,const char*,const std::string&){response=code;}
 };
+struct FootAngle {
+ bool camera_ok=true,zero_ready=true;
+ bool cameraOk() const{return camera_ok;}
+ bool zeroReady() const{return zero_ready;}
+};
 struct WebUi {
- Server* server_; ExperimentRunner* runner_; Logger* logger_; Imu* imu_;
+ Server* server_; ExperimentRunner* runner_; Logger* logger_; Imu* imu_; FootAngle* foot_angles_;
  void handleStartEnergyControlAutonomous();
 };
 HTTP_START
 int main(){
- Logger log; ExperimentRunner r; r.logger_=&log;Server s;Imu imu;WebUi ui{&s,&r,&log,&imu};
+ Logger log; ExperimentRunner r; r.logger_=&log;Server s;Imu imu;FootAngle foot;WebUi ui{&s,&r,&log,&imu,&foot};
  static_assert(Config::ENERGY_CONTROL_AUTONOMOUS_TIMING_COMPENSATION_US==3000,"fixed delay");
  // Preserve the former 3 ms calculation across motion direction and live bias.
  for(float angle:{-8.f,0.f,8.f})for(float rate:{-100.f,-0.1f,0.f,0.1f,100.f})for(float bias:{-2.f,0.f,2.f}){
@@ -118,7 +123,7 @@ int main(){
  log.downloading_=true;log.snapshot(false);assert(log.metadata()==saved);log.downloading_=false;
  log.snapshot(false);std::cout<<log.metadata()<<'\n';log.snapshot(true);std::cout<<log.metadata()<<'\n';
  // Ownership guard must run before any runner/logger access.
- run_control.active_=true;WebUi detached{&s,nullptr,nullptr,nullptr};
+ run_control.active_=true;WebUi detached{&s,nullptr,nullptr,nullptr,nullptr};
  detached.handleStartEnergyControlAutonomous();assert(s.response==409);run_control.active_=false;
  log.downloading_=true;ui.handleStartEnergyControlAutonomous();assert(s.response==409);log.downloading_=false;
  run_control.ready_=false;ui.handleStartEnergyControlAutonomous();assert(s.response==503);run_control.ready_=true;
