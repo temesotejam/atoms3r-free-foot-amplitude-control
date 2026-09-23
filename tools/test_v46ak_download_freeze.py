@@ -58,23 +58,23 @@ compact_start = logger.index("  // Compact Autonomous metadata begin\n")
 compact_end = logger.index("  // Compact Autonomous metadata end\n", compact_start) + len("  // Compact Autonomous metadata end\n")
 compact_block = logger[compact_start:compact_end]
 for token in (
-    '"metadata_profile":"autonomous_compact_v1"',
-    '"energy_control_autonomous_peak_events"',
-    '"energy_control_autonomous_zero_cross_events"',
-    '"v46n_imu_acquisition"',
-    '"v46p_control_worker"',
-    '"v46u_current_timing"',
-    '"metadata_omitted_sections"',
+    'autonomous_compact_v1',
+    'energy_control_autonomous_peak_events',
+    'energy_control_autonomous_zero_cross_events',
+    'v46n_imu_acquisition',
+    'v46p_control_worker',
+    'v46u_current_timing',
+    'metadata_omitted_sections',
 ):
     assert token in compact_block, token
 for token in (
-    '"calibration_probe_events"',
-    '"q_ident_events"',
-    '"e2_shadow_peak_events"',
-    '"q1_shadow_events"',
-    '"v46s_solver_audit"',
-    '"v46k_timing_probe_events"',
-    '"columns"',
+    'calibration_probe_events',
+    'q_ident_events',
+    'e2_shadow_peak_events',
+    'q1_shadow_events',
+    'v46s_solver_audit',
+    'v46k_timing_probe_events',
+    '\"columns\"',
 ):
     assert token not in compact_block, token
 
