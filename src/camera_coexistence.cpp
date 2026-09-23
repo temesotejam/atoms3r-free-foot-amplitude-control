@@ -116,9 +116,11 @@ bool OneShotCamera::begin() {
   // in-progress frame, then enter the idle state. There is NO background
   // camera task in this serial-debug build.
   camera_fb_t* boot_frame = cam_take(pdMS_TO_TICKS(kCaptureTimeoutMs));
+  cameraTaskPriorityPatchSampleStack();
   if (!boot_frame) {
     cam_stop();
     setXclkEnabled(false);
+    cameraTaskPriorityPatchForgetTask();
     esp_camera_deinit();
     digitalWrite(PIN_CAM_POWER_N, HIGH);
     snapshot_.camera_driver_active = false;
@@ -170,6 +172,7 @@ camera_fb_t* OneShotCamera::acquire(uint32_t timeout_ms) {
 
   cam_start();
   camera_fb_t* fb = cam_take(pdMS_TO_TICKS(timeout_ms ? timeout_ms : kCaptureTimeoutMs));
+  cameraTaskPriorityPatchSampleStack();
 
   // The key invariant: receiver and XCLK are OFF before control returns.
   cam_stop();
@@ -275,6 +278,7 @@ bool OneShotCamera::debugDeinit() {
   portEXIT_CRITICAL(&mux_);
   setXclkEnabled(false);
 
+  cameraTaskPriorityPatchForgetTask();
   const esp_err_t err = esp_camera_deinit();
   digitalWrite(PIN_CAM_POWER_N, HIGH);
 
@@ -348,6 +352,8 @@ bool OneShotCamera::initCameraOnTemporaryI2c0() {
 
   err = esp_camera_init(&c);
   if (err != ESP_OK) {
+    // esp_camera_init can have already deleted its partially created task.
+    cameraTaskPriorityPatchForgetTask();
     (void)i2c_driver_delete(I2C_NUM_0);
     setError("esp_camera_init_failed");
     return false;
@@ -355,6 +361,7 @@ bool OneShotCamera::initCameraOnTemporaryI2c0() {
 
   sensor_t* sensor = esp_camera_sensor_get();
   if (!sensor) {
+    cameraTaskPriorityPatchForgetTask();
     esp_camera_deinit();
     (void)i2c_driver_delete(I2C_NUM_0);
     setError("camera_sensor_missing");
@@ -367,6 +374,7 @@ bool OneShotCamera::initCameraOnTemporaryI2c0() {
 
   err = i2c_driver_delete(I2C_NUM_0);
   if (err != ESP_OK) {
+    cameraTaskPriorityPatchForgetTask();
     esp_camera_deinit();
     setError("camera_sccb_i2c0_release_failed");
     return false;
@@ -400,6 +408,7 @@ camera_fb_t* OneShotCamera::acquireContinuous(uint32_t timeout_ms) {
   if (!snapshot().receiver_active) return nullptr;
   const uint32_t start = micros();
   camera_fb_t* fb = cam_take(pdMS_TO_TICKS(timeout_ms));
+  cameraTaskPriorityPatchSampleStack();
   // The low-level cam_take API does not populate the wrapper's format fields.
   // Length is checked by FootObserver before any image access.
   if (fb) { fb->width = 320; fb->height = 240; fb->format = PIXFORMAT_GRAYSCALE; }

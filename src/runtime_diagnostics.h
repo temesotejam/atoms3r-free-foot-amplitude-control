@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-#define RUNTIME_VERSION "0.47.1-usb-diagnostics"
+#define RUNTIME_VERSION "0.47.2-camera-stack-fix"
 
 namespace RuntimeDiag {
 enum class Lane : uint32_t { Control, Imu, Camera, Http, Roller, Export, Count };
@@ -25,12 +25,18 @@ void phase(Lane lane, Phase phase);
 Phase currentPhase(Lane lane);
 void beat(Lane lane, uint32_t detail = 0);
 void sampleMemory(); // HTTP owner only; deliberately excluded from the USB observer.
+void cameraDriverTask(uint32_t requested, uint32_t allocated, bool created);
+void cameraDriverStack(uint32_t free_bytes);
+void cameraDriverStopped();
 void wifiEvent(uint32_t event, int client_change = 0, int ap_active = -1);
 void pollFallback(); // Only used if the independent observer task could not be created.
 #else
 inline void phase(Lane, Phase) {}
 inline Phase currentPhase(Lane) { return Phase::Unseen; }
 inline void beat(Lane, uint32_t = 0) {}
+inline void cameraDriverTask(uint32_t, uint32_t, bool) {}
+inline void cameraDriverStack(uint32_t) {}
+inline void cameraDriverStopped() {}
 #endif
 struct Scope {
   Lane lane; Phase previous;

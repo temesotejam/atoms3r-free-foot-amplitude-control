@@ -15,15 +15,19 @@ constexpr uint32_t kLanes = static_cast<uint32_t>(Lane::Count);
 struct Probe { uint32_t phase, last_ms, beats, detail, stack_free, core; };
 struct Memory { uint32_t at_ms, internal_free, internal_min, largest, dma_free, psram_free; };
 struct Boot { uint32_t id, reset, stage, failures; };
+struct CameraDriver {
+  uint32_t observed, created, active, requested, allocated, stack_seen, stack_free, at_ms;
+};
 struct Sample {
   uint32_t boot, at_ms, wifi_event, wifi_events, clients, ap_active;
-  Probe lanes[kLanes]; Memory memory;
+  Probe lanes[kLanes]; Memory memory; CameraDriver camera_driver;
 };
 static_assert(__atomic_always_lock_free(sizeof(uint32_t), nullptr), "Diagnostic probes must be lock free");
 RTC_NOINIT_ATTR volatile diagnostic_journal::Journal<Boot, 0x55444231> boot_journal;
-RTC_NOINIT_ATTR volatile diagnostic_journal::Journal<Sample, 0x55445331> sample_journal;
+RTC_NOINIT_ATTR volatile diagnostic_journal::Journal<Sample, 0x55445332> sample_journal;
 Probe probes[kLanes]{};
 Memory memory{};
+CameraDriver camera_driver{};
 uint32_t event_id = 0, event_count = 0, clients = 0, ap_active = 0;
 uint32_t boot_stage = 0, boot_failures = 0;
 Boot current_boot{}, previous_boot{};
@@ -31,7 +35,7 @@ Sample previous_sample{};
 bool have_previous_boot = false, have_previous_sample = false;
 bool observer_started = false;
 uint32_t last_sample_ms = 0, last_report_ms = 0, report_started_ms = 0, dropped = 0;
-char report[3072];
+char report[4096];
 size_t report_length = 0, report_sent = 0;
 
 uint32_t get(const uint32_t& value) { return __atomic_load_n(&value, __ATOMIC_RELAXED); }
@@ -65,8 +69,8 @@ const char* reason(uint32_t reset) {
     default: return "UNKNOWN";
   }
 }
-Sample capture(uint32_t now) {
-  Sample s{}; s.boot = current_boot.id; s.at_ms = now;
+Sample capture() {
+  Sample s{}; s.boot = current_boot.id;
   s.wifi_event = get(event_id); s.wifi_events = get(event_count);
   s.clients = get(clients); s.ap_active = get(ap_active);
   // Deliberately independent atomic fields: no live snapshot/spinlock or
@@ -79,6 +83,14 @@ Sample capture(uint32_t now) {
   s.memory.at_ms = get(memory.at_ms); s.memory.internal_free = get(memory.internal_free);
   s.memory.internal_min = get(memory.internal_min); s.memory.largest = get(memory.largest);
   s.memory.dma_free = get(memory.dma_free); s.memory.psram_free = get(memory.psram_free);
+  auto& c = s.camera_driver;
+  c.observed = get(camera_driver.observed); c.created = get(camera_driver.created);
+  c.active = get(camera_driver.active); c.requested = get(camera_driver.requested);
+  c.allocated = get(camera_driver.allocated); c.stack_seen = get(camera_driver.stack_seen);
+  c.stack_free = get(camera_driver.stack_free); c.at_ms = get(camera_driver.at_ms);
+  // Producers can advance last_ms while fields are copied. Timestamp AFTER
+  // the copy to avoid reporting an age of UINT32_MAX for a one-ms race.
+  s.at_ms = millis();
   return s;
 }
 void append(const char* format, ...) {
@@ -99,6 +111,10 @@ void appendSample(const char* label, const Sample& s) {
         label, names[i], phaseName(p.phase), p.beats != 0, s.at_ms - p.last_ms,
         p.beats, p.detail, p.stack_free, p.core);
   }
+  const auto& c = s.camera_driver;
+  append("USBDBG,%s,cam_task,observed=%u,created=%u,active=%u,requested_bytes=%u,allocated_bytes=%u,stack_seen=%u,stack_bytes=%u,stack_at_ms=%u\n",
+      label, c.observed, c.created, c.active, c.requested, c.allocated,
+      c.stack_seen, c.stack_free, c.at_ms);
   const auto& m = s.memory;
   append("USBDBG,%s,heap_at_ms=%u,internal=%u,min=%u,largest=%u,dma=%u,psram=%u\n",
       label, m.at_ms, m.internal_free, m.internal_min, m.largest, m.dma_free, m.psram_free);
@@ -106,7 +122,7 @@ void appendSample(const char* label, const Sample& s) {
 void tick() {
   const uint32_t now = millis();
   if (now - last_sample_ms >= 250 || !last_sample_ms) {
-    sample_journal.save(capture(now)); last_sample_ms = now;
+    sample_journal.save(capture()); last_sample_ms = now;
   }
   if (report_sent < report_length && now - report_started_ms > 2000) {
     report_sent = report_length; ++dropped;
@@ -121,7 +137,7 @@ void tick() {
           previous_boot.id, stageName(previous_boot.stage), previous_boot.failures, have_previous_sample);
       if (have_previous_sample) appendSample("previous", previous_sample);
     } else append("USBDBG,previous_boot,unavailable=1\n");
-    appendSample("live", capture(now));
+    appendSample("live", capture());
   }
   // Native HWCDC has a bounded ring. Never flush or wait for a PC to connect.
   // Timeout 0 is unsafe in this core's unsigned retry loop; use 1 ms plus a
@@ -184,6 +200,17 @@ void sampleMemory() {
   put(memory.dma_free, heap_caps_get_free_size(MALLOC_CAP_DMA));
   put(memory.psram_free, heap_caps_get_free_size(MALLOC_CAP_SPIRAM)); put(memory.at_ms, now);
 }
+void cameraDriverTask(uint32_t requested, uint32_t allocated, bool created) {
+  put(camera_driver.observed, 1); put(camera_driver.created, created);
+  put(camera_driver.active, created); put(camera_driver.requested, requested);
+  put(camera_driver.allocated, allocated); put(camera_driver.stack_seen, 0);
+  put(camera_driver.stack_free, 0); put(camera_driver.at_ms, 0);
+}
+void cameraDriverStack(uint32_t free_bytes) {
+  put(camera_driver.stack_free, free_bytes); put(camera_driver.at_ms, millis());
+  put(camera_driver.stack_seen, 1);
+}
+void cameraDriverStopped() { put(camera_driver.active, 0); }
 void wifiEvent(uint32_t event, int change, int active) {
   put(event_id, event); put(event_count, get(event_count) + 1);
   if (active >= 0) { put(ap_active, active); if (!active) put(clients, 0); }

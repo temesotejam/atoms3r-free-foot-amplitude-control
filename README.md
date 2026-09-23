@@ -1,4 +1,4 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.1 USB diagnostics
+# Current integrated build: Free-foot Runtime V2 / 0.47.2 camera stack fix
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
 [USB diagnostic procedure](docs/USB_DIAGNOSTICS.md) ·
@@ -9,11 +9,14 @@ The current main branch integrates observation-only right/left foot angles with
 the V46al-R2 controller. It uses permanent control ownership, PSRAM event storage,
 and a resumable, CRC-verified RWLOG export. Integrated hardware validation is
 pending; build/host tests do not establish camera frame rate or control deadlines.
-Version 0.47.1 adds an eight-second startup connection window, a separate USB
-observer, RTC reset evidence, and a serial monitor that retains logs across USB
-reconnection. It also fixes a reproduced browser error that could stop polling
-after malformed status data. The cause of the reported device/USB instability
-is not yet established; this is an instrumented build, not a claimed hardware fix.
+Version 0.47.2 addresses three captured `cam_task` stack-canary panics. The
+matching 0.47.1 ELF resolves them to camera FB-SIZE error reporting through
+newlib/UART. The actual RTOS allocation is raised from 2048 to at least 8192
+bytes, with cached driver-stack measurements in USB/RTC diagnostics. The error
+path remains enabled; whether frame-size mismatches persist requires hardware
+confirmation. See [the matched backtrace and fix](docs/CAMERA_STACK_PANIC_0472.md).
+The eight-second USB startup window, automatic monitor reconnection, RTC reset
+evidence, and browser recovery from malformed status data remain available.
 
 The earlier implementation notes below are retained as history.
 

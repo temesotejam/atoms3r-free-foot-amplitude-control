@@ -10,6 +10,8 @@ for name in runtime_control export_protocol previous_peak_math diagnostic_journa
   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o -Isrc tools/test_${name}.cpp -o /tmp/test_${name}
   /tmp/test_${name}
 done
+g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o -Isrc tools/test_camera_task_patch.cpp src/camera_task_priority_patch.cpp -o /tmp/test_camera_task_patch
+/tmp/test_camera_task_patch
 g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_foot_tracking.cpp src/white_marker_tracker.cpp src/foot_angle_estimator.cpp -o /tmp/test_foot
 /tmp/test_foot
 g++ -std=c++11 -O2 tools/test_v46n_acquisition.cpp -o /tmp/test_acq
