@@ -41,8 +41,8 @@ assert git_blob_sha(ROOT / "tools/convert_rwlog_to_csv.py") == "7a2c1229376e1ec2
 assert new_constants in logger
 assert extract_function(logger, "bool PsramLogger::writeBytes(") == new_write
 assert "MSG_DONTWAIT" in logger
-assert "RWLOGDL,write_stall" in logger
-assert "RWLOGDL,write_error" in logger
+assert "rwlogDownloadDiagFail" in logger
+assert "rwlogDownloadDiagRetry" in logger
 assert "STREAM_CHUNK_BYTES = 256" in logger
 assert "STREAM_MIN_CHUNK_BYTES = 64" in logger
 assert "rwlogDownloadDiagShrink" in logger
