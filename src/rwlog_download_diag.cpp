@@ -1,5 +1,6 @@
 #include "rwlog_download_diag.h"
 
+#include <errno.h>
 #include <esp_heap_caps.h>
 
 namespace {
