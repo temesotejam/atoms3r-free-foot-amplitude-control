@@ -40,7 +40,8 @@ assert '#include "bounded_web_server.h"' in main
 assert "BoundedWriteWebServer server(Config::HTTP_PORT);" in main
 assert "class BoundedWriteWebServer : public WebServer" in bounded_h
 assert "kMaxWriteBytes = 256" in bounded
-assert "_currentClientWrite(const char* buffer, size_t length)" in bounded
+assert "BoundedWriteWebServer::_currentClientWrite(" in bounded
+assert "const char* buffer, size_t length" in bounded
 assert "_currentClientWrite_P(" in bounded
 assert "pacedWrite(" in bounded
 assert 'source_tag' in bounded
