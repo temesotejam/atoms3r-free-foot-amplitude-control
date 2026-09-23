@@ -105,3 +105,14 @@ The native browser attachment route is retained, with these transport-only chang
 - serial diagnostics: `RWLOGDL,prepare_begin`, `prepare_end`, `stream_end`.
 
 No Range/resume protocol and no fetch-to-Blob buffering are used.
+
+### 110-byte stall root cause
+
+A failed browser transfer that stopped at exactly **110 bytes** identified the boundary:
+`sizeof(RwLogFileHeader) == 110`. The header was delivered, then the first metadata
+write blocked inside `WiFiClient.write()`.
+
+The RWLOG body writer therefore now uses the underlying socket directly with
+`send(..., MSG_DONTWAIT)`. EAGAIN/EWOULDBLOCK/ENOMEM are retried with the same
+15 s no-progress limit. This makes the timeout enforceable even when the TCP
+send buffer is temporarily full.

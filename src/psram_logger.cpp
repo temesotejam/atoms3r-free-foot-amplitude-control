@@ -8,6 +8,8 @@ extern Roller485Manager roller;
 
 #include <string.h>
 #include <new>
+#include <errno.h>
+#include <lwip/sockets.h>
 
 #include "config.h"
 
@@ -1707,21 +1709,58 @@ uint32_t PsramLogger::calculateCrc(const RwLogFileHeader& header, const String& 
 
 bool PsramLogger::writeBytes(WebServer& server, const uint8_t* data, size_t len) {
   WiFiClient client = server.client();
+  const int socket_fd = client.fd();
+  if (socket_fd < 0 || !client.connected()) return false;
+
+  const size_t total_len = len;
   uint32_t last_progress_ms = millis();
   while (len > 0) {
     const size_t want = len > STREAM_CHUNK_BYTES ? STREAM_CHUNK_BYTES : len;
-    const size_t written = client.write(data, want);
-    if (written > 0) {
+
+    errno = 0;
+    const int result = ::send(
+        socket_fd,
+        reinterpret_cast<const void*>(data),
+        want,
+        MSG_DONTWAIT);
+
+    if (result > 0) {
+      const size_t written = static_cast<size_t>(result);
       data += written;
       len -= written;
       last_progress_ms = millis();
       delay(0);
       continue;
     }
-    if (!client.connected()) return false;
-    if (static_cast<uint32_t>(millis() - last_progress_ms) >
-        STREAM_NO_PROGRESS_TIMEOUT_MS) return false;
-    delay(2);
+
+    const int error = errno;
+    const bool retryable =
+        result == 0 ||
+        (result < 0 &&
+         (error == EAGAIN || error == EWOULDBLOCK || error == ENOMEM));
+
+    if (retryable && client.connected()) {
+      if (static_cast<uint32_t>(millis() - last_progress_ms) >
+          STREAM_NO_PROGRESS_TIMEOUT_MS) {
+        Serial.printf(
+            "RWLOGDL,write_stall,sent=%u,total=%u,errno=%d\n",
+            static_cast<unsigned>(total_len - len),
+            static_cast<unsigned>(total_len),
+            error);
+        return false;
+      }
+      delay(2);
+      continue;
+    }
+
+    Serial.printf(
+        "RWLOGDL,write_error,sent=%u,total=%u,result=%d,errno=%d,connected=%u\n",
+        static_cast<unsigned>(total_len - len),
+        static_cast<unsigned>(total_len),
+        result,
+        error,
+        client.connected() ? 1U : 0U);
+    return false;
   }
   return true;
 }
