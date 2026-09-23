@@ -15,11 +15,17 @@ struct FootFrame {
   bool right_valid = false, left_valid = false, right_in_range = false, left_in_range = false;
   float right_x = NAN, left_x = NAN, right_deg = NAN, left_deg = NAN;
   float right_contrast = 0, left_contrast = 0;
+  float right_scan_y = NAN, left_scan_y = NAN, right_weight = 0, left_weight = 0;
+  MarkerDetectionReason right_reason = MarkerDetectionReason::NoFrame;
+  MarkerDetectionReason left_reason = MarkerDetectionReason::NoFrame;
+  uint8_t right_templates = 0, left_templates = 0;
 };
 struct FootSnapshot {
   FootFrame latest;
   bool available = false, zero_ready = false, recording = false, overflow = false;
   uint32_t count = 0, frame_failures = 0, zero_samples = 0;
+  uint32_t captured_frames = 0, right_marker_failures = 0, left_marker_failures = 0;
+  uint32_t processing_max_us = 0;
   float right_zero = appcfg::kFootAngleAZeroXPx, left_zero = appcfg::kFootAngleBZeroXPx;
   float fps = 0;
 };

@@ -88,6 +88,11 @@ void FootObserver::loop() {
     if (a.valid) { f.right_x = a.center_x_px; f.right_deg = ar.angle_deg; }
     if (b.valid) { f.left_x = b.center_x_px; f.left_deg = bl.angle_deg; }
     f.right_contrast = a.peak_contrast; f.left_contrast = b.peak_contrast;
+    if (a.valid) f.right_scan_y = a.center_y_px;
+    if (b.valid) f.left_scan_y = b.center_y_px;
+    f.right_weight = a.weight_sum; f.left_weight = b.weight_sum;
+    f.right_reason = a.reason; f.left_reason = b.reason;
+    f.right_templates = a.templates_tested; f.left_templates = b.templates_tested;
     f.processing_us = micros() - processing_start;
     RuntimeDiag::phase(RuntimeDiag::Lane::Camera, RuntimeDiag::Phase::CameraRelease);
     camera_->releaseContinuous(fb);
@@ -99,6 +104,12 @@ void FootObserver::loop() {
     RuntimeDiag::phase(RuntimeDiag::Lane::Camera, RuntimeDiag::Phase::Publish);
     portENTER_CRITICAL(&mux_);
     if (!f.frame_valid) ++status_.frame_failures;
+    else {
+      ++status_.captured_frames;
+      if (!a.valid) ++status_.right_marker_failures;
+      if (!b.valid) ++status_.left_marker_failures;
+    }
+    if (f.processing_us > status_.processing_max_us) status_.processing_max_us = f.processing_us;
     if (status_.recording && f.run_id == recording_run_id_) {
       // Signed offsets retain frame-boundary cases; never label them as zero.
       f.log_time_us = f.timestamp_valid ? static_cast<int64_t>(f.frame_us) - log_epoch_us_ : -1;
@@ -123,7 +134,12 @@ void FootObserver::loop() {
 static String number(float v) { return isfinite(v) ? String(v, 5) : String("null"); }
 void FootObserver::appendMetadata(PsramString& json) const {
   const auto s = snapshot();
-  json += "\"foot_observation\":{\"revision\":\"freefoot_runtime_v2_20260923\",\"observation_only\":true,";
+  json += "\"foot_observation\":{\"revision\":\"freefoot_runtime_v2_0473\",\"observation_only\":true,";
+  json += "\"detector\":\"" + String(appcfg::kWhiteDetectorRevision) + "\",";
+  json += "\"scan_y_semantics\":\"selected_row_template_center_not_marker_centroid\",";
+  json += "\"vertical_recovery_angle_accuracy_validated\":false,";
+  json += "\"search_radius_y_px\":" + String(appcfg::kWhiteSearchRadiusYPx);
+  json += ",\"search_step_y_px\":" + String(appcfg::kWhiteSearchStepYPx) + ",";
   json += "\"calibration_source_commit\":\"ac6df8caf59c93956b87cba57521903c25ff9f00\",";
   json += "\"mapping\":\"right=A upper lane;left=B lower lane\",\"positive_direction\":\"marker_x_decreases\",";
   json += "\"frame_timestamp_semantics\":\"camera_driver_frame_timestamp_not_verified_exposure_time\",";
@@ -155,7 +171,12 @@ void FootObserver::appendMetadata(PsramString& json) const {
     json += buf;
     json += ",\"right_x\":" + number(f.right_x) + ",\"left_x\":" + number(f.left_x);
     json += ",\"right_deg\":" + number(f.right_deg) + ",\"left_deg\":" + number(f.left_deg);
-    json += ",\"right_contrast\":" + number(f.right_contrast) + ",\"left_contrast\":" + number(f.left_contrast) + "}";
+    json += ",\"right_contrast\":" + number(f.right_contrast) + ",\"left_contrast\":" + number(f.left_contrast);
+    json += ",\"right_scan_y\":" + number(f.right_scan_y) + ",\"left_scan_y\":" + number(f.left_scan_y);
+    json += ",\"right_weight\":" + number(f.right_weight) + ",\"left_weight\":" + number(f.left_weight);
+    json += ",\"right_reason\":\"" + String(markerDetectionReasonName(f.right_reason)) + "\"";
+    json += ",\"left_reason\":\"" + String(markerDetectionReasonName(f.left_reason)) + "\"";
+    json += ",\"right_templates\":" + String(f.right_templates) + ",\"left_templates\":" + String(f.left_templates) + "}";
   }
   json += "]";
 }

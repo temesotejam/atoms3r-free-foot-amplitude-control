@@ -43,24 +43,44 @@ function drawMarkers(f) {
     if (Number.isFinite(x)) { ctx.fillStyle = '#145fad'; ctx.beginPath(); ctx.arc(x * 2, y, 7, 0, 2 * Math.PI); ctx.fill(); }
   }
 }
+function footIssues(f, stale, terminal) {
+  const issues = [];
+  if (terminal) issues.push('最終フレームを表示');
+  else if (stale) issues.push('画像更新なし');
+  if (f.frame_valid === false) issues.push('画像取得失敗');
+  else if (f.frame_timestamp_valid === false) issues.push('画像時刻が無効');
+  const reasons = {low_contrast: '未検出（明暗差不足）', low_weight: '未検出（白領域不足）'};
+  for (const [side, label] of [['right', '右'], ['left', '左']]) {
+    if (f[side + '_valid']) {
+      if (f[side + '_in_range'] === false) issues.push(label + '：校正範囲外');
+    } else {
+      const reason = f[side + '_reason'];
+      if (reasons[reason]) issues.push(label + '：' + reasons[reason]);
+      else if (reason === 'no_frame' && f.frame_valid !== false) issues.push(label + '：画像なし');
+      else if (!reason) issues.push(label + '：未検出または未校正'); // Older status data.
+    }
+  }
+  if (f.overflow) issues.push('記録容量超過');
+  return issues.length ? ' · ' + issues.join(' · ') : '';
+}
 function render(s) {
   $('connection').textContent = s.controller_fresh ? '接続中' : '接続中 · 制御状態の更新が停止';
   $('state').textContent = s.state; $('remaining').textContent = format(s.remaining_ms / 1000, 1) + ' s';
   $('pitch').textContent = format(s.pitch_deg) + '°';
   $('current').textContent = `${s.motor_mA} / ${s.actual_mA} mA`;
-  const f = s.foot, stale = f.age_ms < 0 || f.age_ms > 500;
+  const f = s.foot, stale = !Number.isFinite(f.age_ms) || f.age_ms < 0 || f.age_ms > 500;
   const terminal = ['FINISHED', 'ESTOP'].includes(s.state);
   $('right').textContent = f.right_valid && (!stale || terminal) ? format(f.right_deg) + '°' : '—';
   $('left').textContent = f.left_valid && (!stale || terminal) ? format(f.left_deg) + '°' : '—';
   $('fps').textContent = terminal ? '停止中' : `${format(stale ? 0 : f.fps, 1)} / 15 fps`;
-  $('foot-status').textContent = `${f.zero_ready ? 'ゼロ点確定' : 'ゼロ点待ち'} · ${f.zero_samples}枚 · 記録${f.frames}枚 · 取得失敗${f.failures}回` +
-    (terminal ? ' · 最終フレームを表示' : stale ? ' · 画像更新なし' : '') +
-    (!f.right_valid || !f.left_valid ? ' · 未検出または未校正' : !f.right_in_range || !f.left_in_range ? ' · 校正範囲外' : '') +
-    (f.overflow ? ' · 記録容量超過' : '');
+  $('foot-status').textContent = `${f.zero_ready ? 'ゼロ点確定' : 'ゼロ点待ち'} · 記録${f.frames ?? 0}枚 · 画像取得失敗${f.failures ?? 0}回` +
+    footIssues(f, stale, terminal);
   if (s.running) $('guide').textContent = '測定中。画面は更新されます。足角度は制御入力に使用しません。';
   else if (s.downloadable) $('guide').textContent = 'ログを保存してください。次の測定には「ログを消去・次の測定へ」を使います。';
   else if (!f.available) $('guide').textContent = 'カメラを初期化できませんでした。診断情報を保存してください。';
+  else if (stale || f.frame_valid === false || f.frame_timestamp_valid === false) $('guide').textContent = 'カメラ画像の更新を確認しています。この状態が続く場合は診断JSONを保存してください。';
   else if (!f.zero_ready) $('guide').textContent = `左右のマーカーが見える直立姿勢で静止してください。姿勢誤差 ${format(s.upright.error_deg, 1)}° / 角速度 ${format(s.upright.gyro_dps, 1)}°/s`;
+  else if (!f.right_valid || !f.left_valid) $('guide').textContent = '未検出の足があります。マーカーの見え方を確認してください。この姿勢の診断JSONを保存すると原因の確認に使えます。';
   else $('guide').textContent = s.ready ? '直立姿勢を保ち、測定を開始してください。' : 'IMUの初期化・静止確認を待っています。';
   $('diagnostic-view').textContent = JSON.stringify(s, null, 2);
   drawMarkers(f); controls();

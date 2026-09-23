@@ -4,7 +4,7 @@ static const char RUNTIME_HTML[] PROGMEM = R"FREEFOOT(<!doctype html><html lang=
 <style>
 :root{font-family:system-ui,sans-serif;color:#1d293d;background:#eef2f5;font-size:16px}*{box-sizing:border-box}body{max-width:950px;margin:auto;padding:20px}h1{font-size:1.65rem;margin-bottom:4px}h2{font-size:1.08rem}p{line-height:1.6}.muted{color:#546477;font-size:.88rem}.card{background:white;border-radius:14px;padding:20px;margin:16px 0;border:1px solid #d9e1e8}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.value{font-size:2rem;font-variant-numeric:tabular-nums;margin:4px 0}.label{font-size:.85rem;color:#546477}button{padding:13px 18px;border:0;border-radius:8px;background:#174b8e;color:white;font:inherit;cursor:pointer;margin:4px 4px 4px 0}button:disabled{opacity:.4;cursor:default}#stop{background:#b62032}#clear,#cancel{background:#58677a}code,pre{font-family:ui-monospace,monospace}pre{white-space:pre-wrap;font-size:.78rem;overflow-wrap:anywhere}#connection{font-weight:600}progress{width:100%;height:24px}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px 4px;border-bottom:1px solid #e1e6eb}canvas{width:100%;height:120px;background:#f3f6fa;border-radius:8px}#message{min-height:26px;color:#9c2636}a{color:#174b8e}
 </style>
-<h1>AtomS3R Free-foot</h1><div class="muted">0.47.2 · カメラスタック修正版 · 足角度は観測用</div>
+<h1>AtomS3R Free-foot</h1><div class="muted">0.47.3 · 足マーカー上下探索版 · 足角度は観測用</div>
 <p id="connection">接続を確認中…</p>
 <section class="card"><div class="grid"><div><div class="label">状態</div><div class="value" id="state">—</div></div><div><div class="label">残り時間</div><div class="value" id="remaining">—</div></div><div><div class="label">胴体 MEKF</div><div class="value" id="pitch">—</div></div><div><div class="label">指令 / 実測電流</div><div class="value" style="font-size:1.5rem" id="current">—</div></div></div>
 <p id="guide">起動後は静止させてください。LEDが点灯したら直立させ、左右マーカーが見える状態で2秒以上静止します。</p>
@@ -12,7 +12,7 @@ static const char RUNTIME_HTML[] PROGMEM = R"FREEFOOT(<!doctype html><html lang=
 <div id="message" role="status"></div><p class="muted">開始・終了のLED同期はそれぞれ5秒。制御は既存のAutonomous、固定3ms補償、300mA / 最大100msパルスです。</p></section>
 <section class="card"><h2>左右足角度</h2><div class="grid"><div><div class="label">右足 · 上段マーカー A</div><div class="value" id="right">—</div></div><div><div class="label">左足 · 下段マーカー B</div><div class="value" id="left">—</div></div><div><div class="label">カメラ実測 / 目標</div><div class="value" style="font-size:1.5rem" id="fps">— / 15 fps</div></div></div>
 <canvas id="markers" width="640" height="120" aria-label="マーカー検出位置。上段が右足、下段が左足。"></canvas>
-<p class="muted" id="foot-status">ゼロ点は起動ごとに1回だけ確定します。</p><p class="muted">角度の正方向はマーカーが左へ動く方向です。検出失敗・古い画像・校正範囲外を区別して表示し、その状態もログに保存します。</p></section>
+<p class="muted" id="foot-status">ゼロ点は起動ごとに1回だけ確定します。</p><p class="muted">角度の正方向はマーカーが左へ動く方向です。検出失敗・古い画像・校正範囲外を区別して表示し、その状態もログに保存します。上下にずれた姿勢での角度精度は確認中です。</p></section>
 <section class="card"><h2>測定ログ</h2><p>測定終了後にログを確定します。中断した場合は「取得・再開」で続きから取得できます。画面を再読み込みしても、端末に保存済みの部分を再利用します。</p>
 <button id="download" disabled>RWLOGを取得・再開</button><button id="cancel" disabled>取得を一時停止</button><button id="csv" disabled>足角度CSVを保存</button>
 <progress id="progress" value="0" max="1"></progress><div id="transfer" role="status">測定待ち</div><p class="muted">RWLOGにIMU・制御イベント・電流・LED同期・足角度をまとめて保存します。USB診断ログは書き込みページから保存できます。</p></section>
@@ -63,24 +63,44 @@ function drawMarkers(f) {
     if (Number.isFinite(x)) { ctx.fillStyle = '#145fad'; ctx.beginPath(); ctx.arc(x * 2, y, 7, 0, 2 * Math.PI); ctx.fill(); }
   }
 }
+function footIssues(f, stale, terminal) {
+  const issues = [];
+  if (terminal) issues.push('最終フレームを表示');
+  else if (stale) issues.push('画像更新なし');
+  if (f.frame_valid === false) issues.push('画像取得失敗');
+  else if (f.frame_timestamp_valid === false) issues.push('画像時刻が無効');
+  const reasons = {low_contrast: '未検出（明暗差不足）', low_weight: '未検出（白領域不足）'};
+  for (const [side, label] of [['right', '右'], ['left', '左']]) {
+    if (f[side + '_valid']) {
+      if (f[side + '_in_range'] === false) issues.push(label + '：校正範囲外');
+    } else {
+      const reason = f[side + '_reason'];
+      if (reasons[reason]) issues.push(label + '：' + reasons[reason]);
+      else if (reason === 'no_frame' && f.frame_valid !== false) issues.push(label + '：画像なし');
+      else if (!reason) issues.push(label + '：未検出または未校正'); // Older status data.
+    }
+  }
+  if (f.overflow) issues.push('記録容量超過');
+  return issues.length ? ' · ' + issues.join(' · ') : '';
+}
 function render(s) {
   $('connection').textContent = s.controller_fresh ? '接続中' : '接続中 · 制御状態の更新が停止';
   $('state').textContent = s.state; $('remaining').textContent = format(s.remaining_ms / 1000, 1) + ' s';
   $('pitch').textContent = format(s.pitch_deg) + '°';
   $('current').textContent = `${s.motor_mA} / ${s.actual_mA} mA`;
-  const f = s.foot, stale = f.age_ms < 0 || f.age_ms > 500;
+  const f = s.foot, stale = !Number.isFinite(f.age_ms) || f.age_ms < 0 || f.age_ms > 500;
   const terminal = ['FINISHED', 'ESTOP'].includes(s.state);
   $('right').textContent = f.right_valid && (!stale || terminal) ? format(f.right_deg) + '°' : '—';
   $('left').textContent = f.left_valid && (!stale || terminal) ? format(f.left_deg) + '°' : '—';
   $('fps').textContent = terminal ? '停止中' : `${format(stale ? 0 : f.fps, 1)} / 15 fps`;
-  $('foot-status').textContent = `${f.zero_ready ? 'ゼロ点確定' : 'ゼロ点待ち'} · ${f.zero_samples}枚 · 記録${f.frames}枚 · 取得失敗${f.failures}回` +
-    (terminal ? ' · 最終フレームを表示' : stale ? ' · 画像更新なし' : '') +
-    (!f.right_valid || !f.left_valid ? ' · 未検出または未校正' : !f.right_in_range || !f.left_in_range ? ' · 校正範囲外' : '') +
-    (f.overflow ? ' · 記録容量超過' : '');
+  $('foot-status').textContent = `${f.zero_ready ? 'ゼロ点確定' : 'ゼロ点待ち'} · 記録${f.frames ?? 0}枚 · 画像取得失敗${f.failures ?? 0}回` +
+    footIssues(f, stale, terminal);
   if (s.running) $('guide').textContent = '測定中。画面は更新されます。足角度は制御入力に使用しません。';
   else if (s.downloadable) $('guide').textContent = 'ログを保存してください。次の測定には「ログを消去・次の測定へ」を使います。';
   else if (!f.available) $('guide').textContent = 'カメラを初期化できませんでした。診断情報を保存してください。';
+  else if (stale || f.frame_valid === false || f.frame_timestamp_valid === false) $('guide').textContent = 'カメラ画像の更新を確認しています。この状態が続く場合は診断JSONを保存してください。';
   else if (!f.zero_ready) $('guide').textContent = `左右のマーカーが見える直立姿勢で静止してください。姿勢誤差 ${format(s.upright.error_deg, 1)}° / 角速度 ${format(s.upright.gyro_dps, 1)}°/s`;
+  else if (!f.right_valid || !f.left_valid) $('guide').textContent = '未検出の足があります。マーカーの見え方を確認してください。この姿勢の診断JSONを保存すると原因の確認に使えます。';
   else $('guide').textContent = s.ready ? '直立姿勢を保ち、測定を開始してください。' : 'IMUの初期化・静止確認を待っています。';
   $('diagnostic-view').textContent = JSON.stringify(s, null, 2);
   drawMarkers(f); controls();

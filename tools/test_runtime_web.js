@@ -20,11 +20,46 @@ vm.runInContext(code,context);
   assert.strictEqual(element('start').disabled,true);
   assert.match(element('connection').textContent,/状態データ/);
   const valid={state:'READY_TO_MEASURE',export_phase:'empty',running:false,ready:true,downloadable:false,
-    controller_fresh:true,command:{pending:false,completed:0,submitted:0},foot:{available:true,zero_ready:true},upright:{}};
+    controller_fresh:true,command:{pending:false,completed:0,submitted:0},
+    foot:{available:true,zero_ready:true,age_ms:80,frame_valid:true,frame_timestamp_valid:true,
+      right_valid:true,left_valid:true,right_in_range:true,left_in_range:true,
+      right_deg:8,left_deg:-6,right_reason:'detected',left_reason:'detected'},upright:{stable:false}};
   context.fetch=async()=>({ok:true,json:async()=>valid});
   await vm.runInContext('refresh()',context);
   assert.strictEqual(element('connection').textContent,'接続中');
   assert.strictEqual(element('start').disabled,false);
+  assert.strictEqual(element('right').textContent,'8.00°'); // Tilting does not invalidate a locked zero.
+  assert.strictEqual(element('left').textContent,'-6.00°');
+  valid.foot.right_in_range=false;
+  await vm.runInContext('refresh()',context);
+  assert.strictEqual(element('right').textContent,'8.00°');
+  assert.match(element('foot-status').textContent,/右：校正範囲外/);
+  valid.ready=false;valid.foot.right_valid=false;valid.foot.right_reason='low_contrast';
+  await vm.runInContext('refresh()',context);
+  assert.strictEqual(element('connection').textContent,'接続中');
+  assert.strictEqual(element('right').textContent,'—');
+  assert.strictEqual(element('left').textContent,'-6.00°');
+  assert.match(element('foot-status').textContent,/右：未検出（明暗差不足）/);
+  assert.match(element('guide').textContent,/未検出の足/);
+  assert.strictEqual(element('start').disabled,true);
+  valid.foot.right_reason='low_weight';
+  await vm.runInContext('refresh()',context);
+  assert.match(element('foot-status').textContent,/右：未検出（白領域不足）/);
+  valid.foot.left_valid=false;valid.foot.right_reason=valid.foot.left_reason='no_frame';valid.foot.frame_valid=false;
+  await vm.runInContext('refresh()',context);
+  assert.match(element('foot-status').textContent,/画像取得失敗/);
+  assert.doesNotMatch(element('foot-status').textContent,/明暗差不足|白領域不足/);
+  valid.foot.frame_valid=true;valid.foot.frame_timestamp_valid=false;
+  valid.foot.right_reason=valid.foot.left_reason='detected';
+  await vm.runInContext('refresh()',context);
+  assert.match(element('foot-status').textContent,/画像時刻が無効/);
+  assert.strictEqual(element('right').textContent,'—');
+  Object.assign(valid.foot,{right_valid:true,left_valid:true,right_in_range:true,frame_timestamp_valid:true,age_ms:600});
+  await vm.runInContext('refresh()',context);
+  assert.strictEqual(element('right').textContent,'—');assert.match(element('foot-status').textContent,/画像更新なし/);
+  valid.state='FINISHED';await vm.runInContext('refresh()',context);
+  assert.strictEqual(element('right').textContent,'8.00°');assert.match(element('foot-status').textContent,/最終フレーム/);
+  valid.state='READY_TO_MEASURE';valid.ready=true;valid.foot.age_ms=80;
   context.fetch=async()=>({ok:true,json:async()=>({})});
   await vm.runInContext('refresh()',context);
   assert.strictEqual(vm.runInContext('latest.state',context),'READY_TO_MEASURE');
@@ -45,5 +80,5 @@ vm.runInContext(code,context);
   assert.strictEqual(vm.runInContext('validateChunk(packet,4096,3).length',context),3);
   assert.throws(()=>vm.runInContext('validateChunk(packet,0,3)',context),/不一致/);
   packet[18]^=1;assert.throws(()=>vm.runInContext('validateChunk(packet,4096,3)',context),/CRC/);
-  console.log('body timeout, malformed status/render recovery, stale authority, offsets and corrupt chunks PASS');
+  console.log('foot failure reasons, tilted/range/terminal display, body timeout, status recovery, stale authority and corrupt chunks PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});

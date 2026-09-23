@@ -1,6 +1,6 @@
 {
   "name": "AtomS3R Free-foot Runtime V2",
-  "version": "0.47.2-camera-stack-fix",
+  "version": "0.47.3-adaptive-markers",
   "builds": [
     {
       "chipFamily": "ESP32-S3",

@@ -39,6 +39,11 @@ int main(int argc,char** argv){
     FootFrame f{};f.sequence=i;f.run_id=1;f.frame_us=1000000+i*66667;
     f.delivered_us=f.frame_us+30000;f.log_time_us=f.frame_us-123456;
     f.right_valid=f.left_valid=true;f.right_deg=5;f.left_deg=6;
+    f.frame_valid=f.timestamp_valid=f.zero_ready=true;
+    f.right_scan_y=42;f.left_scan_y=184;f.right_weight=3200;f.left_weight=3100;
+    f.right_contrast=200;f.left_contrast=190;
+    f.right_reason=f.left_reason=MarkerDetectionReason::Detected;f.right_templates=f.left_templates=17;
+    if(i==1){f.right_valid=false;f.right_deg=NAN;f.right_scan_y=NAN;f.right_reason=MarkerDetectionReason::LowContrast;}
     feet.frames_[i]=f;
   }
   logger.markMeasurementDone();assert(!logger.rwlogDownloadable());

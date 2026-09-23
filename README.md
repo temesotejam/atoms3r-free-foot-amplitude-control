@@ -1,7 +1,8 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.2 camera stack fix
+# Current integrated build: Free-foot Runtime V2 / 0.47.3 adaptive markers
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
 [USB diagnostic procedure](docs/USB_DIAGNOSTICS.md) ·
+[Marker-loss analysis and recovery](docs/MARKER_TRACKING_0473.md) ·
 [Instability review](docs/INSTABILITY_REVIEW.md) ·
 [Runtime architecture](docs/FREEFOOT_RUNTIME_V2.md)
 
@@ -9,12 +10,21 @@ The current main branch integrates observation-only right/left foot angles with
 the V46al-R2 controller. It uses permanent control ownership, PSRAM event storage,
 and a resumable, CRC-verified RWLOG export. Integrated hardware validation is
 pending; build/host tests do not establish camera frame rate or control deadlines.
-Version 0.47.2 addresses three captured `cam_task` stack-canary panics. The
-matching 0.47.1 ELF resolves them to camera FB-SIZE error reporting through
-newlib/UART. The actual RTOS allocation is raised from 2048 to at least 8192
-bytes, with cached driver-stack measurements in USB/RTC diagnostics. The error
-path remains enabled; whether frame-size mismatches persist requires hardware
-confirmation. See [the matched backtrace and fix](docs/CAMERA_STACK_PANIC_0472.md).
+Version 0.47.3 addresses the next observed failure: foot markers disappear during
+tilt although WebUI and camera delivery continue. Four hardware status files show
+locked zeros, fresh images at about 10 fps, and marker loss/recovery. A synthetic
+image reproduces the old fixed-row detector losing a marker after 16 pixels of
+vertical displacement. Recovery now scans the original row template at offsets
+up to ±32 pixels, only when the nominal result is invalid. Contrast thresholds,
+the nominal X estimator, and calibration slopes are retained. Detection reasons,
+scan heights, quality and processing time are available in diagnostics; per-frame
+recovery evidence is also saved in RWLOG/CSV. Real-image recovery and angle
+accuracy at shifted heights still need hardware validation.
+
+The 0.47.2 camera stack fix remains active. Subsequent USB logs extend to 237.5 s
+without another reset, and the user reports stable WebUI updates. Frame-size
+mismatches and sporadic camera event overflows still occurred; this is not proof
+of indefinite stability. See [the matched backtrace and fix](docs/CAMERA_STACK_PANIC_0472.md).
 The eight-second USB startup window, automatic monitor reconnection, RTC reset
 evidence, and browser recovery from malformed status data remain available.
 

@@ -11,7 +11,7 @@ static constexpr int kCameraFpsTarget = 15;
 static constexpr int kMarkerAId = 0;
 static constexpr int kMarkerBId = 1;
 
-// Plain-white-marker sparse-line detector.
+// Plain-white-marker sparse-line detector, with bounded vertical recovery.
 // Upper lane = A, lower lane = B.
 static constexpr int kWhiteMarkerRowCount = 5;
 static constexpr int kWhiteReferenceRowCount = 3;
@@ -27,6 +27,19 @@ static constexpr int kWhiteMarkerBRows[kWhiteMarkerRowCount] =
 static constexpr int kWhiteReferenceBRows[kWhiteReferenceRowCount] =
     {182, 186, 190};
 static constexpr int kWhiteMarkerBCenterY = 160;
+
+static constexpr char kWhiteDetectorRevision[] = "sparse_rows_vertical_v1";
+static constexpr int kWhiteSearchRadiusYPx = 32;
+static constexpr int kWhiteSearchStepYPx = 4;
+static constexpr int kWhiteMaxTemplates =
+    1 + 2 * kWhiteSearchRadiusYPx / kWhiteSearchStepYPx;
+static_assert(kWhiteSearchRadiusYPx % kWhiteSearchStepYPx == 0, "Complete vertical search");
+static_assert(kWhiteReferenceARows[0] - kWhiteSearchRadiusYPx >= 0, "Upper reference in frame");
+static_assert(kWhiteReferenceBRows[kWhiteReferenceRowCount - 1] + kWhiteSearchRadiusYPx < kFrameHeight,
+              "Lower reference in frame");
+static_assert(kWhiteMarkerARows[kWhiteMarkerRowCount - 1] + kWhiteSearchRadiusYPx <
+                  kWhiteMarkerBRows[0] - kWhiteSearchRadiusYPx,
+              "Right and left marker search rows must not overlap");
 
 static constexpr float kWhitePeakMinContrast = 55.0f;
 static constexpr float kWhiteCentroidBaseline = 35.0f;
