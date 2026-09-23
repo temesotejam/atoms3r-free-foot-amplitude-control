@@ -39,7 +39,8 @@ assert main.index("const bool camera_ok = camera_probe.begin();") < main.index("
 assert "if(downloading||refreshInFlight)return;" in webui
 assert "},60000);" in webui
 assert "STREAM_CHUNK_BYTES = 256" in logger
-assert "STREAM_MIN_CHUNK_BYTES = 64" in logger\nassert "STREAM_NO_PROGRESS_TIMEOUT_MS = 15000UL" in logger
+assert "STREAM_MIN_CHUNK_BYTES = 64" in logger
+assert "STREAM_NO_PROGRESS_TIMEOUT_MS = 15000UL" in logger
 assert 'server.sendHeader("Connection", "close");' in logger
 assert 'server_->on("/rwlog-download-health", HTTP_GET' in webui
 assert '#include "bounded_web_server.h"' in main
