@@ -116,3 +116,17 @@ The RWLOG body writer therefore now uses the underlying socket directly with
 `send(..., MSG_DONTWAIT)`. EAGAIN/EWOULDBLOCK/ENOMEM are retried with the same
 15 s no-progress limit. This makes the timeout enforceable even when the TCP
 send buffer is temporarily full.
+
+### Web-only download diagnostics
+
+USB serial is not required for the next download test. After a failed or completed
+download, open:
+
+`http://192.168.4.1/rwlog-download-health`
+
+The JSON records the active phase (header/metadata/samples/crc), total body bytes sent,
+last errno, EAGAIN/ENOMEM counts, adaptive chunk size, and Internal/DMA/PSRAM free memory.
+
+Because the observed failed file stopped at exactly 110 bytes (the packed RWLOG header
+size), the initial body chunk is now 256 bytes and automatically shrinks to 128 then
+64 bytes on ENOMEM.

@@ -1,4 +1,5 @@
 #include "web_ui.h"
+#include "rwlog_download_diag.h"
 
 #include <WiFi.h>
 
@@ -261,6 +262,10 @@ void WebUi::begin(WebServer& server, ExperimentRunner& runner, ImuManager& imu, 
   server_->on("/stop", HTTP_POST, [this]() { handleStop(); });
   server_->on("/clear", HTTP_POST, [this]() { handleClear(); });
   server_->on("/download/rwlog", HTTP_GET, [this]() { handleRwLog(); });
+  server_->on("/rwlog-download-health", HTTP_GET, [this]() {
+    server_->sendHeader("Cache-Control", "no-store");
+    server_->send(200, "application/json", rwlogDownloadDiagnosticsJson());
+  });
   server_->enableDelay(false);  // Empty HTTP polls must not add sleeps to idle acquisition.
   server_->begin();
 }

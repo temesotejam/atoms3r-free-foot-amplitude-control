@@ -72,7 +72,7 @@ jobs:
           cp bmi270-build-patch.json dist/
           python "$HOME/.platformio/packages/tool-esptoolpy/esptool.py" --chip esp32s3 merge_bin -o dist/merged-firmware.bin 0x0000 dist/bootloader.bin 0x8000 dist/partitions.bin 0xe000 dist/boot_app0.bin 0x10000 dist/firmware.bin
           printf '%s\n' "$GITHUB_SHA" > dist/build-sha.txt
-          printf '%s\n' 'V46al-R2 0.46.42; stable baseline bb9c5ed07c5ca8b3c6c6b5813b6c2f1b1f57a6ec; bounded A_prev residual correction active; RWLOG format/header/converter retained; native download uses 1460-byte partial-write retry, 15s no-progress guard and polling suppression; MEKF, fixed 3ms compensation, Ki, current model, solver, 300mA/100ms envelope and ESTOP retained' > dist/FLASH_LAYOUT.txt
+          printf '%s\n' 'V46al-R2 0.46.42; stable baseline bb9c5ed07c5ca8b3c6c6b5813b6c2f1b1f57a6ec; bounded A_prev residual correction active; RWLOG format/header/converter retained; native download uses 256-byte adaptive partial-write retry, 15s no-progress guard and polling suppression; MEKF, fixed 3ms compensation, Ki, current model, solver, 300mA/100ms envelope and ESTOP retained' > dist/FLASH_LAYOUT.txt
           (cd dist && sha256sum *.bin > SHA256SUMS.txt)
           git diff --exit-code
       - uses: actions/upload-artifact@v4

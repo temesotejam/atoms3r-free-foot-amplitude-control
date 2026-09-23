@@ -5,6 +5,7 @@ extern ImuManager imu;
 extern RunControlWorker run_control;
 #include "roller485_manager.h"
 extern Roller485Manager roller;
+#include "rwlog_download_diag.h"
 
 #include <string.h>
 #include <new>
@@ -15,9 +16,10 @@ extern Roller485Manager roller;
 
 static constexpr uint16_t RWLOG_FORMAT_VERSION = 51;
 static constexpr uint32_t RWLOG_FLAG_CRC32 = 1U << 0;
-// RWLOG download transport only. 1460 bytes stays within one common TCP MSS
-// and the writer below accepts partial progress instead of treating it as fatal.
-static constexpr size_t STREAM_CHUNK_BYTES = 1460;
+// RWLOG download transport only. Small chunks preserve TCP pbuf headroom while
+// the camera driver remains initialized. ENOMEM can shrink this to 128/64 B.
+static constexpr size_t STREAM_CHUNK_BYTES = 256;
+static constexpr size_t STREAM_MIN_CHUNK_BYTES = 64;
 static constexpr uint32_t STREAM_NO_PROGRESS_TIMEOUT_MS = 15000UL;
 
 namespace {
@@ -1710,12 +1712,16 @@ uint32_t PsramLogger::calculateCrc(const RwLogFileHeader& header, const String& 
 bool PsramLogger::writeBytes(WebServer& server, const uint8_t* data, size_t len) {
   WiFiClient client = server.client();
   const int socket_fd = client.fd();
-  if (socket_fd < 0 || !client.connected()) return false;
+  if (socket_fd < 0 || !client.connected()) {
+    rwlogDownloadDiagFail("socket_not_connected", 0);
+    return false;
+  }
 
-  const size_t total_len = len;
+  size_t chunk_limit = STREAM_CHUNK_BYTES;
   uint32_t last_progress_ms = millis();
   while (len > 0) {
-    const size_t want = len > STREAM_CHUNK_BYTES ? STREAM_CHUNK_BYTES : len;
+    const size_t want = len < chunk_limit ? len : chunk_limit;
+    rwlogDownloadDiagRequest(want, chunk_limit);
 
     errno = 0;
     const int result = ::send(
@@ -1729,6 +1735,7 @@ bool PsramLogger::writeBytes(WebServer& server, const uint8_t* data, size_t len)
       data += written;
       len -= written;
       last_progress_ms = millis();
+      rwlogDownloadDiagProgress(written);
       delay(0);
       continue;
     }
@@ -1740,31 +1747,28 @@ bool PsramLogger::writeBytes(WebServer& server, const uint8_t* data, size_t len)
          (error == EAGAIN || error == EWOULDBLOCK || error == ENOMEM));
 
     if (retryable && client.connected()) {
+      rwlogDownloadDiagRetry(error);
+      if (error == ENOMEM && chunk_limit > STREAM_MIN_CHUNK_BYTES) {
+        chunk_limit /= 2;
+        if (chunk_limit < STREAM_MIN_CHUNK_BYTES) chunk_limit = STREAM_MIN_CHUNK_BYTES;
+        rwlogDownloadDiagShrink(chunk_limit);
+      }
       if (static_cast<uint32_t>(millis() - last_progress_ms) >
           STREAM_NO_PROGRESS_TIMEOUT_MS) {
-        Serial.printf(
-            "RWLOGDL,write_stall,sent=%u,total=%u,errno=%d\n",
-            static_cast<unsigned>(total_len - len),
-            static_cast<unsigned>(total_len),
-            error);
+        rwlogDownloadDiagFail("no_progress_timeout", error);
         return false;
       }
       delay(2);
       continue;
     }
 
-    Serial.printf(
-        "RWLOGDL,write_error,sent=%u,total=%u,result=%d,errno=%d,connected=%u\n",
-        static_cast<unsigned>(total_len - len),
-        static_cast<unsigned>(total_len),
-        result,
-        error,
-        client.connected() ? 1U : 0U);
+    rwlogDownloadDiagFail(
+        client.connected() ? "socket_send_error" : "client_disconnected",
+        error);
     return false;
   }
   return true;
 }
-
 bool PsramLogger::streamRwLog(WebServer& server) {
   if (!rwlogDownloadable()) {
     last_error_ = "rwlog_not_ready";
@@ -1791,18 +1795,31 @@ bool PsramLogger::streamRwLog(WebServer& server) {
   server.sendHeader("Content-Disposition", String("attachment; filename=\"") + filename + "\"");
   server.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
   server.sendHeader("Connection", "close");
-  server.setContentLength(header.crc_offset + sizeof(crc));
+  const uint32_t total_bytes = header.crc_offset + sizeof(crc);
+  const uint32_t sample_bytes = sample_count_ * sizeof(LogSample);
+  rwlogDownloadDiagBegin(total_bytes, metadata.length(), sample_bytes);
+
+  server.setContentLength(total_bytes);
   server.send(200, "application/octet-stream", "");
 
   const uint32_t stream_start_ms = millis();
   bool ok = true;
+  rwlogDownloadDiagSetPhase("header");
   ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(&header), sizeof(header));
+  rwlogDownloadDiagSetPhase("metadata");
   ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(metadata.c_str()), metadata.length());
-  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(samples_), sample_count_ * sizeof(LogSample));
+  rwlogDownloadDiagSetPhase("samples");
+  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(samples_), sample_bytes);
+  rwlogDownloadDiagSetPhase("crc");
   ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(&crc), sizeof(crc));
 
   downloading_ = false;
   last_error_ = ok ? "" : "rwlog_stream_failed";
+  rwlogDownloadDiagFinish(ok);
+  if (!ok) {
+    WiFiClient failed_client = server.client();
+    failed_client.stop();
+  }
   Serial.printf("RWLOGDL,stream_end,ok=%u,ms=%lu,error=%s\n",
                 ok ? 1U : 0U,
                 static_cast<unsigned long>(millis() - stream_start_ms),
