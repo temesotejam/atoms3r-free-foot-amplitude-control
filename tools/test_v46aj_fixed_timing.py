@@ -34,7 +34,14 @@ logger_start = method(logger, 'void PsramLogger::startRun(')
 assignment = re.search(r'  autonomous_timing_compensation_us_ = .*?;', logger_start, re.S).group()
 assert 'if (downloading_) return;' in logger_start
 assert logger_start.index('if (downloading_) return;') < logger_start.index(assignment)
-metadata = '\n'.join(line for line in logger.splitlines() if any('\\"'+key+'\\"' in line for key in ('autonomous_timing_compensation_us','autonomous_control_prediction_enabled','autonomous_timing_prediction_formula','autonomous_timing_compensation_selectable')))
+legacy_logger = logger
+compact_start = legacy_logger.find("  // Compact Autonomous metadata begin\n")
+if compact_start >= 0:
+    compact_end = legacy_logger.index("  // Compact Autonomous metadata end\n", compact_start) + len("  // Compact Autonomous metadata end\n")
+    compact_block = legacy_logger[compact_start:compact_end]
+    assert '"autonomous_timing_compensation_us"' in compact_block
+    legacy_logger = legacy_logger[:compact_start] + legacy_logger[compact_end:]
+metadata = '\n'.join(line for line in legacy_logger.splitlines() if any('\\"'+key+'\\"' in line for key in ('autonomous_timing_compensation_us','autonomous_control_prediction_enabled','autonomous_timing_prediction_formula','autonomous_timing_compensation_selectable')))
 assert metadata.count('json +=') == 4
 assert 'Config::ENERGY_CONTROL_AUTONOMOUS_TIMING_COMPENSATION_US' not in metadata
 projection = runner.split('  // V46ac delay compensation begin\n', 1)[1].split('  // V46ac delay compensation end', 1)[0]
