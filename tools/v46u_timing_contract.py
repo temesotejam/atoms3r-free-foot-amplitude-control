@@ -15,7 +15,10 @@ def normalize_camera_coexistence(path, data):
     data=data.replace('#include "esp_heap_caps.h"\n','')
     data=data.replace('#include "camera_coexistence.h"\n','')
     data=data.replace('#include "camera_serial_debug.h"\n','')
+    data=data.replace('#include "bounded_web_server.h"\n','')
     data=data.replace('#include "tcp_transport_debug.h"\n','')
+    data=data.replace('BoundedWriteWebServer server(Config::HTTP_PORT);\n',
+                      'WebServer server(Config::HTTP_PORT);\n')
     data=data.replace('OneShotCamera camera_probe;\n','')
     data=data.replace('  tcpTransportDebugBegin();\n','')
     data=data.replace('  cameraSerialDebugBegin(camera_probe);\n','')

@@ -6,6 +6,7 @@
 #include "config.h"
 #include "camera_coexistence.h"
 #include "camera_serial_debug.h"
+#include "bounded_web_server.h"
 #include "tcp_transport_debug.h"
 #include "experiment_runner.h"
 #include "imu_manager.h"
@@ -15,7 +16,7 @@
 #include "web_ui.h"
 #include "run_control_worker.h"
 
-WebServer server(Config::HTTP_PORT);
+BoundedWriteWebServer server(Config::HTTP_PORT);
 OneShotCamera camera_probe;
 PsramLogger logger;
 ImuManager imu;

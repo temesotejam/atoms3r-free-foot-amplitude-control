@@ -8,6 +8,8 @@ camera = (ROOT / "src/camera_coexistence.cpp").read_text(encoding="utf-8")
 header = (ROOT / "src/camera_coexistence.h").read_text(encoding="utf-8")
 serial = (ROOT / "src/camera_serial_debug.cpp").read_text(encoding="utf-8")
 net = (ROOT / "src/tcp_transport_debug.cpp").read_text(encoding="utf-8")
+bounded = (ROOT / "src/bounded_web_server.cpp").read_text(encoding="utf-8")
+bounded_h = (ROOT / "src/bounded_web_server.h").read_text(encoding="utf-8")
 patch = (ROOT / "src/camera_task_priority_patch.cpp").read_text(encoding="utf-8")
 pio = (ROOT / "platformio.ini").read_text(encoding="utf-8")
 
@@ -30,6 +32,19 @@ assert main.index("M5.begin(cfg);") < main.index("const bool psram_ok = logger.b
 assert main.index("const bool psram_ok = logger.begin();") < main.index("const bool imu_ok = imu.begin();")
 assert main.index("const bool imu_ok = imu.begin();") < main.index("const bool camera_ok = camera_probe.begin();")
 assert main.index("const bool camera_ok = camera_probe.begin();") < main.index("const bool roller_ok = roller.begin();")
+
+# WebUI source itself remains byte-identical to the fixed-foot baseline; only
+# the WebServer transport object is replaced underneath it.
+assert git_blob_sha("src/web_ui.cpp") == "c63bb11581c8252fe92f151fb97c9208175bd336"
+assert '#include "bounded_web_server.h"' in main
+assert "BoundedWriteWebServer server(Config::HTTP_PORT);" in main
+assert "class BoundedWriteWebServer : public WebServer" in bounded_h
+assert "kMaxProgmemWriteBytes = 512" in bounded
+assert "_currentClientWrite_P(PGM_P buffer, size_t length)" in bounded
+assert "_currentClient.write_P(buffer + total, want)" in bounded
+assert "taskYIELD();" in bounded
+assert "NETDBG,web_p_begin" in bounded
+assert "NETDBG,web_p_end" in bounded
 
 # SCCB only at boot on I2C0; never touch BMI270 I2C1.
 assert "I2C_NUM_1" not in camera
