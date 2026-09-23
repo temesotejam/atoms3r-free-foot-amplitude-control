@@ -1769,6 +1769,7 @@ bool PsramLogger::writeBytes(WebServer& server, const uint8_t* data, size_t len)
   }
   return true;
 }
+
 bool PsramLogger::streamRwLog(WebServer& server) {
   if (!rwlogDownloadable()) {
     last_error_ = "rwlog_not_ready";
