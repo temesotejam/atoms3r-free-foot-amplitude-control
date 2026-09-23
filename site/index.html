@@ -28,7 +28,7 @@
     <section class="panel important">
       <h2>Camera共存 Phase 1</h2>
       <p><strong>今回は足角度計算をまだ入れていません。</strong> 固定足完成版の制御・MEKF・RWLOG・Web UIをそのまま残し、GC0308を低負荷で動作させてもWi-Fi/Web UIが維持できるかだけを確認する版です。</p>
-      <p>Phase 1Kは<strong>USBシリアル専用デバッグ版</strong>です。Cameraの自動撮影は完全に停止しています。起動後はreceiver OFF / XCLK OFFの待機状態を維持し、USBシリアルから命令したときだけ状態を変えます。</p>
+      <p>Phase 1Lは<strong>USBシリアル専用デバッグ版</strong>です。Cameraの自動撮影は完全に停止しています。起動後はreceiver OFF / XCLK OFFの待機状態を維持し、USBシリアルから命令したときだけ状態を変えます。</p>
       <p>115200 bpsのシリアルモニタで、<code>s</code>=状態表示、<code>c</code>=1枚だけ撮影、<code>i</code>=強制idle、<code>p</code>=センサ電源OFF、<code>d</code>=Camera完全deinit、<code>h</code>=ヘルプです。<code>p</code>と<code>d</code>は再起動まで戻せません。</p>
       <p>USBログには2秒ごとのheartbeatと、Camera状態・AP接続台数・Internal/DMA/PSRAM残量・撮影時間を出します。まず何も送らずWebUIを確認し、その後<code>c</code>を1回ずつ送って挙動を比較します。</p>
       <p>書き込み後はまずモータを動かさず、Wi-Fi <code>AtomS3CAM_Q1_SHADOW</code>へ接続し、最初に <code>http://192.168.4.1/camera-health</code> を開いてください。短い <code>ok camera=...</code> が出たら、続いて <code>http://192.168.4.1/</code> の通常WebUIを確認します。</p>
@@ -36,9 +36,9 @@
 
     <section class="panel important">
       <h2>このページから直接書き込めます</h2>
-      <p>AtomS3R を USB でPCへ接続し、Chrome または Edge のデスクトップ版で下のボタンを押してください。<strong>Phase 1K専用のmanifest/firmwareファイル名を使用しているため、直前版のブラウザキャッシュは再利用されません。</strong></p>
-      <esp-web-install-button manifest="manifest-phase1k.json">
-        <button slot="activate" class="primary">AtomS3RへCamera WebUI + LED Debug Phase 1Kを書き込む</button>
+      <p>AtomS3R を USB でPCへ接続し、Chrome または Edge のデスクトップ版で下のボタンを押してください。<strong>Phase 1L専用のmanifest/firmwareファイル名を使用しているため、直前版のブラウザキャッシュは再利用されません。</strong></p>
+      <esp-web-install-button manifest="manifest-phase1l.json">
+        <button slot="activate" class="primary">AtomS3RへCamera Paced WebUI Phase 1Lを書き込む</button>
         <span slot="unsupported" class="warning">このブラウザはWeb Serial / WebUSBに対応していません。PC版ChromeまたはEdgeを使用してください。</span>
       </esp-web-install-button>
       <details>
@@ -49,7 +49,7 @@
 
     <section class="panel important" id="usb-serial-panel">
       <h2>USBシリアルログ</h2>
-      <p>Phase 1Kのデバッグログをこのページ上で直接確認できます。AtomS3RをUSB接続し、<strong>115200 bps</strong>で接続します。書き込み直後はWeb Flasherがポートを使用している場合があるため、書き込み画面を閉じてから接続してください。</p>
+      <p>Phase 1Lのデバッグログをこのページ上で直接確認できます。AtomS3RをUSB接続し、<strong>115200 bps</strong>で接続します。書き込み直後はWeb Flasherがポートを使用している場合があるため、書き込み画面を閉じてから接続してください。</p>
 
       <div class="serial-toolbar">
         <button id="serial-connect" class="serial-button serial-connect" type="button">USBシリアルに接続</button>
@@ -74,8 +74,7 @@
 </pre>
       <p class="hint"><code>p</code>と<code>d</code>は再起動まで戻せません。制御実験中はCamera操作コマンドがファーム側で拒否されます。</p>
       <p><strong>HTTP経路の追加テスト：</strong>AtomS3RのWi-Fiへ接続した状態で、まず <code>http://192.168.4.1:81/</code> を開いてください。これはArduino WebServerを使わない最小TCP応答です。次に <code>http://192.168.4.1/net-probe</code> を開きます。USBログには <code>NETDBG</code> としてaccept/request/responseが表示されます。</p>
-      <p><strong>Phase 1KではWebUIの送信単位を修正しています。</strong> WebUI本体のHTML・JavaScript・APIは固定足版から変更せず、下層のPROGMEM送信だけを<strong>最大512 byte</strong>に分割します。USBログには <code>NETDBG,web_p_begin / web_p_progress / web_p_end</code> が出ます。</p>
-      <p><strong>Phase 1KではLED直立判定の診断も追加しています。</strong> LED点灯中は1秒ごとに <code>POSEDBG</code> を出し、<code>reason / fresh / direction_error_deg / accel_norm_g / gyro_norm_dps / hold_ms</code> をページ上のUSBシリアルで確認できます。判定閾値自体は変更していません。</p>
+      <p><strong>Phase 1LではWebUI送信をさらに安定化しています。</strong> WebUI本体のHTML・JavaScript・APIは固定足版のままです。下層のTCP送信を<strong>最大256 byte</strong>にし、成功ごとに2 ms待機します。TCP送信キューが満杯・メモリ一時不足なら2 ms後に同じ位置から再試行し、一括送信による詰まりを避けます。USBログには <code>NETDBG,web_p_begin / web_p_progress / web_p_end</code> が出ます。</p>
     </section>
 
     <section class="panel">

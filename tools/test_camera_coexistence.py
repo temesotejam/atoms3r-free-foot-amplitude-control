@@ -39,22 +39,12 @@ assert git_blob_sha("src/web_ui.cpp") == "c63bb11581c8252fe92f151fb97c9208175bd3
 assert '#include "bounded_web_server.h"' in main
 assert "BoundedWriteWebServer server(Config::HTTP_PORT);" in main
 assert "class BoundedWriteWebServer : public WebServer" in bounded_h
-assert "kMaxProgmemWriteBytes = 512" in bounded
+assert "kMaxProgmemWriteBytes = 256" in bounded
 assert "_currentClientWrite_P(PGM_P buffer, size_t length)" in bounded
-assert "_currentClient.write_P(buffer + total, want)" in bounded
-assert "taskYIELD();" in bounded
+assert "::send(" in bounded\nassert "MSG_DONTWAIT" in bounded\nassert "retryableSocketError" in bounded\nassert "kSuccessPaceMs = 2" in bounded\nassert "kMaxNoProgressMs = 3000" in bounded
+assert "vTaskDelay(pdMS_TO_TICKS(kSuccessPaceMs))" in bounded\nassert "vTaskDelay(pdMS_TO_TICKS(kRetryDelayMs))" in bounded
 assert "NETDBG,web_p_begin" in bounded
 assert "NETDBG,web_p_end" in bounded
-
-# Startup LED diagnostics are observation-only: expose every original gate
-# without changing thresholds or confirmation behavior.
-assert "POSEDBG,ms=%lu,reason=%s" in main
-assert "direction_error_deg=%.3f" in main
-assert "accel_norm_g=%.4f" in main
-assert "gyro_norm_dps=%.3f" in main
-assert "hold_ms=%lu" in main
-assert "UPRIGHT_MAX_DIRECTION_ERROR_DEG" in (ROOT / "src/upright_pose_guide.h").read_text(encoding="utf-8")
-assert "UPRIGHT_STABLE_HOLD_MS = 400UL" in (ROOT / "src/upright_pose_guide.h").read_text(encoding="utf-8")
 
 # SCCB only at boot on I2C0; never touch BMI270 I2C1.
 assert "I2C_NUM_1" not in camera
