@@ -167,3 +167,21 @@ the legacy full metadata builder.
 
 This changes metadata payload size only. The v51 header, CRC, sample layout, sample
 frequency, controller, estimator, motor command and converter remain unchanged.
+
+### Paced RWLOG transport
+
+The compact-metadata run still stalled after roughly 3.6 kB, which is close to
+110-byte header + fourteen 256-byte body chunks. That pattern is consistent with
+burst-filling the lwIP send/pbuf pool: the RWLOG writer yielded with `delay(0)`
+after success, while the already-stable bounded WebServer path deliberately paces
+successful writes by 2 ms.
+
+The RWLOG body path now mirrors that behavior:
+- 256-byte internal-RAM staging remains,
+- every successful body write waits 2 ms,
+- ENOMEM/EAGAIN retries and 256->128->64 fallback remain,
+- the 15 s no-progress guard remains.
+
+At 256 bytes / 2 ms the theoretical application-side floor is about 128 kB/s,
+so a 1 MB body should take on the order of 8 seconds plus protocol overhead, not
+hours.

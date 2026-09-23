@@ -20,6 +20,7 @@ static constexpr uint32_t RWLOG_FLAG_CRC32 = 1U << 0;
 // the camera driver remains initialized. ENOMEM can shrink this to 128/64 B.
 static constexpr size_t STREAM_CHUNK_BYTES = 256;
 static constexpr size_t STREAM_MIN_CHUNK_BYTES = 64;
+static constexpr uint32_t STREAM_SUCCESS_PACE_MS = 2UL;
 static constexpr uint32_t STREAM_NO_PROGRESS_TIMEOUT_MS = 15000UL;
 
 namespace {
@@ -2002,7 +2003,10 @@ bool PsramLogger::writeBytes(WebServer& server, const uint8_t* data, size_t len)
       len -= written;
       last_progress_ms = millis();
       rwlogDownloadDiagProgress(written);
-      delay(0);
+      // Match the bounded WebServer path: do not burst-fill lwIP pbufs.
+      // 256 B every 2 ms is still ~128 kB/s before protocol overhead, so a
+      // 1 MB RWLOG has an ~8 s floor rather than exhausting the send pool.
+      delay(STREAM_SUCCESS_PACE_MS);
       continue;
     }
 

@@ -107,7 +107,7 @@ void rwlogDownloadDiagFinish(bool ok) {
 String rwlogDownloadDiagnosticsJson() {
   String s;
   s.reserve(1000);
-  s = "{\"revision\":\"rwlog_download_diag_v5_compact_metadata_20260923\"";
+  s = "{\"revision\":\"rwlog_download_diag_v6_paced_256b_2ms_20260923\"";
   s += ",\"attempts\":" + String(g_diag.attempts);
   s += ",\"active\":" + String(g_diag.active ? "true" : "false");
   s += ",\"ok\":" + String(g_diag.ok ? "true" : "false");
@@ -115,6 +115,7 @@ String rwlogDownloadDiagnosticsJson() {
   s += ",\"phase\":\"" + String(g_diag.phase) + "\"";
   s += ",\"socket_source_memory\":\"internal_stack_staging\"";
   s += ",\"metadata_profile\":\"autonomous_compact_v1\"";
+  s += ",\"success_pace_ms\":2";
   s += ",\"failure_reason\":\"" + String(g_diag.failure_reason) + "\"";
   s += ",\"expected_bytes\":" + String(g_diag.expected_bytes);
   s += ",\"metadata_bytes\":" + String(g_diag.metadata_bytes);
