@@ -110,10 +110,10 @@ class RunControlWorker {
     portEXIT_CRITICAL(&mux_);
     return copy;
   }
-  void beginRunAudit() {
+  void beginRunAudit(uint32_t epoch_us = 0) {
     // Owner only. The previous run has already been released by HTTP.
     portENTER_CRITICAL(&mux_);
-    audit_ = Audit{}; audit_.epoch_us = micros();
+    audit_ = Audit{}; audit_.epoch_us = epoch_us ? epoch_us : micros();
     last_step_start_us_ = audit_.epoch_us;
     portEXIT_CRITICAL(&mux_);
   }

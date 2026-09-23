@@ -65,6 +65,7 @@ void WebUi::status() {
   const auto s = control_->snapshot(); const auto f = feet_->snapshot();
   const auto c = control_->commandState(); const auto e = export_->status();
   const auto h = control_->healthSnapshot();
+  const auto camera = feet_->cameraSnapshot();
   const bool fresh = s.heartbeat_us && static_cast<uint32_t>(micros() - s.heartbeat_us) < 500000;
   String json; json.reserve(2400);
   json = "{\"revision\":\"0.47.0-freefoot-runtime-v2\",\"state\":\"" + String(s.state_name) + "\"";
@@ -103,7 +104,15 @@ void WebUi::status() {
   json += ",\"upright\":{\"stable\":" + String(s.upright_stable ? "true" : "false");
   json += ",\"error_deg\":" + num(s.upright_error_deg) + ",\"accel_g\":" + num(s.accel_norm_g);
   json += ",\"gyro_dps\":" + num(s.gyro_norm_dps) + "}";
+  json += ",\"camera\":{\"initialized\":" + String(camera.camera_ok ? "true" : "false");
+  json += ",\"receiver_active\":" + String(camera.receiver_active ? "true" : "false");
+  json += ",\"xclk_active\":" + String(camera.xclk_active ? "true" : "false");
+  json += ",\"xclk_hz\":" + String(camera.xclk_hz);
+  json += ",\"capture_us\":" + String(camera.last_capture_us) + ",\"max_capture_us\":" + String(camera.max_capture_us);
+  json += ",\"driver_task_core\":" + String(camera.cam_task_core);
+  json += ",\"driver_task_priority\":" + String(camera.cam_task_effective_priority) + "}";
   json += ",\"memory\":{\"internal_free\":" + String(heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+  json += ",\"internal_min_free\":" + String(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
   json += ",\"internal_largest\":" + String(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
   json += ",\"dma_free\":" + String(heap_caps_get_free_size(MALLOC_CAP_DMA));
   json += ",\"psram_free\":" + String(heap_caps_get_free_size(MALLOC_CAP_SPIRAM)) + "}";

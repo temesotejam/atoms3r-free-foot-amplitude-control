@@ -90,7 +90,7 @@ static bool controlStep(void*) {
           log_epoch_us = esp_timer_get_time() - static_cast<uint32_t>(micros() - logger.runStartUs());
           measurement_epoch_us = 0;
           feet.beginRun(runner.status().run_id, log_epoch_us);
-          run_control.beginRunAudit();
+          run_control.beginRunAudit(start);
         }
       }
     }

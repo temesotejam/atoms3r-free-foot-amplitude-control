@@ -71,8 +71,8 @@ void FootObserver::loop() {
         run.upright_epoch == run_before.upright_epoch && !run.running &&
         f.timestamp_valid && f.frame_us >= run.upright_since_us,
         a.valid && b.valid, a.center_x_px, b.center_x_px);
-    const auto ar = estimateFootAngle(a, zero_.a_zero, zero_.ready);
-    const auto bl = estimateFootAngle(b, zero_.b_zero, zero_.ready);
+    const auto ar = estimateFootAngle(a, zero_.a_zero, zero_.ready && f.timestamp_valid);
+    const auto bl = estimateFootAngle(b, zero_.b_zero, zero_.ready && f.timestamp_valid);
     f.zero_ready = zero_.ready; f.right_valid = ar.valid; f.left_valid = bl.valid;
     f.right_in_range = a.valid && ar.in_calibration_range;
     f.left_in_range = b.valid && bl.in_calibration_range;

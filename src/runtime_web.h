@@ -143,6 +143,21 @@ async function cachePut(key, value) {
     tx.oncomplete = resolve; tx.onabort = resolve; tx.onerror = resolve;
   });
 }
+async function pruneCache(token) {
+  const prefix = token + ':';
+  for (const key of memoryCache.keys()) if (!key.startsWith(prefix)) memoryCache.delete(key);
+  const db = await openCache(); if (!db) return;
+  await new Promise(resolve => {
+    try {
+      const tx = db.transaction('chunks', 'readwrite'), r = tx.objectStore('chunks').openCursor();
+      r.onsuccess = () => {
+        const cursor = r.result;
+        if (cursor) { if (!String(cursor.key).startsWith(prefix)) cursor.delete(); cursor.continue(); }
+      };
+      tx.oncomplete = resolve; tx.onabort = resolve; tx.onerror = resolve;
+    } catch { resolve(); }
+  });
+}
 function validateChunk(bytes, offset, length) {
   if (!(bytes instanceof Uint8Array) || bytes.byteLength !== length + 16) throw new Error('チャンク長の不一致');
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -169,6 +184,7 @@ async function download() {
     } while (m.phase !== 'ready');
     if (!/^[a-f0-9]{16}$/.test(m.token) || !Number.isInteger(m.bytes) || m.bytes < 114 || m.bytes > 9 * 1024 * 1024 || m.chunk_bytes !== 4096)
       throw new Error('ログ仕様が一致しません。ページを更新してください。');
+    await pruneCache(m.token);
     const file = new Uint8Array(m.bytes); $('progress').max = m.bytes; $('progress').value = 0;
     for (let offset = 0; offset < m.bytes;) {
       if (cancelTransfer) throw new Error('一時停止しました。取得・再開で続けられます。');
@@ -176,6 +192,7 @@ async function download() {
       let payload, packet = await cacheGet(key);
       if (packet) { try { payload = validateChunk(packet, offset, length); } catch { packet = null; } }
       for (let retry = 0; !payload && retry < 5; ++retry) {
+        if (cancelTransfer) throw new Error('一時停止しました。');
         try {
           packet = await request(`/export/chunk?token=${m.token}&offset=${offset}&length=${length}`, {kind: 'bytes'});
           payload = validateChunk(packet, offset, length); await cachePut(key, packet);

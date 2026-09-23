@@ -32,6 +32,7 @@ class FootObserver {
   void finishRun();
   void clearRun();
   FootSnapshot snapshot() const;
+  CameraOneShotSnapshot cameraSnapshot() const { return camera_ ? camera_->snapshot() : CameraOneShotSnapshot{}; }
   void appendMetadata(PsramString& json) const; // sealed, export worker only
  private:
   static void entry(void* ptr) { static_cast<FootObserver*>(ptr)->loop(); }
