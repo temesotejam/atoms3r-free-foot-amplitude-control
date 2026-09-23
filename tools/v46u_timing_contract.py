@@ -71,6 +71,9 @@ def normalize_camera_coexistence(path, data):
   }
 
 ''','')
+    data=data.replace(
+        '  imu.setStartupGuideState(reason, false, 0);\n\n  if (!fresh || !UprightPoseGuide::isUprightStableSample(r)) {',
+        '  imu.setStartupGuideState(reason, false, 0);\n  if (!fresh || !UprightPoseGuide::isUprightStableSample(r)) {')
     camera_start='''  // Camera one-shot integration proof only. No marker detection or foot angle.
 '''
     if camera_start in data:
