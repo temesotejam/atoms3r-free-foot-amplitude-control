@@ -39,8 +39,11 @@ assert git_blob_sha("src/web_ui.cpp") == "c63bb11581c8252fe92f151fb97c9208175bd3
 assert '#include "bounded_web_server.h"' in main
 assert "BoundedWriteWebServer server(Config::HTTP_PORT);" in main
 assert "class BoundedWriteWebServer : public WebServer" in bounded_h
-assert "kMaxProgmemWriteBytes = 256" in bounded
-assert "_currentClientWrite_P(PGM_P buffer, size_t length)" in bounded
+assert "kMaxWriteBytes = 256" in bounded
+assert "_currentClientWrite(const char* buffer, size_t length)" in bounded
+assert "_currentClientWrite_P(" in bounded
+assert "pacedWrite(" in bounded
+assert 'source_tag' in bounded
 assert "::send(" in bounded
 assert "MSG_DONTWAIT" in bounded
 assert "retryableSocketError" in bounded
@@ -48,8 +51,11 @@ assert "kSuccessPaceMs = 2" in bounded
 assert "kMaxNoProgressMs = 3000" in bounded
 assert "vTaskDelay(pdMS_TO_TICKS(kSuccessPaceMs))" in bounded
 assert "vTaskDelay(pdMS_TO_TICKS(kRetryDelayMs))" in bounded
-assert "NETDBG,web_p_begin" in bounded
-assert "NETDBG,web_p_end" in bounded
+assert "NETDBG,web_write_begin" in bounded
+assert "NETDBG,web_write_end" in bounded
+
+# Compact startup pose diagnostics are observation-only.
+assert "POSEDBG,ms=%lu,reason=%s,fresh=%u,dir=%.2f,acc=%.3f,gyro=%.2f,hold=%lu" in main
 
 # SCCB only at boot on I2C0; never touch BMI270 I2C1.
 assert "I2C_NUM_1" not in camera

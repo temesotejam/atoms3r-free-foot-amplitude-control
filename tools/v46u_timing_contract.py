@@ -20,6 +20,7 @@ def normalize_camera_coexistence(path, data):
     data=data.replace('BoundedWriteWebServer server(Config::HTTP_PORT);\n',
                       'WebServer server(Config::HTTP_PORT);\n')
     data=data.replace('OneShotCamera camera_probe;\n','')
+    data=data.replace('static uint32_t startup_guide_last_diag_ms = 0;\n','')
     data=data.replace('  tcpTransportDebugBegin();\n','')
     data=data.replace('  cameraSerialDebugBegin(camera_probe);\n','')
     data=data.replace('  cameraSerialDebugUpdate(camera_probe, !runner.running());\n  tcpTransportDebugUpdate();\n\n','')
@@ -41,6 +42,24 @@ def normalize_camera_coexistence(path, data):
         data=data.replace(
             '                control_task_ok ? "OK" : "FAILED");\n\n  web.begin(server, runner, imu, roller, logger);',
             '                control_task_ok ? "OK" : "FAILED");\n  web.begin(server, runner, imu, roller, logger);')
+    data=data.replace('''  if (static_cast<uint32_t>(now_ms - startup_guide_last_diag_ms) >= 1000UL) {
+    startup_guide_last_diag_ms = now_ms;
+    Serial.printf(
+        "POSEDBG,ms=%lu,reason=%s,fresh=%u,dir=%.2f,acc=%.3f,gyro=%.2f,hold=%lu\\n",
+        static_cast<unsigned long>(now_ms),
+        reason,
+        fresh ? 1U : 0U,
+        UprightPoseGuide::directionErrorDeg(r),
+        UprightPoseGuide::accelNormG(r),
+        UprightPoseGuide::gyroNormDps(r),
+        static_cast<unsigned long>(
+            startup_upright_since_ms ? now_ms - startup_upright_since_ms : 0U));
+  }
+
+''','')
+    data=data.replace(
+        '  imu.setStartupGuideState(reason, false, 0);\n\n  if (!fresh || !UprightPoseGuide::isUprightStableSample(r)) {',
+        '  imu.setStartupGuideState(reason, false, 0);\n  if (!fresh || !UprightPoseGuide::isUprightStableSample(r)) {')
     camera_start='''  // Camera one-shot integration proof only. No marker detection or foot angle.
 '''
     if camera_start in data:

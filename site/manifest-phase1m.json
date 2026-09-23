@@ -1,0 +1,15 @@
+{
+  "name": "AtomS3R Camera Full Web Transport Phase 1M",
+  "version": "0.46.42-camera-phase1m",
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {"path": "firmware/bootloader.bin", "offset": 0},
+        {"path": "firmware/partitions.bin", "offset": 32768},
+        {"path": "firmware/boot_app0.bin", "offset": 57344},
+        {"path": "firmware/firmware-phase1m.bin", "offset": 65536}
+      ]
+    }
+  ]
+}

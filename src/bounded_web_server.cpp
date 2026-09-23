@@ -6,17 +6,8 @@
 
 namespace {
 
-// Keep each lwIP enqueue small enough to remain comfortable even after the
-// camera driver and an HTTP connection have fragmented internal/DMA-capable RAM.
-constexpr size_t kMaxProgmemWriteBytes = 256;
-
-// Do not fill the TCP send queue back-to-back. A small successful-send pacing
-// interval lets Wi-Fi/lwIP transmit and process ACKs before the next enqueue.
+constexpr size_t kMaxWriteBytes = 256;
 constexpr uint32_t kSuccessPaceMs = 2;
-
-// EAGAIN/EWOULDBLOCK/ENOMEM mean "try again after the stack drains", not a
-// failed HTTP response. Bound a no-progress interval so a dead peer cannot
-// block the Arduino HTTP task forever.
 constexpr uint32_t kRetryDelayMs = 2;
 constexpr uint32_t kMaxNoProgressMs = 3000;
 
@@ -26,19 +17,24 @@ bool retryableSocketError(int error) {
 
 }  // namespace
 
-size_t BoundedWriteWebServer::_currentClientWrite_P(PGM_P buffer, size_t length) {
+size_t BoundedWriteWebServer::pacedWrite(
+    const uint8_t* buffer, size_t length, const char* source_tag) {
   if (length == 0) return 0;
 
   const int socket_fd = _currentClient.fd();
   if (socket_fd < 0 || !_currentClient.connected()) return 0;
 
-  Serial.printf(
-      "NETDBG,web_p_begin,ms=%lu,bytes=%u,chunk=%u,pace_ms=%u,retry_ms=%u\n",
-      static_cast<unsigned long>(millis()),
-      static_cast<unsigned>(length),
-      static_cast<unsigned>(kMaxProgmemWriteBytes),
-      static_cast<unsigned>(kSuccessPaceMs),
-      static_cast<unsigned>(kRetryDelayMs));
+  const bool trace = length > kMaxWriteBytes;
+  if (trace) {
+    Serial.printf(
+        "NETDBG,web_write_begin,src=%s,ms=%lu,bytes=%u,chunk=%u,pace_ms=%u,retry_ms=%u\n",
+        source_tag,
+        static_cast<unsigned long>(millis()),
+        static_cast<unsigned>(length),
+        static_cast<unsigned>(kMaxWriteBytes),
+        static_cast<unsigned>(kSuccessPaceMs),
+        static_cast<unsigned>(kRetryDelayMs));
+  }
 
   size_t total = 0;
   uint32_t sends = 0;
@@ -49,8 +45,7 @@ size_t BoundedWriteWebServer::_currentClientWrite_P(PGM_P buffer, size_t length)
 
   while (total < length) {
     const size_t remaining = length - total;
-    const size_t want =
-        remaining < kMaxProgmemWriteBytes ? remaining : kMaxProgmemWriteBytes;
+    const size_t want = remaining < kMaxWriteBytes ? remaining : kMaxWriteBytes;
 
     errno = 0;
     const int result = ::send(
@@ -64,9 +59,10 @@ size_t BoundedWriteWebServer::_currentClientWrite_P(PGM_P buffer, size_t length)
       ++sends;
       last_progress_ms = millis();
 
-      if ((sends & 0x07U) == 0U || total == length) {
+      if (trace && ((sends & 0x07U) == 0U || total == length)) {
         Serial.printf(
-            "NETDBG,web_p_progress,sends=%lu,retries=%lu,sent=%u,total=%u\n",
+            "NETDBG,web_write_progress,src=%s,sends=%lu,retries=%lu,sent=%u,total=%u\n",
+            source_tag,
             static_cast<unsigned long>(sends),
             static_cast<unsigned long>(retries),
             static_cast<unsigned>(total),
@@ -83,7 +79,8 @@ size_t BoundedWriteWebServer::_currentClientWrite_P(PGM_P buffer, size_t length)
       if (static_cast<uint32_t>(millis() - last_progress_ms) >
           kMaxNoProgressMs) {
         Serial.printf(
-            "NETDBG,web_p_stall,offset=%u,want=%u,errno=%d,retries=%lu,connected=%u\n",
+            "NETDBG,web_write_stall,src=%s,offset=%u,want=%u,errno=%d,retries=%lu,connected=%u\n",
+            source_tag,
             static_cast<unsigned>(total),
             static_cast<unsigned>(want),
             last_error,
@@ -92,13 +89,13 @@ size_t BoundedWriteWebServer::_currentClientWrite_P(PGM_P buffer, size_t length)
         failed = true;
         break;
       }
-
       vTaskDelay(pdMS_TO_TICKS(kRetryDelayMs));
       continue;
     }
 
     Serial.printf(
-        "NETDBG,web_p_socket_error,offset=%u,want=%u,result=%d,errno=%d,connected=%u\n",
+        "NETDBG,web_write_socket_error,src=%s,offset=%u,want=%u,result=%d,errno=%d,connected=%u\n",
+        source_tag,
         static_cast<unsigned>(total),
         static_cast<unsigned>(want),
         result,
@@ -108,15 +105,30 @@ size_t BoundedWriteWebServer::_currentClientWrite_P(PGM_P buffer, size_t length)
     break;
   }
 
-  Serial.printf(
-      "NETDBG,web_p_end,result=%s,sends=%lu,retries=%lu,sent=%u,total=%u,last_errno=%d,connected=%u\n",
-      (!failed && total == length) ? "OK" : "FAILED",
-      static_cast<unsigned long>(sends),
-      static_cast<unsigned long>(retries),
-      static_cast<unsigned>(total),
-      static_cast<unsigned>(length),
-      last_error,
-      _currentClient.connected() ? 1U : 0U);
+  if (trace || failed) {
+    Serial.printf(
+        "NETDBG,web_write_end,src=%s,result=%s,sends=%lu,retries=%lu,sent=%u,total=%u,last_errno=%d,connected=%u\n",
+        source_tag,
+        (!failed && total == length) ? "OK" : "FAILED",
+        static_cast<unsigned long>(sends),
+        static_cast<unsigned long>(retries),
+        static_cast<unsigned>(total),
+        static_cast<unsigned>(length),
+        last_error,
+        _currentClient.connected() ? 1U : 0U);
+  }
 
   return total;
+}
+
+size_t BoundedWriteWebServer::_currentClientWrite(
+    const char* buffer, size_t length) {
+  return pacedWrite(
+      reinterpret_cast<const uint8_t*>(buffer), length, "ram");
+}
+
+size_t BoundedWriteWebServer::_currentClientWrite_P(
+    PGM_P buffer, size_t length) {
+  return pacedWrite(
+      reinterpret_cast<const uint8_t*>(buffer), length, "progmem");
 }

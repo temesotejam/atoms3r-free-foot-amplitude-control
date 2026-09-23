@@ -10,5 +10,9 @@ class BoundedWriteWebServer : public WebServer {
   explicit BoundedWriteWebServer(int port = 80) : WebServer(port) {}
 
  protected:
+  size_t _currentClientWrite(const char* buffer, size_t length) override;
   size_t _currentClientWrite_P(PGM_P buffer, size_t length) override;
+
+ private:
+  size_t pacedWrite(const uint8_t* buffer, size_t length, const char* source_tag);
 };

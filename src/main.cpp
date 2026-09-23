@@ -34,6 +34,7 @@ static_assert(RunControlWorker::kPriority < 6, "BMI270 reader must preempt run c
 
 static uint32_t startup_guide_boot_ms = 0;
 static uint32_t startup_upright_since_ms = 0;
+static uint32_t startup_guide_last_diag_ms = 0;
 static bool startup_guide_prompt_announced = false;
 static bool startup_upright_confirmed = false;
 
@@ -74,6 +75,21 @@ static void updateStartupPoseGuide() {
   else if (UprightPoseGuide::directionErrorDeg(r) > UprightPoseGuide::UPRIGHT_MAX_DIRECTION_ERROR_DEG) reason = "not_upright";
   else if (UprightPoseGuide::gyroNormDps(r) > UprightPoseGuide::UPRIGHT_MAX_GYRO_NORM_DPS) reason = "still_moving";
   imu.setStartupGuideState(reason, false, 0);
+
+  if (static_cast<uint32_t>(now_ms - startup_guide_last_diag_ms) >= 1000UL) {
+    startup_guide_last_diag_ms = now_ms;
+    Serial.printf(
+        "POSEDBG,ms=%lu,reason=%s,fresh=%u,dir=%.2f,acc=%.3f,gyro=%.2f,hold=%lu\n",
+        static_cast<unsigned long>(now_ms),
+        reason,
+        fresh ? 1U : 0U,
+        UprightPoseGuide::directionErrorDeg(r),
+        UprightPoseGuide::accelNormG(r),
+        UprightPoseGuide::gyroNormDps(r),
+        static_cast<unsigned long>(
+            startup_upright_since_ms ? now_ms - startup_upright_since_ms : 0U));
+  }
+
   if (!fresh || !UprightPoseGuide::isUprightStableSample(r)) {
     startup_upright_since_ms = 0;
     return;
