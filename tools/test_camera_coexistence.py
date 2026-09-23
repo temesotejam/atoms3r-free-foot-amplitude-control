@@ -41,8 +41,13 @@ assert "BoundedWriteWebServer server(Config::HTTP_PORT);" in main
 assert "class BoundedWriteWebServer : public WebServer" in bounded_h
 assert "kMaxProgmemWriteBytes = 256" in bounded
 assert "_currentClientWrite_P(PGM_P buffer, size_t length)" in bounded
-assert "::send(" in bounded\nassert "MSG_DONTWAIT" in bounded\nassert "retryableSocketError" in bounded\nassert "kSuccessPaceMs = 2" in bounded\nassert "kMaxNoProgressMs = 3000" in bounded
-assert "vTaskDelay(pdMS_TO_TICKS(kSuccessPaceMs))" in bounded\nassert "vTaskDelay(pdMS_TO_TICKS(kRetryDelayMs))" in bounded
+assert "::send(" in bounded
+assert "MSG_DONTWAIT" in bounded
+assert "retryableSocketError" in bounded
+assert "kSuccessPaceMs = 2" in bounded
+assert "kMaxNoProgressMs = 3000" in bounded
+assert "vTaskDelay(pdMS_TO_TICKS(kSuccessPaceMs))" in bounded
+assert "vTaskDelay(pdMS_TO_TICKS(kRetryDelayMs))" in bounded
 assert "NETDBG,web_p_begin" in bounded
 assert "NETDBG,web_p_end" in bounded
 
