@@ -24,9 +24,6 @@ struct CameraOneShotSnapshot {
 
   uint32_t xclk_hz = 16000000UL;
   uint16_t xclk_warmup_ms = 20;
-  uint16_t minimum_idle_ms = 300;
-  int8_t consumer_core = 0;
-  uint8_t consumer_priority = 1;
 
   bool cam_task_priority_patch_observed = false;
   uint8_t cam_task_original_priority = 0;
@@ -47,17 +44,21 @@ class OneShotCamera {
  public:
   bool begin();
 
-  // True one-shot API: the receiver and XCLK are normally OFF. acquire()
-  // enables them only for one frame and disables both before returning.
+  // Receiver and XCLK are normally OFF. acquire() enables them only long
+  // enough to obtain one frame and disables both before it returns.
   camera_fb_t* acquire(uint32_t timeout_ms = 500);
   void release(camera_fb_t* fb);
+
+  // USB-serial diagnostic actions. No automatic capture is performed.
+  bool debugCaptureOnce();
+  void debugForceIdle();
+  bool debugPowerSensorOff();
+  bool debugDeinit();
 
   CameraOneShotSnapshot snapshot() const;
   const char* lastError() const { return last_error_; }
 
  private:
-  static void taskEntry(void* arg);
-  void taskLoop();
   bool initCameraOnTemporaryI2c0();
   void setXclkEnabled(bool enabled);
   void flushQueuedFrames();
@@ -67,7 +68,6 @@ class OneShotCamera {
 
   mutable portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
   SemaphoreHandle_t capture_mutex_ = nullptr;
-  TaskHandle_t task_ = nullptr;
   CameraOneShotSnapshot snapshot_;
   char last_error_[64] = "not_initialized";
 };

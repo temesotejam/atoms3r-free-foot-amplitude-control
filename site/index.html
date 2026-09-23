@@ -28,17 +28,17 @@
     <section class="panel important">
       <h2>Camera共存 Phase 1</h2>
       <p><strong>今回は足角度計算をまだ入れていません。</strong> 固定足完成版の制御・MEKF・RWLOG・Web UIをそのまま残し、GC0308を低負荷で動作させてもWi-Fi/Web UIが維持できるかだけを確認する版です。</p>
-      <p>Phase 1Gは<strong>真のone-shot取得</strong>です。待機中はCamera receiverを停止するだけでなく、GPIO21の<strong>XCLKも0に固定</strong>します。撮影時だけ XCLK ON → 20 ms安定待ち → receiver ON → 1枚取得 → receiver OFF → XCLK OFF の順に実行します。</p>
-      <p>撮影完了後には必ず<strong>300 ms以上の完全休止時間</strong>を置きます。この休止中はGC0308の電源と設定は保持しますが、XCLK・PCLK/VSYNC/HREF・GDMA受信は止まります。SCCBは起動時1回だけで、Roller485開始後はI2C0へ一切触れません。</p>
-      <p>短い撮影窓の間だけ動く <code>cam_task</code> もPriority 3へ下げています（Wi-Fi 23 / Roller 4 / cam_task 3 / one-shot task 1）。</p>
+      <p>Phase 1Hは<strong>USBシリアル専用デバッグ版</strong>です。Cameraの自動撮影は完全に停止しています。起動後はreceiver OFF / XCLK OFFの待機状態を維持し、USBシリアルから命令したときだけ状態を変えます。</p>
+      <p>115200 bpsのシリアルモニタで、<code>s</code>=状態表示、<code>c</code>=1枚だけ撮影、<code>i</code>=強制idle、<code>p</code>=センサ電源OFF、<code>d</code>=Camera完全deinit、<code>h</code>=ヘルプです。<code>p</code>と<code>d</code>は再起動まで戻せません。</p>
+      <p>USBログには2秒ごとのheartbeatと、Camera状態・AP接続台数・Internal/DMA/PSRAM残量・撮影時間を出します。まず何も送らずWebUIを確認し、その後<code>c</code>を1回ずつ送って挙動を比較します。</p>
       <p>書き込み後はまずモータを動かさず、Wi-Fi <code>AtomS3CAM_Q1_SHADOW</code>へ接続し、最初に <code>http://192.168.4.1/camera-health</code> を開いてください。短い <code>ok camera=...</code> が出たら、続いて <code>http://192.168.4.1/</code> の通常WebUIを確認します。</p>
     </section>
 
     <section class="panel important">
       <h2>このページから直接書き込めます</h2>
-      <p>AtomS3R を USB でPCへ接続し、Chrome または Edge のデスクトップ版で下のボタンを押してください。<strong>Phase 1G専用のmanifest/firmwareファイル名を使用しているため、直前版のブラウザキャッシュは再利用されません。</strong></p>
-      <esp-web-install-button manifest="manifest-phase1g.json">
-        <button slot="activate" class="primary">AtomS3RへCamera True One-Shot Phase 1Gを書き込む</button>
+      <p>AtomS3R を USB でPCへ接続し、Chrome または Edge のデスクトップ版で下のボタンを押してください。<strong>Phase 1H専用のmanifest/firmwareファイル名を使用しているため、直前版のブラウザキャッシュは再利用されません。</strong></p>
+      <esp-web-install-button manifest="manifest-phase1h.json">
+        <button slot="activate" class="primary">AtomS3RへCamera USB Serial Debug Phase 1Hを書き込む</button>
         <span slot="unsupported" class="warning">このブラウザはWeb Serial / WebUSBに対応していません。PC版ChromeまたはEdgeを使用してください。</span>
       </esp-web-install-button>
       <details>

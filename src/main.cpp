@@ -5,6 +5,7 @@
 
 #include "config.h"
 #include "camera_coexistence.h"
+#include "camera_serial_debug.h"
 #include "experiment_runner.h"
 #include "imu_manager.h"
 #include "psram_logger.h"
@@ -196,6 +197,7 @@ void setup() {
   });
 
   web.begin(server, runner, imu, roller, logger);
+  cameraSerialDebugBegin(camera_probe);
   Serial.printf("AP SSID: %s\n", Config::AP_SSID);
   Serial.println("Open http://192.168.4.1/ and start Autonomous Energy Control V7");
   displayLine("V46q / V7 ready", Config::AP_SSID);
@@ -259,6 +261,8 @@ static bool runControlStep(void*) {
 }
 
 void loop() {
+  cameraSerialDebugUpdate(camera_probe, !runner.running());
+
   // While a run is active, this lower-priority Arduino task owns only HTTP.
   // Never put a mutex around handleClient and the controller: that would
   // reintroduce network waits into the IMU-consumer deadline.
