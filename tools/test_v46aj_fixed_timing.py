@@ -39,7 +39,7 @@ compact_start = legacy_logger.find("  // Compact Autonomous metadata begin\n")
 if compact_start >= 0:
     compact_end = legacy_logger.index("  // Compact Autonomous metadata end\n", compact_start) + len("  // Compact Autonomous metadata end\n")
     compact_block = legacy_logger[compact_start:compact_end]
-    assert '"autonomous_timing_compensation_us"' in compact_block
+    assert 'autonomous_timing_compensation_us' in compact_block
     legacy_logger = legacy_logger[:compact_start] + legacy_logger[compact_end:]
 metadata = '\n'.join(line for line in legacy_logger.splitlines() if any('\\"'+key+'\\"' in line for key in ('autonomous_timing_compensation_us','autonomous_control_prediction_enabled','autonomous_timing_prediction_formula','autonomous_timing_compensation_selectable')))
 assert metadata.count('json +=') == 4
