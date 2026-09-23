@@ -38,6 +38,159 @@ static uint32_t startup_guide_last_diag_ms = 0;
 static bool startup_guide_prompt_announced = false;
 static bool startup_upright_confirmed = false;
 
+// Phase 1N: one observation-only camera acquisition during an Autonomous run.
+// Camera work stays on the priority-2 Arduino/HTTP task. The priority-4
+// controller and priority-6 BMI270 reader can preempt it at all times.
+static constexpr uint32_t PHASE1N_CAMERA_TRIGGER_MS = 10000UL;
+struct Phase1nCameraValidation {
+  bool run_seen = false;
+  bool attempted = false;
+  bool capture_ok = false;
+  uint16_t run_id = 0;
+  uint32_t capture_measure_ms = 0;
+  bool pulse_active_at_trigger = false;
+  int16_t motor_cmd_mA_at_trigger = 0;
+  bool imu_healthy_before = false;
+  bool imu_healthy_after = false;
+  bool imu_stale_before = true;
+  bool imu_stale_after = true;
+  uint32_t frames_before = 0;
+  uint32_t frames_after = 0;
+  uint32_t failures_before = 0;
+  uint32_t failures_after = 0;
+  uint32_t frame_bytes = 0;
+  uint32_t capture_us = 0;
+  bool receiver_active_after = false;
+  bool xclk_active_after = false;
+  RunControlWorker::Health control_before;
+  RunControlWorker::Health control_after;
+};
+static Phase1nCameraValidation phase1n_camera;
+
+static bool phase1nWindowPass() {
+  const auto& p = phase1n_camera;
+  return p.attempted && p.capture_ok &&
+      p.frames_after == p.frames_before + 1 &&
+      p.failures_after == p.failures_before &&
+      p.imu_healthy_before && p.imu_healthy_after &&
+      !p.imu_stale_before && !p.imu_stale_after &&
+      !p.receiver_active_after && !p.xclk_active_after &&
+      p.control_after.sample_deadline_over == p.control_before.sample_deadline_over &&
+      p.control_after.runner_deadline_over == p.control_before.runner_deadline_over;
+}
+
+static String phase1nCameraValidationJson() {
+  const auto& p = phase1n_camera;
+  String s;
+  s.reserve(1700);
+  s = "{\"revision\":\"phase1n_run_oneshot_coexistence_20260923\"";
+  s += ",\"trigger_measure_ms\":" + String(PHASE1N_CAMERA_TRIGGER_MS);
+  s += ",\"run_seen\":" + String(p.run_seen ? "true" : "false");
+  s += ",\"attempted\":" + String(p.attempted ? "true" : "false");
+  s += ",\"capture_ok\":" + String(p.capture_ok ? "true" : "false");
+  s += ",\"window_pass\":" + String(phase1nWindowPass() ? "true" : "false");
+  s += ",\"final_rwlog_audit_required\":true";
+  s += ",\"run_id\":" + String(p.run_id);
+  s += ",\"capture_measure_ms\":" + String(p.capture_measure_ms);
+  s += ",\"pulse_active_at_trigger\":" + String(p.pulse_active_at_trigger ? "true" : "false");
+  s += ",\"motor_cmd_mA_at_trigger\":" + String(p.motor_cmd_mA_at_trigger);
+  s += ",\"frame_bytes\":" + String(p.frame_bytes);
+  s += ",\"capture_us\":" + String(p.capture_us);
+  s += ",\"frames_before\":" + String(p.frames_before);
+  s += ",\"frames_after\":" + String(p.frames_after);
+  s += ",\"failures_before\":" + String(p.failures_before);
+  s += ",\"failures_after\":" + String(p.failures_after);
+  s += ",\"receiver_active_after\":" + String(p.receiver_active_after ? "true" : "false");
+  s += ",\"xclk_active_after\":" + String(p.xclk_active_after ? "true" : "false");
+  s += ",\"imu_healthy_before\":" + String(p.imu_healthy_before ? "true" : "false");
+  s += ",\"imu_healthy_after\":" + String(p.imu_healthy_after ? "true" : "false");
+  s += ",\"imu_stale_before\":" + String(p.imu_stale_before ? "true" : "false");
+  s += ",\"imu_stale_after\":" + String(p.imu_stale_after ? "true" : "false");
+  s += ",\"control_steps_during_capture\":" +
+      String(p.control_after.steps - p.control_before.steps);
+  s += ",\"sample_deadline_over_before\":" + String(p.control_before.sample_deadline_over);
+  s += ",\"sample_deadline_over_after\":" + String(p.control_after.sample_deadline_over);
+  s += ",\"sample_deadline_max_us_before\":" + String(p.control_before.sample_deadline_max_us);
+  s += ",\"sample_deadline_max_us_after\":" + String(p.control_after.sample_deadline_max_us);
+  s += ",\"runner_deadline_over_before\":" + String(p.control_before.runner_deadline_over);
+  s += ",\"runner_deadline_over_after\":" + String(p.control_after.runner_deadline_over);
+  s += ",\"runner_deadline_max_us_before\":" + String(p.control_before.runner_deadline_max_us);
+  s += ",\"runner_deadline_max_us_after\":" + String(p.control_after.runner_deadline_max_us);
+  return s + "}";
+}
+
+static void servicePhase1nRunCameraValidation(const RunControlSnapshot& run) {
+  if (!phase1n_camera.run_seen) {
+    phase1n_camera = Phase1nCameraValidation{};
+    phase1n_camera.run_seen = true;
+    phase1n_camera.run_id = run.run_id;
+    Serial.println("PHASE1N,armed=1,trigger_measure_ms=10000");
+  }
+  if (!run.energy_control_autonomous || phase1n_camera.attempted) return;
+  if (run.state_id != static_cast<uint8_t>(ExperimentState::RUNNING_BATCH_SWEEP) ||
+      run.measure_elapsed_ms < PHASE1N_CAMERA_TRIGGER_MS) return;
+
+  phase1n_camera.attempted = true;
+  phase1n_camera.run_id = run.run_id;
+  phase1n_camera.capture_measure_ms = run.measure_elapsed_ms;
+  phase1n_camera.pulse_active_at_trigger = run.pulse_active;
+  phase1n_camera.motor_cmd_mA_at_trigger = run.motor_cmd_mA;
+
+  const CameraOneShotSnapshot camera_before = camera_probe.snapshot();
+  phase1n_camera.frames_before = camera_before.frame_count;
+  phase1n_camera.failures_before = camera_before.frame_failures;
+  phase1n_camera.imu_healthy_before = imu.acquisitionHealthy();
+  phase1n_camera.imu_stale_before = imu.stale(millis());
+  phase1n_camera.control_before = run_control.healthSnapshot();
+
+  camera_fb_t* frame = camera_probe.acquire(500);
+  phase1n_camera.capture_ok = frame != nullptr;
+  if (frame) {
+    phase1n_camera.frame_bytes = frame->len;
+    camera_probe.release(frame);
+  }
+
+  const CameraOneShotSnapshot camera_after = camera_probe.snapshot();
+  phase1n_camera.frames_after = camera_after.frame_count;
+  phase1n_camera.failures_after = camera_after.frame_failures;
+  phase1n_camera.capture_us = camera_after.last_capture_us;
+  phase1n_camera.receiver_active_after = camera_after.receiver_active;
+  phase1n_camera.xclk_active_after = camera_after.xclk_active;
+  phase1n_camera.imu_healthy_after = imu.acquisitionHealthy();
+  phase1n_camera.imu_stale_after = imu.stale(millis());
+  phase1n_camera.control_after = run_control.healthSnapshot();
+
+  Serial.printf(
+      "PHASE1N,run=%u,measure_ms=%lu,capture_ok=%u,capture_us=%lu,bytes=%lu,"
+      "pulse=%u,motor_mA=%d,imu=%u->%u,stale=%u->%u,frames=%lu->%lu,"
+      "fail=%lu->%lu,receiver_after=%u,xclk_after=%u,control_steps=%lu,"
+      "sample_deadline_over=%lu->%lu,runner_deadline_over=%lu->%lu,window_pass=%u\n",
+      static_cast<unsigned>(phase1n_camera.run_id),
+      static_cast<unsigned long>(phase1n_camera.capture_measure_ms),
+      phase1n_camera.capture_ok ? 1U : 0U,
+      static_cast<unsigned long>(phase1n_camera.capture_us),
+      static_cast<unsigned long>(phase1n_camera.frame_bytes),
+      phase1n_camera.pulse_active_at_trigger ? 1U : 0U,
+      static_cast<int>(phase1n_camera.motor_cmd_mA_at_trigger),
+      phase1n_camera.imu_healthy_before ? 1U : 0U,
+      phase1n_camera.imu_healthy_after ? 1U : 0U,
+      phase1n_camera.imu_stale_before ? 1U : 0U,
+      phase1n_camera.imu_stale_after ? 1U : 0U,
+      static_cast<unsigned long>(phase1n_camera.frames_before),
+      static_cast<unsigned long>(phase1n_camera.frames_after),
+      static_cast<unsigned long>(phase1n_camera.failures_before),
+      static_cast<unsigned long>(phase1n_camera.failures_after),
+      phase1n_camera.receiver_active_after ? 1U : 0U,
+      phase1n_camera.xclk_active_after ? 1U : 0U,
+      static_cast<unsigned long>(
+          phase1n_camera.control_after.steps - phase1n_camera.control_before.steps),
+      static_cast<unsigned long>(phase1n_camera.control_before.sample_deadline_over),
+      static_cast<unsigned long>(phase1n_camera.control_after.sample_deadline_over),
+      static_cast<unsigned long>(phase1n_camera.control_before.runner_deadline_over),
+      static_cast<unsigned long>(phase1n_camera.control_after.runner_deadline_over),
+      phase1nWindowPass() ? 1U : 0U);
+}
+
 static void displayLine(const char* line1, const char* line2 = "") {
   if (!M5.Display.width()) return;
   M5.Display.fillScreen(TFT_BLACK);
@@ -194,6 +347,11 @@ void setup() {
     Serial.println("NETDBG,webserver80_response_complete,path=/net-probe");
   });
 
+  server.on("/camera-run-validation", HTTP_GET, []() {
+    server.sendHeader("Cache-Control", "no-store");
+    server.send(200, "application/json; charset=utf-8", phase1nCameraValidationJson());
+  });
+
   server.on("/camera-health", HTTP_GET, []() {
     Serial.println("NETDBG,webserver80_handler,path=/camera-health");
     const CameraOneShotSnapshot c = camera_probe.snapshot();
@@ -253,6 +411,9 @@ static void captureRunState(void*, RunControlSnapshot& out) {
   out.running = runner.running();
   out.state_id = static_cast<uint8_t>(st.state);
   out.run_id = st.run_id;
+  out.energy_control_autonomous = runner.energyControlAutonomousMode();
+  out.pulse_active = st.pulse_active;
+  out.measure_elapsed_ms = st.measure_elapsed_ms;
   out.motor_cmd_mA = st.motor_cmd_mA;
   out.actual_current_mA = st.roller_actual_current_mA;
   out.remaining_ms = st.remaining_ms;
@@ -301,10 +462,17 @@ void loop() {
   // Never put a mutex around handleClient and the controller: that would
   // reintroduce network waits into the IMU-consumer deadline.
   if (run_control.active()) {
+    // Phase 1N deliberately runs on this lower-priority task. The camera can
+    // block this task while run control and BMI270 acquisition keep preempting it.
+    servicePhase1nRunCameraValidation(run_control.snapshot());
     web.update();
     delay(1);
     return;
   }
+
+  // Preserve the completed result for HTTP inspection, but arm a fresh Phase 1N
+  // record when the next run transfers ownership to the worker.
+  phase1n_camera.run_seen = false;
 
   // Idle ownership is exclusive again after the worker's final snapshot.
   const uint32_t loop_start_us = micros();

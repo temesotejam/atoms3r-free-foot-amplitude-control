@@ -11,6 +11,7 @@ net = (ROOT / "src/tcp_transport_debug.cpp").read_text(encoding="utf-8")
 bounded = (ROOT / "src/bounded_web_server.cpp").read_text(encoding="utf-8")
 bounded_h = (ROOT / "src/bounded_web_server.h").read_text(encoding="utf-8")
 patch = (ROOT / "src/camera_task_priority_patch.cpp").read_text(encoding="utf-8")
+worker = (ROOT / "src/run_control_worker.h").read_text(encoding="utf-8")
 pio = (ROOT / "platformio.ini").read_text(encoding="utf-8")
 
 def git_blob_sha(path):
@@ -95,6 +96,41 @@ for token in (
 # Destructive debug actions cannot be triggered while the control run is active.
 assert "DENIED_CONTROL_RUN_ACTIVE" in serial
 
+# Phase 1N performs exactly one observation-only one-shot at t>=10 s of the
+# Autonomous measurement. It runs on the priority-2 HTTP task and never calls
+# the live ExperimentRunner from that task.
+for token in (
+    "PHASE1N_CAMERA_TRIGGER_MS = 10000UL",
+    "phase1n_run_oneshot_coexistence_20260923",
+    "servicePhase1nRunCameraValidation(run_control.snapshot())",
+    "camera_probe.acquire(500)",
+    "camera_probe.release(frame)",
+    "imu.acquisitionHealthy()",
+    "imu.stale(millis())",
+    "run_control.healthSnapshot()",
+    'server.on("/camera-run-validation", HTTP_GET',
+    "final_rwlog_audit_required",
+    "PHASE1N,run=%u",
+):
+    assert token in main, token
+active_loop = main[main.index("if (run_control.active())"):]
+assert active_loop.index("servicePhase1nRunCameraValidation") < active_loop.index("web.update()")
+phase1n = main[main.index("static void servicePhase1nRunCameraValidation") :
+               main.index("static void displayLine")]
+assert "runner.status()" not in phase1n
+assert "runner.update()" not in phase1n
+assert "runner.serviceFast()" not in phase1n
+for token in (
+    "energy_control_autonomous",
+    "pulse_active",
+    "measure_elapsed_ms",
+    "struct Health",
+    "Health healthSnapshot() const",
+    "sample_deadline_over",
+    "runner_deadline_over",
+):
+    assert token in worker, token
+
 # Port 81 is an independent raw-TCP probe; port 80 has a tiny WebServer probe.
 for token in (
     "WiFiServer g_server(kDiagPort)",
@@ -119,4 +155,4 @@ assert '--wrap=xTaskCreatePinnedToCore' in pio
 assert 'strcmp(pcName, "cam_task") == 0' in patch
 assert 'kCameraInternalTaskPriority = 3' in patch
 
-print("PASS: USB serial manual camera debugger with no background capture")
+print("PASS: Phase 1N run-time one-shot coexistence with preserved control ownership")

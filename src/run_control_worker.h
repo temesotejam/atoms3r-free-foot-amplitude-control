@@ -13,6 +13,9 @@ struct RunControlSnapshot {
   bool running = false;
   uint8_t state_id = 0;
   uint16_t run_id = 0;
+  bool energy_control_autonomous = false;
+  bool pulse_active = false;
+  uint32_t measure_elapsed_ms = 0;
   int16_t motor_cmd_mA = 0;
   int16_t actual_current_mA = 0;
   uint32_t remaining_ms = 0;
@@ -37,6 +40,17 @@ class RunControlWorker {
     uint32_t observed_priority = 0;
     timing_deadline::Counter sample_completion, runner_work;
     Timing recent[16] = {};
+  };
+  // Small lock-bounded view used by Phase 1N. It intentionally exposes only
+  // deadline counters; no controller state is read from the HTTP task.
+  struct Health {
+    uint32_t steps = 0;
+    uint32_t max_period_us = 0;
+    uint32_t max_path_us = 0;
+    uint32_t sample_deadline_over = 0;
+    uint32_t sample_deadline_max_us = 0;
+    uint32_t runner_deadline_over = 0;
+    uint32_t runner_deadline_max_us = 0;
   };
 
   bool begin(Step step, Capture capture, void* context) {
@@ -76,6 +90,19 @@ class RunControlWorker {
     const RunControlSnapshot copy = snapshot_;
     portEXIT_CRITICAL(&mux_);
     return copy;
+  }
+  Health healthSnapshot() const {
+    Health h;
+    portENTER_CRITICAL(&mux_);
+    h.steps = audit_.steps;
+    h.max_period_us = audit_.max_period_us;
+    h.max_path_us = audit_.max_path_us;
+    h.sample_deadline_over = audit_.sample_completion.over;
+    h.sample_deadline_max_us = audit_.sample_completion.maximum;
+    h.runner_deadline_over = audit_.runner_work.over;
+    h.runner_deadline_max_us = audit_.runner_work.maximum;
+    portEXIT_CRITICAL(&mux_);
+    return h;
   }
   bool requestStop() {
     portENTER_CRITICAL(&mux_);
