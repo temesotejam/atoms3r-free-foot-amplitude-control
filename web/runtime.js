@@ -25,7 +25,7 @@ async function request(path, {method = 'GET', kind = 'json', timeout = 3000} = {
 }
 function controls() {
   const fresh = latest && Date.now() - lastSeen < 3500;
-  const busy = commandInFlight || !!latest?.command.pending;
+  const busy = commandInFlight || !!latest?.command?.pending;
   const building = latest?.export_phase === 'building';
   $('start').disabled = !fresh || busy || transferRunning || !latest.ready || latest.running || latest.export_phase !== 'empty';
   $('clear').disabled = !fresh || busy || transferRunning || building || latest.running || !['FINISHED', 'ESTOP'].includes(latest.state);
@@ -68,20 +68,39 @@ function render(s) {
 async function refresh() {
   if (refreshInFlight) return;
   refreshInFlight = true;
+  let received = false;
   try {
-    latest = await request('/status.json', {timeout: 2500}); lastSeen = Date.now(); render(latest);
+    const s = await request('/status.json', {timeout: 2500}); received = true;
+    adoptStatus(s); render(latest);
   } catch (error) {
-    $('connection').textContent = '接続待ち · Wi-Fi接続を確認してください（自動再試行）'; controls();
+    lastSeen = 0;
+    $('connection').textContent = received || error instanceof SyntaxError
+      ? '状態データ・画面更新のエラー（自動再試行）'
+      : '装置から応答がありません（自動再試行）';
+    controls();
   } finally { refreshInFlight = false; }
 }
-async function poll() { await refresh(); setTimeout(poll, 800); }
+function adoptStatus(s) {
+  if (!s || typeof s.state !== 'string' || typeof s.export_phase !== 'string' ||
+      !s.foot || !s.upright || !s.command ||
+      typeof s.command.pending !== 'boolean' ||
+      !Number.isInteger(s.command.completed) || !Number.isInteger(s.command.submitted) ||
+      ['running', 'ready', 'downloadable', 'controller_fresh'].some(key => typeof s[key] !== 'boolean'))
+    throw new Error('装置の状態データが不完全です');
+  latest = s; lastSeen = Date.now();
+}
+async function poll() {
+  try { await refresh(); }
+  catch (error) { $('connection').textContent = '画面更新のエラー（自動再試行）'; }
+  finally { setTimeout(poll, 800); }
+}
 async function command(path) {
   commandInFlight = true; controls(); $('message').textContent = '要求を送信中…';
-  const before = latest?.command.submitted ?? 0;
+  const before = latest?.command?.submitted ?? 0;
   try {
     await request(path, {method: 'POST', kind: 'text'});
     for (let i = 0; i < 12; ++i) {
-      const s = await request('/status.json'); latest = s; lastSeen = Date.now(); render(s);
+      const s = await request('/status.json'); adoptStatus(s); render(s);
       if (!s.command.pending && (s.command.completed > before || path === '/stop')) {
         $('message').textContent = s.command.result || '要求を処理しました'; return;
       }

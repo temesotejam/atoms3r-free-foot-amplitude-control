@@ -1,4 +1,5 @@
 #include "imu_manager.h"
+#include "runtime_diagnostics.h"
 #include <math.h>
 #include <M5Unified.h>
 #include "config.h"
@@ -169,7 +170,9 @@ void ImuManager::acquisitionLoop() {
   reader_priority_ = priority;
   portEXIT_CRITICAL(&mux_);
   for (;;) {
+    RuntimeDiag::phase(RuntimeDiag::Lane::Imu, RuntimeDiag::Phase::Wait);
     const uint32_t wakes = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    RuntimeDiag::phase(RuntimeDiag::Lane::Imu, RuntimeDiag::Phase::ImuRead);
     NotifyStamp notification;
     portENTER_CRITICAL(&notify_mux_);
     notification = notify_stamp_;
@@ -197,7 +200,9 @@ void ImuManager::acquisitionLoop() {
     portENTER_CRITICAL(&mux_);
     audit_.poll(elapsed, wakes);
     portEXIT_CRITICAL(&mux_);
+    RuntimeDiag::phase(RuntimeDiag::Lane::Imu, RuntimeDiag::Phase::ImuAudit);
     recordPollProfile(poll_observation_);
+    RuntimeDiag::beat(RuntimeDiag::Lane::Imu, elapsed);
     previous_yield_us_ = 0;
     // Keep the established overrun wait. Removing it could starve control/STOP.
     const uint32_t yield_start = micros();

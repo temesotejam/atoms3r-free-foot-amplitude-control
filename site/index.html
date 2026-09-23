@@ -13,7 +13,7 @@
     <header class="hero">
       <p class="eyebrow">ATOMS3R / FREE-FOOT AMPLITUDE CONTROL</p>
       <h1>Free-foot Runtime V2<br><span>左右足角度・制御・ログを統合</span></h1>
-      <p class="lead">Free-foot Runtime V2 / 0.47.0。内部RAMの使用量、制御タスクの管理、ログ転送を再設計した統合版です。</p>
+      <p class="lead">Free-foot Runtime V2 / 0.47.1 USB診断版。再起動理由と各処理の到達点をUSBへ繰り返し出力します。</p>
       <div class="badges"><span>ESP32-S3</span><span>BMI270 400/200 Hz</span><span>RWLOG v51</span><span>MEKF</span><span>左右足角度</span></div>
     </header>
     <section class="panel important">
@@ -27,36 +27,38 @@
       <h2>書き込みと測定</h2>
       <p>書き込み時はAtomS3RをUSBでPCへ接続し、PC版ChromeまたはEdgeで下のボタンを押してください。</p>
       <esp-web-install-button manifest="manifest-freefoot-runtime-v2.json">
-        <button slot="activate" class="primary">Free-foot Runtime V2を書き込む</button>
+        <button slot="activate" class="primary">0.47.1 USB診断版を書き込む</button>
         <span slot="unsupported" class="warning">PC版ChromeまたはEdgeを使用してください。</span>
       </esp-web-install-button>
       <ol>
         <li>測定時はバッテリーで起動し、Wi-Fi <code>AtomS3CAM_Q1_SHADOW</code>（パスワード <code>12345678</code>）へ接続します。</li>
-        <li><a href="http://192.168.4.1/">http://192.168.4.1/</a>を開きます。起動10秒後のLED点灯を目安に直立させ、左右の白マーカーが見える状態で2秒以上静止してください。</li>
+        <li><a href="http://192.168.4.1/">http://192.168.4.1/</a>を開きます。起動時のUSB待機8秒＋従来の10秒後のLED点灯を目安に直立させ、左右の白マーカーが見える状態で2秒以上静止してください。</li>
         <li>左右のゼロ点が確定して開始可能になったら測定します。測定終了後は「RWLOGを取得・再開」で保存します。足角度CSVも保存できます。</li>
         <li>次の測定には「ログを消去・次の測定へ」を使います。ゼロ点は同じ起動中は保持されます。</li>
       </ol>
-      <p>電源・通信・カメラ・制御の確認情報は装置のWeb画面からJSONで保存できます。バッテリー測定時のUSBシリアル接続は不要です。</p>
+      <p>電源・通信・カメラ・制御の確認情報は装置のWeb画面からJSONで保存できます。この診断版はUSB接続がなくても8秒後に通常処理へ進みます。不安定な場合は下のUSBログを保存してください。</p>
       <details><summary>デバイスが表示されない場合</summary><p>AtomS3RをDownload Modeへ入れてから書き込み、完了後に通常起動してください。</p></details>
     </section>
 
     <section class="panel important" id="usb-serial-panel">
       <h2>USBシリアルログ</h2>
-      <p>書き込み・起動時のUSBシリアル出力を確認できます。測定時の診断には装置のWeb画面を使います。AtomS3RをUSB接続し、<strong>115200 bps</strong>で接続します。書き込み直後はWeb Flasherがポートを使用している場合があるため、書き込み画面を閉じてから接続してください。</p>
+      <p>書き込み完了後に書き込み画面を閉じ、通常起動してから下の「USBシリアルに接続」で対象ポートを選びます。起動時の8秒間はカメラ・Wi-Fi初期化前の待機です。接続後は操作せず、問題が出るまでログを受信し、「ログを保存」でTXTを保存してください。WebUIが開けなくてもこのページから受信できます。</p>
+      <p>ポートが消えても、それまでのログを保持して許可済みのポートへ再接続します。書き込みモードのままでは通常プログラムの診断ログは出ません。<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/USB_DIAGNOSTICS.md">ログの読み方と確認手順</a></p>
 
       <div class="serial-toolbar">
         <button id="serial-connect" class="serial-button serial-connect" type="button">USBシリアルに接続</button>
         <button id="serial-disconnect" class="serial-button" type="button" disabled>切断</button>
+        <button id="serial-save" class="serial-button" type="button">ログを保存</button>
         <button id="serial-copy" class="serial-button" type="button">ログをコピー</button>
         <button id="serial-clear" class="serial-button" type="button">ログをクリア</button>
       </div>
 
+      <p><label><input id="serial-reconnect" type="checkbox" checked> USBポートの復帰後に自動再接続する</label></p>
       <p class="serial-status">状態: <strong id="serial-status">未接続</strong></p>
 
       <pre id="serial-log" class="serial-log" aria-live="polite">USBシリアル未接続
 </pre>
-      <p class="hint"><code>p</code>と<code>d</code>は再起動まで戻せません。制御実験中はCamera操作コマンドがファーム側で拒否されます。</p>
-      <p><strong>HTTP経路の追加テスト：</strong>AtomS3RのWi-Fiへ接続した状態で、まず <code>http://192.168.4.1:81/</code> を開いてください。これはArduino WebServerを使わない最小TCP応答です。次に <code>http://192.168.4.1/net-probe</code> を開きます。USBログには <code>NETDBG</code> としてaccept/request/responseが表示されます。</p>
+      <p class="hint"><code>USBDBG,boot</code>に再起動理由、<code>previous</code>に前回起動中の保存済み状態、<code>live</code>に現在の状態が出ます。USBモニターはログ受信のみで、測定の開始や再起動は行いません。電源断によって前回記録が残らない場合もあります。</p>
 
     </section>
 
@@ -68,160 +70,7 @@
       .then(s => { document.getElementById('build-sha').textContent = s.trim(); })
       .catch(() => { document.getElementById('build-sha').textContent = '取得できません。上のリンクで確認してください。'; });
 
-    let serialPort = null;
-    let serialReader = null;
-    let serialReadLoopActive = false;
-    let serialLogText = '';
-
-    const serialLog = document.getElementById('serial-log');
-    const serialStatus = document.getElementById('serial-status');
-    const connectButton = document.getElementById('serial-connect');
-    const disconnectButton = document.getElementById('serial-disconnect');
-    const copyButton = document.getElementById('serial-copy');
-    const clearButton = document.getElementById('serial-clear');
-    const commandButtons = [...document.querySelectorAll('.serial-command')];
-
-    function setSerialStatus(text, state = '') {
-      serialStatus.textContent = text;
-      serialStatus.dataset.state = state;
-    }
-
-    function setSerialControls(connected) {
-      connectButton.disabled = connected;
-      disconnectButton.disabled = !connected;
-      commandButtons.forEach(button => { button.disabled = !connected; });
-    }
-
-    function appendSerial(text) {
-      if (!text) return;
-      if (serialLogText === 'USBシリアル未接続\n') serialLogText = '';
-      serialLogText += text;
-      // Prevent an accidentally endless session from making the page unusable.
-      // Keep the newest 2 MiB, which is far larger than the expected CAMDBG log.
-      const maxChars = 2 * 1024 * 1024;
-      if (serialLogText.length > maxChars) {
-        serialLogText = '[古いログを省略しました]\n' + serialLogText.slice(-maxChars);
-      }
-      serialLog.textContent = serialLogText;
-      serialLog.scrollTop = serialLog.scrollHeight;
-    }
-
-    async function readSerialLoop() {
-      const decoder = new TextDecoder();
-      serialReadLoopActive = true;
-      try {
-        while (serialPort && serialPort.readable && serialReadLoopActive) {
-          serialReader = serialPort.readable.getReader();
-          try {
-            while (serialReadLoopActive) {
-              const { value, done } = await serialReader.read();
-              if (done) break;
-              if (value) appendSerial(decoder.decode(value, {stream: true}));
-            }
-          } finally {
-            serialReader.releaseLock();
-            serialReader = null;
-          }
-        }
-      } catch (error) {
-        appendSerial('\n[Serial read error] ' + error.message + '\n');
-        setSerialStatus('読取エラー', 'error');
-      }
-    }
-
-    async function connectSerial() {
-      if (!('serial' in navigator)) {
-        setSerialStatus('Web Serial非対応ブラウザ', 'error');
-        appendSerial('[ERROR] PC版Chrome/Edgeを使用してください。\n');
-        return;
-      }
-      try {
-        setSerialStatus('ポート選択中…');
-        serialPort = await navigator.serial.requestPort();
-        await serialPort.open({ baudRate: 115200, bufferSize: 65536 });
-        serialLogText = '';
-        serialLog.textContent = '';
-        setSerialControls(true);
-        setSerialStatus('接続中 115200 bps', 'ok');
-        appendSerial('[Browser] USB Serial connected @ 115200 bps\n');
-        readSerialLoop();
-      } catch (error) {
-        serialPort = null;
-        setSerialControls(false);
-        setSerialStatus('接続失敗', 'error');
-        appendSerial('[Serial connect error] ' + error.message + '\n');
-      }
-    }
-
-    async function disconnectSerial() {
-      serialReadLoopActive = false;
-      try {
-        if (serialReader) {
-          try { await serialReader.cancel(); } catch (_) {}
-        }
-        if (serialPort) {
-          try { await serialPort.close(); } catch (_) {}
-        }
-      } finally {
-        serialReader = null;
-        serialPort = null;
-        setSerialControls(false);
-        setSerialStatus('未接続');
-        appendSerial('[Browser] USB Serial disconnected\n');
-      }
-    }
-
-    async function sendSerialCommand(command) {
-      if (!serialPort || !serialPort.writable) {
-        setSerialStatus('未接続', 'error');
-        return;
-      }
-      const writer = serialPort.writable.getWriter();
-      try {
-        await writer.write(new TextEncoder().encode(command + '\n'));
-        appendSerial('[Browser -> AtomS3R] ' + command + '\n');
-      } catch (error) {
-        appendSerial('[Serial write error] ' + error.message + '\n');
-        setSerialStatus('送信エラー', 'error');
-      } finally {
-        writer.releaseLock();
-      }
-    }
-
-    connectButton.addEventListener('click', connectSerial);
-    disconnectButton.addEventListener('click', disconnectSerial);
-    clearButton.addEventListener('click', () => {
-      serialLogText = '';
-      serialLog.textContent = '';
-    });
-    copyButton.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(serialLogText);
-        const before = copyButton.textContent;
-        copyButton.textContent = 'コピーしました';
-        setTimeout(() => { copyButton.textContent = before; }, 1200);
-      } catch (error) {
-        setSerialStatus('コピー失敗', 'error');
-        appendSerial('[Clipboard error] ' + error.message + '\n');
-      }
-    });
-    commandButtons.forEach(button => {
-      button.disabled = true;
-      button.addEventListener('click', () => sendSerialCommand(button.dataset.cmd));
-    });
-
-    setSerialControls(false);
-
-    navigator.serial?.addEventListener('disconnect', event => {
-      if (serialPort && event.target === serialPort) {
-        serialReadLoopActive = false;
-        serialReader = null;
-        serialPort = null;
-        setSerialControls(false);
-        setSerialStatus('USB切断');
-        appendSerial('[Browser] USB device disconnected\n');
-      }
-    });
   </script>
+  <script src="serial-monitor.js" defer></script>
 </body>
 </html>

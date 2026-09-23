@@ -1,4 +1,5 @@
 #include "foot_observer.h"
+#include "runtime_diagnostics.h"
 #include "foot_angle_estimator.h"
 #include "esp_timer.h"
 #include <new>
@@ -40,14 +41,21 @@ void FootObserver::loop() {
   uint32_t seq = 0;
   uint64_t last_valid_us = 0;
   for (;;) {
+    RuntimeDiag::phase(RuntimeDiag::Lane::Camera, RuntimeDiag::Phase::Snapshot);
     const auto run_before = control_->snapshot();
     // Capture for boot zero/idle alignment and throughout START/MEASURE/END.
     // Once a run is complete the camera is idle while logs are prepared/sent.
     if (run_before.state_id == 4 || run_before.state_id == 5) {
-      camera_->stopContinuous(); vTaskDelay(pdMS_TO_TICKS(20)); continue;
+      RuntimeDiag::phase(RuntimeDiag::Lane::Camera, RuntimeDiag::Phase::CameraStop);
+      camera_->stopContinuous();
+      RuntimeDiag::beat(RuntimeDiag::Lane::Camera, seq);
+      RuntimeDiag::phase(RuntimeDiag::Lane::Camera, RuntimeDiag::Phase::Wait);
+      vTaskDelay(pdMS_TO_TICKS(20)); continue;
     }
     const uint64_t begin = esp_timer_get_time();
+    RuntimeDiag::phase(RuntimeDiag::Lane::Camera, RuntimeDiag::Phase::CameraCapture);
     camera_fb_t* fb = camera_->startContinuous() ? camera_->acquireContinuous(200) : nullptr;
+    RuntimeDiag::phase(RuntimeDiag::Lane::Camera, RuntimeDiag::Phase::Snapshot);
     const auto run = control_->snapshot();
     FootFrame f{};
     f.sequence = ++seq; f.delivered_us = esp_timer_get_time();
@@ -61,6 +69,7 @@ void FootObserver::loop() {
       f.timestamp_valid = f.frame_us > 0 && f.frame_us <= f.delivered_us &&
           f.delivered_us - f.frame_us < 500000;
     }
+    RuntimeDiag::phase(RuntimeDiag::Lane::Camera, RuntimeDiag::Phase::CameraProcess);
     const uint32_t processing_start = micros();
     const auto a = right_.process(f.frame_valid ? fb->buf : nullptr);
     const auto b = left_.process(f.frame_valid ? fb->buf : nullptr);
@@ -80,12 +89,14 @@ void FootObserver::loop() {
     if (b.valid) { f.left_x = b.center_x_px; f.left_deg = bl.angle_deg; }
     f.right_contrast = a.peak_contrast; f.left_contrast = b.peak_contrast;
     f.processing_us = micros() - processing_start;
+    RuntimeDiag::phase(RuntimeDiag::Lane::Camera, RuntimeDiag::Phase::CameraRelease);
     camera_->releaseContinuous(fb);
     float fps = 0;
     if (f.frame_valid) {
       if (last_valid_us && f.delivered_us > last_valid_us) fps = 1000000.0f / (f.delivered_us - last_valid_us);
       last_valid_us = f.delivered_us;
     }
+    RuntimeDiag::phase(RuntimeDiag::Lane::Camera, RuntimeDiag::Phase::Publish);
     portENTER_CRITICAL(&mux_);
     if (!f.frame_valid) ++status_.frame_failures;
     if (status_.recording && f.run_id == recording_run_id_) {
@@ -101,6 +112,8 @@ void FootObserver::loop() {
     status_.zero_samples = zero_.count;
     status_.fps = fps;
     portEXIT_CRITICAL(&mux_);
+    RuntimeDiag::beat(RuntimeDiag::Lane::Camera, seq);
+    RuntimeDiag::phase(RuntimeDiag::Lane::Camera, RuntimeDiag::Phase::Wait);
     const int64_t remaining = 66667 - (esp_timer_get_time() - begin);
     if (remaining > 0) vTaskDelay(pdMS_TO_TICKS((remaining + 999) / 1000));
     else vTaskDelay(1);

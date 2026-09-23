@@ -5,6 +5,7 @@
 #include <freertos/task.h>
 #include <string.h>
 #include "timing_deadline.h"
+#include "runtime_diagnostics.h"
 
 // One permanent controller owner, including idle and calibration. HTTP sends
 // commands and consumes POD snapshots; it never calls the live runner/IMU.
@@ -231,11 +232,15 @@ class RunControlWorker {
   void oneStep() {
     step_(context_);
     RunControlSnapshot next{};
+    RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::Snapshot);
     capture_(context_, next);
+    RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::Publish);
     portENTER_CRITICAL(&mux_);
     snapshot_ = next;
     active_ = next.running;
     portEXIT_CRITICAL(&mux_);
+    RuntimeDiag::beat(RuntimeDiag::Lane::Control, next.state_id);
+    RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::Wait);
   }
   void loop() {
     for (;;) {

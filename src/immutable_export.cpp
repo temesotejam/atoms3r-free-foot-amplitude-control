@@ -1,4 +1,5 @@
 #include "immutable_export.h"
+#include "runtime_diagnostics.h"
 #include <esp_system.h>
 
 bool ImmutableExport::begin(PsramLogger& logger) {
@@ -23,9 +24,14 @@ bool ImmutableExport::reset() {
   portENTER_CRITICAL(&mux_); status_ = Status{}; portEXIT_CRITICAL(&mux_); return true;
 }
 void ImmutableExport::loop() {
-  for (;;) { ulTaskNotifyTake(pdTRUE, portMAX_DELAY); build(); }
+  for (;;) {
+    RuntimeDiag::beat(RuntimeDiag::Lane::Export);
+    RuntimeDiag::phase(RuntimeDiag::Lane::Export, RuntimeDiag::Phase::Wait);
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY); build();
+  }
 }
 void ImmutableExport::build() {
+  RuntimeDiag::phase(RuntimeDiag::Lane::Export, RuntimeDiag::Phase::ExportMetadata);
   metadata_ = PsramString{};
   metadata_ = logger_->buildMetadataJson();
   if (!metadata_.ok()) {
@@ -34,6 +40,7 @@ void ImmutableExport::build() {
     status_.phase = Phase::Error;
     portEXIT_CRITICAL(&mux_); return;
   }
+  RuntimeDiag::phase(RuntimeDiag::Lane::Export, RuntimeDiag::Phase::ExportCrc);
   header_ = logger_->buildHeader(metadata_.length());
   export_protocol::Span spans[] = {
     {reinterpret_cast<const uint8_t*>(&header_), sizeof(header_)},
@@ -49,10 +56,12 @@ void ImmutableExport::build() {
       crc_ = export_protocol::crc32(crc_, span.data + offset, length);
       offset += length; hashed += length;
       portENTER_CRITICAL(&mux_); status_.hashed_bytes = hashed; portEXIT_CRITICAL(&mux_);
+      RuntimeDiag::beat(RuntimeDiag::Lane::Export, hashed);
       vTaskDelay(1);
     }
   }
   // Publish only after the complete CRC and every byte/offset are immutable.
+  RuntimeDiag::phase(RuntimeDiag::Lane::Export, RuntimeDiag::Phase::Publish);
   Status complete;
   complete.bytes = header_.crc_offset + 4; complete.hashed_bytes = complete.bytes;
   complete.crc = crc_;

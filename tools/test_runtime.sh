@@ -2,9 +2,11 @@
 set -euo pipefail
 python3 tools/embed_runtime_web.py --check
 node --check web/runtime.js
+node --check site/serial-monitor.js
+node tools/test_serial_monitor.js
 node tools/test_runtime_web.js
 python3 tools/test_rwlog_v46_converter.py
-for name in runtime_control export_protocol previous_peak_math; do
+for name in runtime_control export_protocol previous_peak_math diagnostic_journal; do
   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o -Isrc tools/test_${name}.cpp -o /tmp/test_${name}
   /tmp/test_${name}
 done

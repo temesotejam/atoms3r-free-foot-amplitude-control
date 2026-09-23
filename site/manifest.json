@@ -1,6 +1,6 @@
 {
   "name": "AtomS3R Free-foot Runtime V2",
-  "version": "0.47.0-freefoot-runtime-v2",
+  "version": "0.47.1-usb-diagnostics",
   "builds": [
     {
       "chipFamily": "ESP32-S3",

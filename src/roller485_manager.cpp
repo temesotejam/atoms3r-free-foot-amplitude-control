@@ -1,4 +1,5 @@
 #include "roller485_manager.h"
+#include "runtime_diagnostics.h"
 
 #include <Wire.h>
 
@@ -115,6 +116,7 @@ void Roller485Manager::ioTaskLoop() {
   publishTelemetry();
 
   for (;;) {
+    RuntimeDiag::phase(RuntimeDiag::Lane::Roller, RuntimeDiag::Phase::RollerInit);
     if (!io_task_ready_) {
       requested_current_mA_ = 0;
       command_mA_ = 0;
@@ -139,11 +141,14 @@ void Roller485Manager::ioTaskLoop() {
         telemetry_.io_task_ready = false;
         telemetry_.roller_ok = false;
         publishTelemetry();
+        RuntimeDiag::beat(RuntimeDiag::Lane::Roller, 0);
+        RuntimeDiag::phase(RuntimeDiag::Lane::Roller, RuntimeDiag::Phase::Wait);
         vTaskDelay(pdMS_TO_TICKS(Config::ROLLER_IO_RETRY_PERIOD_MS));
         continue;
       }
     }
 
+    RuntimeDiag::phase(RuntimeDiag::Lane::Roller, RuntimeDiag::Phase::RollerIo);
     RollerCommand cmd;
     while (command_queue_ && xQueueReceive(command_queue_, &cmd, 0) == pdTRUE) {
       if (!applyCurrentMa(cmd)) {
@@ -204,6 +209,8 @@ void Roller485Manager::ioTaskLoop() {
     telemetry_.requested_current_mA = requested_current_mA_;
     telemetry_.applied_current_mA = command_mA_;
     publishTelemetry();
+    RuntimeDiag::beat(RuntimeDiag::Lane::Roller, io_task_ready_ ? 1 : 0);
+    RuntimeDiag::phase(RuntimeDiag::Lane::Roller, RuntimeDiag::Phase::Wait);
     ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1));
   }
 }

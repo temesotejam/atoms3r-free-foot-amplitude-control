@@ -1,12 +1,19 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.0
+# Current integrated build: Free-foot Runtime V2 / 0.47.1 USB diagnostics
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
-[Runtime architecture, tests and hardware checklist](docs/FREEFOOT_RUNTIME_V2.md)
+[USB diagnostic procedure](docs/USB_DIAGNOSTICS.md) ·
+[Instability review](docs/INSTABILITY_REVIEW.md) ·
+[Runtime architecture](docs/FREEFOOT_RUNTIME_V2.md)
 
 The current main branch integrates observation-only right/left foot angles with
 the V46al-R2 controller. It uses permanent control ownership, PSRAM event storage,
 and a resumable, CRC-verified RWLOG export. Integrated hardware validation is
 pending; build/host tests do not establish camera frame rate or control deadlines.
+Version 0.47.1 adds an eight-second startup connection window, a separate USB
+observer, RTC reset evidence, and a serial monitor that retains logs across USB
+reconnection. It also fixes a reproduced browser error that could stop polling
+after malformed status data. The cause of the reported device/USB instability
+is not yet established; this is an instrumented build, not a claimed hardware fix.
 
 The earlier implementation notes below are retained as history.
 

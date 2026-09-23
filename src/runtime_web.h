@@ -4,7 +4,7 @@ static const char RUNTIME_HTML[] PROGMEM = R"FREEFOOT(<!doctype html><html lang=
 <style>
 :root{font-family:system-ui,sans-serif;color:#1d293d;background:#eef2f5;font-size:16px}*{box-sizing:border-box}body{max-width:950px;margin:auto;padding:20px}h1{font-size:1.65rem;margin-bottom:4px}h2{font-size:1.08rem}p{line-height:1.6}.muted{color:#546477;font-size:.88rem}.card{background:white;border-radius:14px;padding:20px;margin:16px 0;border:1px solid #d9e1e8}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.value{font-size:2rem;font-variant-numeric:tabular-nums;margin:4px 0}.label{font-size:.85rem;color:#546477}button{padding:13px 18px;border:0;border-radius:8px;background:#174b8e;color:white;font:inherit;cursor:pointer;margin:4px 4px 4px 0}button:disabled{opacity:.4;cursor:default}#stop{background:#b62032}#clear,#cancel{background:#58677a}code,pre{font-family:ui-monospace,monospace}pre{white-space:pre-wrap;font-size:.78rem;overflow-wrap:anywhere}#connection{font-weight:600}progress{width:100%;height:24px}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px 4px;border-bottom:1px solid #e1e6eb}canvas{width:100%;height:120px;background:#f3f6fa;border-radius:8px}#message{min-height:26px;color:#9c2636}a{color:#174b8e}
 </style>
-<h1>AtomS3R Free-foot</h1><div class="muted">0.47.0 · Runtime V2 · 足角度は観測用</div>
+<h1>AtomS3R Free-foot</h1><div class="muted">0.47.1 · USB診断版 · 足角度は観測用</div>
 <p id="connection">接続を確認中…</p>
 <section class="card"><div class="grid"><div><div class="label">状態</div><div class="value" id="state">—</div></div><div><div class="label">残り時間</div><div class="value" id="remaining">—</div></div><div><div class="label">胴体 MEKF</div><div class="value" id="pitch">—</div></div><div><div class="label">指令 / 実測電流</div><div class="value" style="font-size:1.5rem" id="current">—</div></div></div>
 <p id="guide">起動後は静止させてください。LEDが点灯したら直立させ、左右マーカーが見える状態で2秒以上静止します。</p>
@@ -15,7 +15,7 @@ static const char RUNTIME_HTML[] PROGMEM = R"FREEFOOT(<!doctype html><html lang=
 <p class="muted" id="foot-status">ゼロ点は起動ごとに1回だけ確定します。</p><p class="muted">角度の正方向はマーカーが左へ動く方向です。検出失敗・古い画像・校正範囲外を区別して表示し、その状態もログに保存します。</p></section>
 <section class="card"><h2>測定ログ</h2><p>測定終了後にログを確定します。中断した場合は「取得・再開」で続きから取得できます。画面を再読み込みしても、端末に保存済みの部分を再利用します。</p>
 <button id="download" disabled>RWLOGを取得・再開</button><button id="cancel" disabled>取得を一時停止</button><button id="csv" disabled>足角度CSVを保存</button>
-<progress id="progress" value="0" max="1"></progress><div id="transfer" role="status">測定待ち</div><p class="muted">RWLOGにIMU・制御イベント・電流・LED同期・足角度をまとめて保存します。USBシリアル接続は不要です。</p></section>
+<progress id="progress" value="0" max="1"></progress><div id="transfer" role="status">測定待ち</div><p class="muted">RWLOGにIMU・制御イベント・電流・LED同期・足角度をまとめて保存します。USB診断ログは書き込みページから保存できます。</p></section>
 <details class="card"><summary>診断情報</summary><button id="diagnostics">診断JSONを保存</button><pre id="diagnostic-view">—</pre></details>
 <script>
 'use strict';
@@ -45,7 +45,7 @@ async function request(path, {method = 'GET', kind = 'json', timeout = 3000} = {
 }
 function controls() {
   const fresh = latest && Date.now() - lastSeen < 3500;
-  const busy = commandInFlight || !!latest?.command.pending;
+  const busy = commandInFlight || !!latest?.command?.pending;
   const building = latest?.export_phase === 'building';
   $('start').disabled = !fresh || busy || transferRunning || !latest.ready || latest.running || latest.export_phase !== 'empty';
   $('clear').disabled = !fresh || busy || transferRunning || building || latest.running || !['FINISHED', 'ESTOP'].includes(latest.state);
@@ -88,20 +88,39 @@ function render(s) {
 async function refresh() {
   if (refreshInFlight) return;
   refreshInFlight = true;
+  let received = false;
   try {
-    latest = await request('/status.json', {timeout: 2500}); lastSeen = Date.now(); render(latest);
+    const s = await request('/status.json', {timeout: 2500}); received = true;
+    adoptStatus(s); render(latest);
   } catch (error) {
-    $('connection').textContent = '接続待ち · Wi-Fi接続を確認してください（自動再試行）'; controls();
+    lastSeen = 0;
+    $('connection').textContent = received || error instanceof SyntaxError
+      ? '状態データ・画面更新のエラー（自動再試行）'
+      : '装置から応答がありません（自動再試行）';
+    controls();
   } finally { refreshInFlight = false; }
 }
-async function poll() { await refresh(); setTimeout(poll, 800); }
+function adoptStatus(s) {
+  if (!s || typeof s.state !== 'string' || typeof s.export_phase !== 'string' ||
+      !s.foot || !s.upright || !s.command ||
+      typeof s.command.pending !== 'boolean' ||
+      !Number.isInteger(s.command.completed) || !Number.isInteger(s.command.submitted) ||
+      ['running', 'ready', 'downloadable', 'controller_fresh'].some(key => typeof s[key] !== 'boolean'))
+    throw new Error('装置の状態データが不完全です');
+  latest = s; lastSeen = Date.now();
+}
+async function poll() {
+  try { await refresh(); }
+  catch (error) { $('connection').textContent = '画面更新のエラー（自動再試行）'; }
+  finally { setTimeout(poll, 800); }
+}
 async function command(path) {
   commandInFlight = true; controls(); $('message').textContent = '要求を送信中…';
-  const before = latest?.command.submitted ?? 0;
+  const before = latest?.command?.submitted ?? 0;
   try {
     await request(path, {method: 'POST', kind: 'text'});
     for (let i = 0; i < 12; ++i) {
-      const s = await request('/status.json'); latest = s; lastSeen = Date.now(); render(s);
+      const s = await request('/status.json'); adoptStatus(s); render(s);
       if (!s.command.pending && (s.command.completed > before || path === '/stop')) {
         $('message').textContent = s.command.result || '要求を処理しました'; return;
       }
