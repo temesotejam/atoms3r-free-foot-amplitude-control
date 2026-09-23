@@ -24,6 +24,9 @@ struct CameraOneShotSnapshot {
 
   uint32_t xclk_hz = 16000000UL;
   uint16_t xclk_warmup_ms = 20;
+  uint16_t minimum_idle_ms = 0;  // Serial debug build: no automatic capture schedule.
+  int8_t consumer_core = -1;     // No background camera consumer task.
+  uint8_t consumer_priority = 0;
 
   bool cam_task_priority_patch_observed = false;
   uint8_t cam_task_original_priority = 0;
