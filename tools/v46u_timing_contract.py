@@ -61,7 +61,7 @@ def normalize_phase1n_camera_validation(path, data):
         if health_start in data:
             start=data.index(health_start)
             end=data.index('''  bool begin(Step step, Capture capture, void* context) {''', start)
-            data=data[:start]+data[end:]
+            data=data[:start]+'\n'+data[end:]
         getter='''  Health healthSnapshot() const {
     Health h;
     portENTER_CRITICAL(&mux_);
