@@ -9,6 +9,76 @@ from v46ak_observation_contract import normalize_file as normalize_v46ak_file
 from v46al_control_contract import normalize_file as normalize_v46al_file
 ROOT=Path(__file__).resolve().parents[1]
 
+def normalize_phase1n_camera_validation(path, data):
+    """Remove the approved Phase 1N observation layer before frozen timing hashes."""
+    if path == 'src/main.cpp':
+        start_marker='// Phase 1N: one observation-only camera acquisition during an Autonomous run.\n'
+        end_marker='static void displayLine'
+        if start_marker in data:
+            start=data.index(start_marker)
+            end=data.index(end_marker, start)
+            data=data[:start]+data[end:]
+        route='''  server.on("/camera-run-validation", HTTP_GET, []() {
+    server.sendHeader("Cache-Control", "no-store");
+    server.send(200, "application/json; charset=utf-8", phase1nCameraValidationJson());
+  });
+
+'''
+        data=data.replace(route,'')
+        data=data.replace('''  out.energy_control_autonomous = runner.energyControlAutonomousMode();
+  out.pulse_active = st.pulse_active;
+  out.measure_elapsed_ms = st.measure_elapsed_ms;
+''','')
+        data=data.replace('''  if (run_control.active()) {
+    // Phase 1N deliberately runs on this lower-priority task. The camera can
+    // block this task while run control and BMI270 acquisition keep preempting it.
+    servicePhase1nRunCameraValidation(run_control.snapshot());
+    web.update();
+    delay(1);
+    return;
+  }
+
+  // Preserve the completed result for HTTP inspection, but arm a fresh Phase 1N
+  // record when the next run transfers ownership to the worker.
+  phase1n_camera.run_seen = false;
+
+''','''  if (run_control.active()) {
+    web.update();
+    delay(1);
+    return;
+  }
+
+''')
+    elif path == 'src/run_control_worker.h':
+        data=data.replace('''  bool energy_control_autonomous = false;
+  bool pulse_active = false;
+  uint32_t measure_elapsed_ms = 0;
+''','')
+        health_start='''  // Small lock-bounded view used by Phase 1N. It intentionally exposes only
+  // deadline counters; no controller state is read from the HTTP task.
+  struct Health {
+'''
+        if health_start in data:
+            start=data.index(health_start)
+            end=data.index('''  bool begin(Step step, Capture capture, void* context) {''', start)
+            data=data[:start]+data[end:]
+        getter='''  Health healthSnapshot() const {
+    Health h;
+    portENTER_CRITICAL(&mux_);
+    h.steps = audit_.steps;
+    h.max_period_us = audit_.max_period_us;
+    h.max_path_us = audit_.max_path_us;
+    h.sample_deadline_over = audit_.sample_completion.over;
+    h.sample_deadline_max_us = audit_.sample_completion.maximum;
+    h.runner_deadline_over = audit_.runner_work.over;
+    h.runner_deadline_max_us = audit_.runner_work.maximum;
+    portEXIT_CRITICAL(&mux_);
+    return h;
+  }
+'''
+        data=data.replace(getter,'')
+    return data
+
 def normalize_camera_coexistence(path, data):
     if path != 'src/main.cpp':
         return data
@@ -69,7 +139,8 @@ def normalize_camera_coexistence(path, data):
     return data
 
 def original_timing_file(path):
-    data=normalize_camera_coexistence(path,(ROOT/path).read_text())
+    data=normalize_phase1n_camera_validation(path,(ROOT/path).read_text())
+    data=normalize_camera_coexistence(path,data)
     # V46al-R1 is the declared active-control delta; remove it before retained hashes.
     data=normalize_v46al_file(path, data)
     # V46ak is observation-only; remove it before checking the retained baseline.
