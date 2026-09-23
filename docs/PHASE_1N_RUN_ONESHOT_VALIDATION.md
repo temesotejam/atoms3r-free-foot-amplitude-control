@@ -145,3 +145,25 @@ The existing 256 -> 128 -> 64 byte ENOMEM shrink behavior remains.
 The Web diagnostic endpoint identifies this build with
 `revision=rwlog_download_diag_v4_internal_staging_20260923` and reports
 `socket_source_memory=internal_stack_staging`.
+
+## Compact Autonomous RWLOG metadata
+
+The Autonomous 30 s capture now uses `metadata_profile=autonomous_compact_v1`.
+The binary RWLOG format remains v51 and every 258-byte timeseries sample is retained.
+
+Retained metadata:
+- firmware / attitude / amplitude-control revisions and current model constants,
+- all rendered Autonomous peak events,
+- all rendered Autonomous zero-cross decision events including pre-input current/wheel state,
+- IMU acquisition diagnostics,
+- RunControl deadline diagnostics,
+- current-read timing summary,
+- event counts, overflow/truncation status and final metadata byte count.
+
+Omitted from Autonomous RWLOG metadata because they are inactive/fixed for this run:
+legacy calibration tables, Q_IDENT, E2/Q1-shadow event tables, solver-comparison event
+rings, timing-probe event rings, and fixed state/column legends. Older modes still use
+the legacy full metadata builder.
+
+This changes metadata payload size only. The v51 header, CRC, sample layout, sample
+frequency, controller, estimator, motor command and converter remain unchanged.

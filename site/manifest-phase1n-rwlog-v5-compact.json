@@ -1,0 +1,15 @@
+{
+  "name": "AtomS3R Phase 1N RWLOG Compact Metadata V5",
+  "version": "0.46.42-camera-phase1n-rwlog-v5-compact",
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {"path": "firmware/bootloader.bin", "offset": 0},
+        {"path": "firmware/partitions.bin", "offset": 32768},
+        {"path": "firmware/boot_app0.bin", "offset": 57344},
+        {"path": "firmware/firmware-phase1n-rwlog-v5-compact.bin", "offset": 65536}
+      ]
+    }
+  ]
+}
