@@ -8,6 +8,7 @@
 #include "camera_serial_debug.h"
 #include "bounded_web_server.h"
 #include "tcp_transport_debug.h"
+#include "rwlog_diag_server_task.h"
 #include "experiment_runner.h"
 #include "imu_manager.h"
 #include "psram_logger.h"
@@ -388,6 +389,9 @@ void setup() {
 
   web.begin(server, runner, imu, roller, logger);
   tcpTransportDebugBegin();
+  const bool rwlog_diag_task_ok = rwlogDiagServerBegin();
+  Serial.printf("RWLOG diagnostic server: %s http://192.168.4.1:82/rwlog-download-health\n",
+                rwlog_diag_task_ok ? "OK" : "FAILED");
   cameraSerialDebugBegin(camera_probe);
   Serial.printf("AP SSID: %s\n", Config::AP_SSID);
   Serial.println("Open http://192.168.4.1/ and start Autonomous Energy Control V7");

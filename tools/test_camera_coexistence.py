@@ -10,6 +10,7 @@ camera = (ROOT / "src/camera_coexistence.cpp").read_text(encoding="utf-8")
 header = (ROOT / "src/camera_coexistence.h").read_text(encoding="utf-8")
 serial = (ROOT / "src/camera_serial_debug.cpp").read_text(encoding="utf-8")
 net = (ROOT / "src/tcp_transport_debug.cpp").read_text(encoding="utf-8")
+rwdiag_server = (ROOT / "src/rwlog_diag_server_task.cpp").read_text(encoding="utf-8")
 bounded = (ROOT / "src/bounded_web_server.cpp").read_text(encoding="utf-8")
 bounded_h = (ROOT / "src/bounded_web_server.h").read_text(encoding="utf-8")
 patch = (ROOT / "src/camera_task_priority_patch.cpp").read_text(encoding="utf-8")
@@ -152,6 +153,12 @@ for token in (
 assert 'server.on("/net-probe", HTTP_GET' in main
 assert "tcpTransportDebugBegin();" in main
 assert "tcpTransportDebugUpdate();" in main
+assert '#include "rwlog_diag_server_task.h"' in main
+assert "rwlogDiagServerBegin();" in main
+assert "constexpr uint16_t kRwlogDiagPort = 82" in rwdiag_server
+assert "xTaskCreatePinnedToCore(" in rwdiag_server
+assert 'GET /rwlog-download-health ' in rwdiag_server
+assert "rwlogDownloadDiagnosticsJson()" in rwdiag_server
 
 # Still no image/foot-angle analysis.
 for token in ("foot_angle", "right_foot", "left_foot", "centroid", "deg_per_px"):

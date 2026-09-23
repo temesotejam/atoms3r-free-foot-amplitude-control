@@ -2075,14 +2075,22 @@ bool PsramLogger::streamRwLog(WebServer& server) {
 
   const uint32_t stream_start_ms = millis();
   bool ok = true;
-  rwlogDownloadDiagSetPhase("header");
-  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(&header), sizeof(header));
-  rwlogDownloadDiagSetPhase("metadata");
-  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(metadata.c_str()), metadata.length());
-  rwlogDownloadDiagSetPhase("samples");
-  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(samples_), sample_bytes);
-  rwlogDownloadDiagSetPhase("crc");
-  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(&crc), sizeof(crc));
+  if (ok) {
+    rwlogDownloadDiagSetPhase("header");
+    ok = writeBytes(server, reinterpret_cast<const uint8_t*>(&header), sizeof(header));
+  }
+  if (ok) {
+    rwlogDownloadDiagSetPhase("metadata");
+    ok = writeBytes(server, reinterpret_cast<const uint8_t*>(metadata.c_str()), metadata.length());
+  }
+  if (ok) {
+    rwlogDownloadDiagSetPhase("samples");
+    ok = writeBytes(server, reinterpret_cast<const uint8_t*>(samples_), sample_bytes);
+  }
+  if (ok) {
+    rwlogDownloadDiagSetPhase("crc");
+    ok = writeBytes(server, reinterpret_cast<const uint8_t*>(&crc), sizeof(crc));
+  }
 
   downloading_ = false;
   last_error_ = ok ? "" : "rwlog_stream_failed";

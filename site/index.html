@@ -31,14 +31,14 @@
       <p>Phase 1Nは<strong>Run中one-shot共存検証版</strong>です。通常時はreceiver OFF / XCLK OFFを維持し、Autonomous Energy Controlの測定開始10秒以降に<strong>1回だけ自動撮影</strong>します。撮影後はreceiver/XCLKをOFFへ戻し、画像処理はまだ行いません。</p>
       <p>115200 bpsのシリアルモニタで、<code>s</code>=状態表示、<code>c</code>=1枚だけ撮影、<code>i</code>=強制idle、<code>p</code>=センサ電源OFF、<code>d</code>=Camera完全deinit、<code>h</code>=ヘルプです。<code>p</code>と<code>d</code>は再起動まで戻せません。</p>
       <p>USBログには2秒ごとのheartbeatに加え、自動撮影後に<code>PHASE1N,...</code>を1行出します。撮影時間、前後のIMU healthy/stale、制御deadline違反数、receiver/XCLKの復帰状態をここで確認できます。手動<code>c</code>は停止中の追加確認用です。</p>
-      <p><strong>RWLOG paced v6:</strong> compact metadataに加え、RWLOG送信を256 Bごとに2 msペースへ制限します。lwIPの送信バッファを一気に埋めず、約1 MBでも最低約8秒で安定送信する設計です。</p>
+      <p><strong>RWLOG diag82 v7:</strong> compact metadata・256 B/2 ms送信に加え、RWLOG診断を独立FreeRTOSタスクのport 82へ分離します。ダウンロードがport 80を占有したままでも <code>http://192.168.4.1:82/rwlog-download-health</code> を開いて送信状況を確認できます。</p>
       <p>書き込み後はまずモータを動かさず、Wi-Fi <code>AtomS3CAM_Q1_SHADOW</code>へ接続し、<code>http://192.168.4.1/camera-health</code> と通常WebUIを確認します。Run中one-shot後の結果は <code>http://192.168.4.1/camera-run-validation</code> で確認できます。</p>
     </section>
 
     <section class="panel important">
       <h2>このページから直接書き込めます</h2>
-      <p>AtomS3R を USB でPCへ接続し、Chrome または Edge のデスクトップ版で下のボタンを押してください。<strong>RWLOG paced v6専用のmanifest/firmwareファイル名を使用しているため、直前版のブラウザキャッシュは再利用されません。</strong></p>
-      <esp-web-install-button manifest="manifest-phase1n-rwlog-v6-paced.json">
+      <p>AtomS3R を USB でPCへ接続し、Chrome または Edge のデスクトップ版で下のボタンを押してください。<strong>RWLOG diag82 v7専用のmanifest/firmwareファイル名を使用しているため、直前版のブラウザキャッシュは再利用されません。</strong></p>
+      <esp-web-install-button manifest="manifest-phase1n-rwlog-v7-diag82.json">
         <button slot="activate" class="primary">AtomS3RへCamera Run One-Shot Phase 1Nを書き込む</button>
         <span slot="unsupported" class="warning">このブラウザはWeb Serial / WebUSBに対応していません。PC版ChromeまたはEdgeを使用してください。</span>
       </esp-web-install-button>
