@@ -15,9 +15,11 @@ def normalize_camera_coexistence(path, data):
     data=data.replace('#include "esp_heap_caps.h"\n','')
     data=data.replace('#include "camera_coexistence.h"\n','')
     data=data.replace('#include "camera_serial_debug.h"\n','')
+    data=data.replace('#include "tcp_transport_debug.h"\n','')
     data=data.replace('OneShotCamera camera_probe;\n','')
+    data=data.replace('  tcpTransportDebugBegin();\n','')
     data=data.replace('  cameraSerialDebugBegin(camera_probe);\n','')
-    data=data.replace('  cameraSerialDebugUpdate(camera_probe, !runner.running());\n\n','')
+    data=data.replace('  cameraSerialDebugUpdate(camera_probe, !runner.running());\n  tcpTransportDebugUpdate();\n\n','')
     data=data.replace('''  Serial.printf("Camera internal cam_task: patch=%s core=%d priority=%u->%u\\n",
                 camera_boot.cam_task_priority_patch_observed ? "YES" : "NO",
                 static_cast<int>(camera_boot.cam_task_core),

@@ -7,6 +7,7 @@ main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
 camera = (ROOT / "src/camera_coexistence.cpp").read_text(encoding="utf-8")
 header = (ROOT / "src/camera_coexistence.h").read_text(encoding="utf-8")
 serial = (ROOT / "src/camera_serial_debug.cpp").read_text(encoding="utf-8")
+net = (ROOT / "src/tcp_transport_debug.cpp").read_text(encoding="utf-8")
 patch = (ROOT / "src/camera_task_priority_patch.cpp").read_text(encoding="utf-8")
 pio = (ROOT / "platformio.ini").read_text(encoding="utf-8")
 
@@ -66,6 +67,22 @@ for token in (
 
 # Destructive debug actions cannot be triggered while the control run is active.
 assert "DENIED_CONTROL_RUN_ACTIVE" in serial
+
+# Port 81 is an independent raw-TCP probe; port 80 has a tiny WebServer probe.
+for token in (
+    "WiFiServer g_server(kDiagPort)",
+    "constexpr uint16_t kDiagPort = 81",
+    "raw tcp port 81 ok",
+    "NETDBG,accept",
+    "NETDBG,request",
+    "NETDBG,response",
+    "largest_internal",
+    "largest_dma",
+):
+    assert token in net, token
+assert 'server.on("/net-probe", HTTP_GET' in main
+assert "tcpTransportDebugBegin();" in main
+assert "tcpTransportDebugUpdate();" in main
 
 # Still no image/foot-angle analysis.
 for token in ("foot_angle", "right_foot", "left_foot", "centroid", "deg_per_px"):

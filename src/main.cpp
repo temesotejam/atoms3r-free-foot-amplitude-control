@@ -6,6 +6,7 @@
 #include "config.h"
 #include "camera_coexistence.h"
 #include "camera_serial_debug.h"
+#include "tcp_transport_debug.h"
 #include "experiment_runner.h"
 #include "imu_manager.h"
 #include "psram_logger.h"
@@ -163,7 +164,21 @@ void setup() {
                 control_task_ok ? "OK" : "FAILED");
 
   // Minimal one-shot camera probe independent of the full Web UI/status JSON.
+  server.on("/net-probe", HTTP_GET, []() {
+    Serial.printf(
+        "NETDBG,webserver80_handler,path=/net-probe,ms=%lu,internal=%u,largest_internal=%u,dma=%u,largest_dma=%u\n",
+        static_cast<unsigned long>(millis()),
+        static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+        static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)),
+        static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_DMA)),
+        static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_DMA)));
+    server.sendHeader("Cache-Control", "no-store");
+    server.send(200, "text/plain; charset=utf-8", "arduino WebServer port 80 ok\n");
+    Serial.println("NETDBG,webserver80_response_complete,path=/net-probe");
+  });
+
   server.on("/camera-health", HTTP_GET, []() {
+    Serial.println("NETDBG,webserver80_handler,path=/camera-health");
     const CameraOneShotSnapshot c = camera_probe.snapshot();
     char body[384];
     snprintf(body, sizeof(body),
@@ -197,6 +212,7 @@ void setup() {
   });
 
   web.begin(server, runner, imu, roller, logger);
+  tcpTransportDebugBegin();
   cameraSerialDebugBegin(camera_probe);
   Serial.printf("AP SSID: %s\n", Config::AP_SSID);
   Serial.println("Open http://192.168.4.1/ and start Autonomous Energy Control V7");
@@ -262,6 +278,7 @@ static bool runControlStep(void*) {
 
 void loop() {
   cameraSerialDebugUpdate(camera_probe, !runner.running());
+  tcpTransportDebugUpdate();
 
   // While a run is active, this lower-priority Arduino task owns only HTTP.
   // Never put a mutex around handleClient and the controller: that would
