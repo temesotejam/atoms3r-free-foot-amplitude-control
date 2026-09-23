@@ -87,16 +87,11 @@ def normalize_camera_coexistence(path, data):
     data=data.replace('#include "camera_serial_debug.h"\n','')
     data=data.replace('#include "bounded_web_server.h"\n','')
     data=data.replace('#include "tcp_transport_debug.h"\n','')
-    data=data.replace('#include "rwlog_diag_server_task.h"\n','')
     data=data.replace('BoundedWriteWebServer server(Config::HTTP_PORT);\n',
                       'WebServer server(Config::HTTP_PORT);\n')
     data=data.replace('OneShotCamera camera_probe;\n','')
     data=data.replace('static uint32_t startup_guide_last_diag_ms = 0;\n','')
     data=data.replace('  tcpTransportDebugBegin();\n','')
-    data=data.replace('''  const bool rwlog_diag_task_ok = rwlogDiagServerBegin();
-  Serial.printf("RWLOG diagnostic server: %s http://192.168.4.1:82/rwlog-download-health\\n",
-                rwlog_diag_task_ok ? "OK" : "FAILED");
-''','')
     data=data.replace('  cameraSerialDebugBegin(camera_probe);\n','')
     data=data.replace('  cameraSerialDebugUpdate(camera_probe, !runner.running());\n  tcpTransportDebugUpdate();\n\n','')
     data=data.replace('''  Serial.printf("Camera internal cam_task: patch=%s core=%d priority=%u->%u\\n",

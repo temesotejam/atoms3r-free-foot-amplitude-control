@@ -185,20 +185,3 @@ The RWLOG body path now mirrors that behavior:
 At 256 bytes / 2 ms the theoretical application-side floor is about 128 kB/s,
 so a 1 MB body should take on the order of 8 seconds plus protocol overhead, not
 hours.
-
-### Independent diagnostic server on port 82
-
-The previous health endpoint shared the same port-80 WebServer as the blocking
-download handler. When the download stalled, the endpoint itself could not run.
-
-RWLOG diagnostics are now also served by a dedicated FreeRTOS task on core 0,
-priority 1, using an independent WiFiServer on port 82:
-
-`http://192.168.4.1:82/rwlog-download-health`
-
-The diagnostic state is copied under a short critical section before JSON rendering,
-so the port-82 task can inspect counters while the port-80 download task is updating
-them. The old port-80 endpoint remains available when the main server is idle.
-
-The streaming state machine also preserves the actual failing phase; later section
-labels are no longer written after an earlier section fails.
