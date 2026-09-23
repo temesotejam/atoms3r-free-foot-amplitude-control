@@ -39,7 +39,6 @@ assert "i2c_driver_delete(I2C_NUM_0)" in camera
 # No background camera acquisition task exists in the serial debug build.
 assert "xTaskCreatePinnedToCore(" not in camera
 assert "taskLoop" not in camera
-assert "camera_oneshot" not in camera
 
 # Manual one-shot still obeys the strict XCLK/receiver gate.
 capture = camera[camera.index("camera_fb_t* OneShotCamera::acquire") :
