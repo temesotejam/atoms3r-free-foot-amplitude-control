@@ -4,53 +4,45 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#111827">
-  <title>AtomS3R Amplitude Control Development — V46al-R2 active control</title>
+  <title>AtomS3R Free-foot Runtime V2</title>
   <link rel="stylesheet" href="styles.css">
   <script type="module" src="https://unpkg.com/esp-web-tools@10.1.1/dist/web/install-button.js?module"></script>
 </head>
 <body>
   <main class="shell">
     <header class="hero">
-      <p class="eyebrow">ATOMS3R / AMPLITUDE CONTROL DEVELOPMENT / V46al-R2 ACTIVE CONTROL</p>
-      <h1>Amplitude Control Development<br><span>Previous-Peak Active Control</span></h1>
-      <p class="lead">実機確認済みV46ak stableを基準に、直前ピーク A_prev の残差補正だけを次ピーク予測へ追加し、実際のQ決定へ使う V46al-R2 / 0.46.42 です。</p>
-      <div class="badges"><span>ESP32-S3</span><span>BMI270 400/200 Hz</span><span>RWLOG v51</span><span>MEKF amplitude</span><span>3 ms compensation</span></div>
+      <p class="eyebrow">ATOMS3R / FREE-FOOT AMPLITUDE CONTROL</p>
+      <h1>Free-foot Runtime V2<br><span>左右足角度・制御・ログを統合</span></h1>
+      <p class="lead">Free-foot Runtime V2 / 0.47.0。内部RAMの使用量、制御タスクの管理、ログ転送を再設計した統合版です。</p>
+      <div class="badges"><span>ESP32-S3</span><span>BMI270 400/200 Hz</span><span>RWLOG v51</span><span>MEKF</span><span>左右足角度</span></div>
     </header>
     <section class="panel important">
-      <h2>実制御検証版：V46al-R2 / 0.46.42</h2>
-      <p>V46akの rate-only A_free に、5 Runから得た side別の A_prev 残差補正を追加します。補正は目標8°・10秒以降・測定support内だけで有効です。実電流とホイール速度は引き続き観測のみで、制御入力には使いません。</p>
-      <p><strong>測定条件：遅延補償3 ms固定・目標8°・30秒。</strong>開始姿勢と撮影条件をそろえてください。補償時間の設定は不要です。各Run終了後、<strong>次の開始前にRWLOGと動画を保存</strong>してください。</p>
-      <p>MEKF、3 ms ZEROクロス補償、ピーク/side判定、電流モデル、既存solver、Ki、300 mA・最大100 ms、非常停止、RWLOGダウンロードはV46ak基準のまま維持しています。</p>
-      <p><a href="https://github.com/temesotejam/atoms3r-amplitude-control-development/blob/main/docs/V46AL_R2_PREVIOUS_PEAK_ACTIVE_CONTROL.md">V46al-R2の変更内容</a> / <a href="https://github.com/temesotejam/atoms3r-amplitude-control-v46ak-stable">V46ak stable</a></p>
-      <p>公開ビルド：<code id="build-sha">取得中</code><br><a href="build-sha.txt">ビルドSHAを確認</a> / <a href="firmware/SHA256SUMS.txt">ファームウェアのSHA-256</a></p>
+      <h2>今回の構成</h2>
+      <p>V46al-R2の制御計算、固定3ms補償、300mA・最大100msパルス、30秒測定、開始・終了のLED同期を維持。白マーカーの位置から左右足角度を取得・表示・保存します。足角度は観測用で、制御入力には使用しません。</p>
+      <p>ログ用イベント配列と大きな説明データはPSRAMに配置します。測定後にログを確定し、CRCで検証できる4KB以下のチャンクで取得します。ブラウザの一時停止・再接続・再読み込み後も保存済みの部分を再利用できます。</p>
+      <p><strong>実機での統合動作は確認待ちです。</strong>ビルドとホスト検証の範囲、実機で確認する項目は<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/FREEFOOT_RUNTIME_V2.md">設計・確認手順</a>を参照してください。カメラは15fpsを目標に設定し、画面に実測値を表示します。</p>
+      <p>公開ビルド：<code id="build-sha">取得中</code><br><a href="build-sha.txt">ビルドSHA</a> / <a href="firmware/SHA256SUMS.txt">ファームウェアSHA-256</a></p>
     </section>
-
     <section class="panel important">
-      <h2>Camera共存 Phase 1</h2>
-      <p><strong>今回は足角度計算をまだ入れていません。</strong> 固定足完成版の制御・MEKF・RWLOG・Web UIをそのまま残し、GC0308を低負荷で動作させてもWi-Fi/Web UIが維持できるかだけを確認する版です。</p>
-      <p>Phase 1Nは<strong>Run中one-shot共存検証版</strong>です。通常時はreceiver OFF / XCLK OFFを維持し、Autonomous Energy Controlの測定開始10秒以降に<strong>1回だけ自動撮影</strong>します。撮影後はreceiver/XCLKをOFFへ戻し、画像処理はまだ行いません。</p>
-      <p>115200 bpsのシリアルモニタで、<code>s</code>=状態表示、<code>c</code>=1枚だけ撮影、<code>i</code>=強制idle、<code>p</code>=センサ電源OFF、<code>d</code>=Camera完全deinit、<code>h</code>=ヘルプです。<code>p</code>と<code>d</code>は再起動まで戻せません。</p>
-      <p>USBログには2秒ごとのheartbeatに加え、自動撮影後に<code>PHASE1N,...</code>を1行出します。撮影時間、前後のIMU healthy/stale、制御deadline違反数、receiver/XCLKの復帰状態をここで確認できます。手動<code>c</code>は停止中の追加確認用です。</p>
-      <p><strong>WEBUI RECOVERY v6:</strong> compact metadataに加え、RWLOG送信を256 Bごとに2 msペースへ制限します。lwIPの送信バッファを一気に埋めず、約1 MBでも最低約8秒で安定送信する設計です。</p>
-      <p>書き込み後はまずモータを動かさず、Wi-Fi <code>AtomS3CAM_Q1_SHADOW</code>へ接続し、<code>http://192.168.4.1/camera-health</code> と通常WebUIを確認します。Run中one-shot後の結果は <code>http://192.168.4.1/camera-run-validation</code> で確認できます。</p>
-    </section>
-
-    <section class="panel important">
-      <h2>このページから直接書き込めます</h2>
-      <p>AtomS3R を USB でPCへ接続し、Chrome または Edge のデスクトップ版で下のボタンを押してください。<strong>WEBUI RECOVERY v6専用のmanifest/firmwareファイル名を使用しているため、直前版のブラウザキャッシュは再利用されません。</strong></p>
-      <esp-web-install-button manifest="manifest-webui-recovery-v6.json">
-        <button slot="activate" class="primary">AtomS3RへCamera Run One-Shot Phase 1Nを書き込む</button>
-        <span slot="unsupported" class="warning">このブラウザはWeb Serial / WebUSBに対応していません。PC版ChromeまたはEdgeを使用してください。</span>
+      <h2>書き込みと測定</h2>
+      <p>書き込み時はAtomS3RをUSBでPCへ接続し、PC版ChromeまたはEdgeで下のボタンを押してください。</p>
+      <esp-web-install-button manifest="manifest-freefoot-runtime-v2.json">
+        <button slot="activate" class="primary">Free-foot Runtime V2を書き込む</button>
+        <span slot="unsupported" class="warning">PC版ChromeまたはEdgeを使用してください。</span>
       </esp-web-install-button>
-      <details>
-        <summary>デバイスが表示されない場合</summary>
-        <p>AtomS3RをDownload Modeへ入れてから再度ボタンを押してください。書き込み完了後は通常起動してください。</p>
-      </details>
+      <ol>
+        <li>測定時はバッテリーで起動し、Wi-Fi <code>AtomS3CAM_Q1_SHADOW</code>（パスワード <code>12345678</code>）へ接続します。</li>
+        <li><a href="http://192.168.4.1/">http://192.168.4.1/</a>を開きます。起動10秒後のLED点灯を目安に直立させ、左右の白マーカーが見える状態で2秒以上静止してください。</li>
+        <li>左右のゼロ点が確定して開始可能になったら測定します。測定終了後は「RWLOGを取得・再開」で保存します。足角度CSVも保存できます。</li>
+        <li>次の測定には「ログを消去・次の測定へ」を使います。ゼロ点は同じ起動中は保持されます。</li>
+      </ol>
+      <p>電源・通信・カメラ・制御の確認情報は装置のWeb画面からJSONで保存できます。バッテリー測定時のUSBシリアル接続は不要です。</p>
+      <details><summary>デバイスが表示されない場合</summary><p>AtomS3RをDownload Modeへ入れてから書き込み、完了後に通常起動してください。</p></details>
     </section>
 
     <section class="panel important" id="usb-serial-panel">
       <h2>USBシリアルログ</h2>
-      <p>Phase 1Nのデバッグログをこのページ上で直接確認できます。AtomS3RをUSB接続し、<strong>115200 bps</strong>で接続します。書き込み直後はWeb Flasherがポートを使用している場合があるため、書き込み画面を閉じてから接続してください。</p>
+      <p>書き込み・起動時のUSBシリアル出力を確認できます。測定時の診断には装置のWeb画面を使います。AtomS3RをUSB接続し、<strong>115200 bps</strong>で接続します。書き込み直後はWeb Flasherがポートを使用している場合があるため、書き込み画面を閉じてから接続してください。</p>
 
       <div class="serial-toolbar">
         <button id="serial-connect" class="serial-button serial-connect" type="button">USBシリアルに接続</button>
@@ -61,68 +53,14 @@
 
       <p class="serial-status">状態: <strong id="serial-status">未接続</strong></p>
 
-      <div class="serial-commands">
-        <span>Camera debug:</span>
-        <button type="button" class="serial-command" data-cmd="s">s 状態表示</button>
-        <button type="button" class="serial-command" data-cmd="c">c 1枚撮影</button>
-        <button type="button" class="serial-command" data-cmd="i">i 強制idle</button>
-        <button type="button" class="serial-command danger" data-cmd="p">p センサ電源OFF</button>
-        <button type="button" class="serial-command danger" data-cmd="d">d Camera deinit</button>
-        <button type="button" class="serial-command" data-cmd="h">h ヘルプ</button>
-      </div>
-
       <pre id="serial-log" class="serial-log" aria-live="polite">USBシリアル未接続
 </pre>
       <p class="hint"><code>p</code>と<code>d</code>は再起動まで戻せません。制御実験中はCamera操作コマンドがファーム側で拒否されます。</p>
       <p><strong>HTTP経路の追加テスト：</strong>AtomS3RのWi-Fiへ接続した状態で、まず <code>http://192.168.4.1:81/</code> を開いてください。これはArduino WebServerを使わない最小TCP応答です。次に <code>http://192.168.4.1/net-probe</code> を開きます。USBログには <code>NETDBG</code> としてaccept/request/responseが表示されます。</p>
-      <p><strong>Phase 1NでもWebServerの全レスポンスを安定化しています。</strong> WebUI本体だけでなく、<code>/status.json</code>などRAM上の応答も最大<strong>256 byte</strong>に分け、成功ごとに2 ms待機します。一時的なTCPキュー満杯・メモリ不足では2 ms後に再試行します。USBログには <code>NETDBG,web_write_*</code> が出ます。またLED点灯中は簡潔な<code>POSEDBG</code>を1秒ごとに出します。</p>
+
     </section>
 
-    <section class="panel">
-      <h2>書き込み後の実験</h2>
-      <ol>
-        <li>これまで通り、機体を安全な倒した状態にして電源を入れます。</li>
-        <li>起動から10秒経つと同期LEDが<strong>常時点灯</strong>します。これは「立ててよい」の合図です。</li>
-        <li>機体を立てて静止させます。実測した立位重力方向に約400 ms安定するとLEDが<strong>消灯</strong>します。</li>
-        <li>Wi-Fi <code>AtomS3CAM_Q1_SHADOW</code> に接続し、<code>http://192.168.4.1/</code> を開きます。</li>
-        <li>targetは <strong>8.0 deg固定</strong>です。</li>
-        <li>動画撮影を開始し、同期LEDが映るようにします。</li>
-        <li><strong>Start autonomous energy control</strong> を押します。</li>
-        <li>測定開始10秒以降にCameraが1回だけ自動撮影します。制御とIMU取得は高優先度タスクのまま継続し、撮影後はreceiver/XCLKをOFFへ戻します。</li>
-        <li>START同期の最初のOFF区間でfresh Accelを約0.8秒平均し、Ry(180°)機体座標へ変換してMEKFを再初期化します。起動時に求めたGyro Biasも同じ座標変換で再適用します。</li>
-        <li>その後のSTART/MID/END同期LEDパターンは従来通りです。30秒のモータ駆動測定後、RWLOGをダウンロードします。</li>
-      </ol>
-      <p class="hint">測定中は大きな状態JSONを生成せず、小さな状態応答のみ1秒に1回確認します。ESTOPは41秒待たず表示に反映され、Emergency stopのPOSTも使用できます。</p>
-    </section>
-
-    <section class="panel">
-      <h2>V46q取得系のIMU座標と更新（V46sで継承）</h2>
-      <p>実機の立位ではRaw IMUの重力がほぼ−Z方向で、動画の物理Pitch角速度は+raw gyと一致しました。V46sでも右手系を保つ <code>R_y(π)=diag(-1,+1,-1)</code> を用います。</p>
-      <div class="grid">
-        <article><strong>Accel</strong><p><code>(-ax, +ay, -az)</code></p></article>
-        <article><strong>Gyro</strong><p><code>(-gx, +gy×0.908911)</code>と<code>-gz</code></p></article>
-        <article><strong>Gyro predict</strong><p>400 Hz（2.5 ms ODR）</p></article>
-        <article><strong>Accel correction</strong><p>fresh Accelのみ 200 Hz</p></article>
-      </div>
-    </section>
-
-    <section class="panel">
-      <h2>posterior と制御予測</h2>
-      <div class="grid">
-        <article><strong>Posterior</strong><p><code>pitch_mekf_measurement_relative_deg</code><br>測定開始時を0°とする未補償角。動画との比較に使用。</p></article>
-        <article><strong>旧Quaternion予測</strong><p><code>pitch_mekf_predicted_abs_deg</code><br>Autonomous中は計算せず、診断値はNaN。</p></article>
-        <article><strong>Control</strong><p><code>pitch_mekf_control_deg</code><br>未補償角に角速度×補償時間を加えた、タイミング判定用の角度。</p></article>
-        <article><strong>補償時間</strong><p><code>3 ms 固定</code><br>設定操作は不要です。</p></article>
-      </div>
-    </section>
-
-    <section class="panel safety">
-      <h2>実機動作について</h2>
-      <p>このV46ajはモータを実際に駆動します。可動部から手・ケーブル・治具を離し、異常時は実験画面の <strong>Emergency stop</strong> を使用してください。</p>
-      <p>Attitude revision: <code>v46aj_fixed_3ms_compensation_20260920</code></p>
-    </section>
-
-    <footer>atoms3r-amplitude-control-development / V46al-R2 active control</footer>
+    <footer>atoms3r-free-foot-amplitude-control / Free-foot Runtime V2</footer>
   </main>
   <script>
     fetch('build-sha.txt', {cache: 'no-store'})

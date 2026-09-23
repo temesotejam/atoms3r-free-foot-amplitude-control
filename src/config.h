@@ -119,7 +119,7 @@ static constexpr uint32_t MADGWICK_SETTLING_MS = 5000UL;
 
 // Dedicated manual-release capture. The first window is held static by the
 // operator; it is metadata, not a per-run angle-zero operation.
-static constexpr char PASSIVE_CAPTURE_FIRMWARE_REVISION[] = "energy_control_autonomous_v7_side_response_correction_20260904";
+static constexpr char PASSIVE_CAPTURE_FIRMWARE_REVISION[] = "freefoot_runtime_v2_0_47_0_20260923";
 static constexpr char ATTITUDE_VALIDATION_REVISION[] = "v46aj_fixed_3ms_compensation_20260920";
 // V46ak changes observation only. ATTITUDE_VALIDATION_REVISION intentionally remains V46aj.
 static constexpr char AMPLITUDE_CONTROL_OBSERVATION_REVISION[] = "v46ak_pre_input_state_observation_20260920";
@@ -819,7 +819,10 @@ static constexpr uint32_t BETA_SWEEP_TOTAL_DURATION_MS =
     BETA_SWEEP_TRIAL_COUNT * BETA_SWEEP_TRIAL_DURATION_MS +
     (BETA_SWEEP_TRIAL_COUNT - 1) * BETA_SWEEP_INTER_TRIAL_REST_MS;
 
-static constexpr size_t LOG_BUFFER_BYTES = 6UL * 1024UL * 1024UL;
+// 30 s at the fastest 2 ms log cadence + 10 s of 20 ms sync rows
+// require < 4 MiB. Five MiB retains margin for event-triggered rows and leaves
+// room for a worst-case completed export; old 6 MiB allocation crowded it out.
+static constexpr size_t LOG_BUFFER_BYTES = 5UL * 1024UL * 1024UL;
 static constexpr uint8_t BUFFER_WARNING_PERCENT = 90;
 
 }  // namespace Config

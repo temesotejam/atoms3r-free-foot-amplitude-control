@@ -1,7 +1,8 @@
 #pragma once
 
 #include <Arduino.h>
-#include <WebServer.h>
+#include "psram_string.h"
+#include <math.h>
 
 #include "log_types.h"
 #include "solver_audit.h"
@@ -555,7 +556,7 @@ class PsramLogger {
   };
   void addEnergyControlAutonomousZeroCrossEvent(const EnergyControlAutonomousZeroCrossEvent& event);
   void addSolverShadowEvent(const SolverShadowEvent& event);
-  void addSolverAuditEvent(const solver_audit::Record& event) { if (solver_audit_) solver_audit_->push(event); }
+  void addSolverAuditEvent(const solver_audit::Record& event) { if (!sealed_ && solver_audit_) solver_audit_->push(event); }
   void addTimingProbeEvent(const TimingProbeEvent& event);
   bool energyControlAutonomousEventCapacityReached() const {
     return energy_control_autonomous_peak_event_count_ >= kMaxEnergyControlAutonomousEvents ||
@@ -592,15 +593,34 @@ class PsramLogger {
   size_t psramTotal() const;
   size_t psramFree() const;
 
-  bool streamRwLog(WebServer& server);
+  // The control owner seals only after terminal events have been committed.
+  void seal() { sealed_ = true; last_measurement_done_ = true; }
+  bool sealed() const { return sealed_; }
+  const uint8_t* sampleBytes() const { return reinterpret_cast<const uint8_t*>(samples_); }
+  PsramString buildMetadataJson() const;
+  RwLogFileHeader buildHeader(uint32_t metadata_size) const;
+  static size_t eventStorageBytes() { return sizeof(EventStorage); }
 
 private:
-  String buildMetadataJson() const;
-  RwLogFileHeader buildHeader(uint32_t metadata_size) const;
-  uint32_t calculateCrc(const RwLogFileHeader& header, const String& metadata) const;
-  static uint32_t crc32Update(uint32_t crc, const uint8_t* data, size_t len);
-  static bool writeBytes(WebServer& server, const uint8_t* data, size_t len);
 
+
+  struct EventStorage {
+    IdentificationEvent identification_events_[kMaxIdentificationEvents] = {};
+    CalibrationPeakEvent calibration_peak_events_[kMaxCalibrationPeakEvents] = {};
+    CalibrationProbeEvent calibration_probe_events_[kMaxCalibrationProbeEvents] = {};
+    CalibrationStateGateEvent calibration_state_gate_events_[kMaxCalibrationStateGateEvents] = {};
+    CalibrationBuildUpEvent calibration_build_up_events_[kMaxCalibrationBuildUpEvents] = {};
+    E2ShadowPeakEvent e2_shadow_peak_events_[kMaxE2ShadowPeakEvents] = {};
+    Q1ShadowEvent q1_shadow_events_[kMaxQ1ShadowEvents] = {};
+    QIdentEvent q_ident_events_[kMaxQIdentEvents] = {};
+    EnergyControlV0Event energy_control_v0_events_[kMaxEnergyControlV0Events] = {};
+    EnergyControlAutonomousPeakEvent energy_control_autonomous_peak_events_[kMaxEnergyControlAutonomousEvents] = {};
+    EnergyControlAutonomousZeroCrossEvent energy_control_autonomous_zero_cross_events_[kMaxEnergyControlAutonomousEvents] = {};
+    SolverShadowEvent solver_shadow_events_[kMaxSolverShadowEvents] = {};
+    TimingProbeEvent timing_probe_events_[kMaxTimingProbeEvents] = {};
+  };
+  EventStorage* events_ = nullptr;
+  bool sealed_ = true;
   LogSample* samples_ = nullptr;
   size_t sample_capacity_ = 0;
   size_t sample_count_ = 0;
@@ -620,38 +640,25 @@ private:
   bool energy_control_v0_mode_ = false;
   bool energy_control_autonomous_mode_ = false;
   uint32_t autonomous_timing_compensation_us_ = 0;  // Immutable metadata for the saved run.
-  IdentificationEvent identification_events_[kMaxIdentificationEvents] = {};
   uint16_t identification_event_count_ = 0;
-  CalibrationPeakEvent calibration_peak_events_[kMaxCalibrationPeakEvents] = {};
   uint8_t calibration_peak_event_count_ = 0;
-  CalibrationProbeEvent calibration_probe_events_[kMaxCalibrationProbeEvents] = {};
   uint8_t calibration_probe_event_count_ = 0;
-  CalibrationStateGateEvent calibration_state_gate_events_[kMaxCalibrationStateGateEvents] = {};
   uint8_t calibration_state_gate_event_count_ = 0;
-  CalibrationBuildUpEvent calibration_build_up_events_[kMaxCalibrationBuildUpEvents] = {};
   uint8_t calibration_build_up_event_count_ = 0;
-  E2ShadowPeakEvent e2_shadow_peak_events_[kMaxE2ShadowPeakEvents] = {};
   uint16_t e2_shadow_peak_event_count_ = 0;
   bool e2_shadow_peak_event_overflow_ = false;
-  Q1ShadowEvent q1_shadow_events_[kMaxQ1ShadowEvents] = {};
   uint16_t q1_shadow_event_count_ = 0;
   bool q1_shadow_event_overflow_ = false;
-  QIdentEvent q_ident_events_[kMaxQIdentEvents] = {};
   uint16_t q_ident_event_count_ = 0;
   bool q_ident_event_overflow_ = false;
-  EnergyControlV0Event energy_control_v0_events_[kMaxEnergyControlV0Events] = {};
   uint16_t energy_control_v0_event_count_ = 0;
   bool energy_control_v0_event_overflow_ = false;
-  EnergyControlAutonomousPeakEvent energy_control_autonomous_peak_events_[kMaxEnergyControlAutonomousEvents] = {};
   uint16_t energy_control_autonomous_peak_event_count_ = 0;
-  EnergyControlAutonomousZeroCrossEvent energy_control_autonomous_zero_cross_events_[kMaxEnergyControlAutonomousEvents] = {};
   uint16_t energy_control_autonomous_zero_cross_event_count_ = 0;
   bool energy_control_autonomous_event_overflow_ = false;
-  SolverShadowEvent solver_shadow_events_[kMaxSolverShadowEvents] = {};
   uint16_t solver_shadow_event_count_ = 0;
   bool solver_shadow_event_overflow_ = false;
   solver_audit::Buffer<128>* solver_audit_ = nullptr;
-  TimingProbeEvent timing_probe_events_[kMaxTimingProbeEvents] = {};
   uint16_t timing_probe_event_count_ = 0;
   bool timing_probe_event_overflow_ = false;
   CalibrationResult calibration_result_;

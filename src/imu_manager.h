@@ -1,4 +1,6 @@
 #pragma once
+#include <math.h>
+#include "psram_string.h"
 
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
@@ -64,6 +66,7 @@ class ImuManager {
   String startupDiagnosticsJson() const;
   void setStartupGuideState(const char* reason, bool confirmed, uint32_t hold_ms);
   String acquisitionDiagnosticsJson() const;
+  void appendAcquisitionDiagnostics(PsramString& json) const;
   void zeroPitch();
   void setDynamicBetaContext(bool pulse_active, uint32_t time_since_last_pulse_ms, bool pre_start_stabilize = false);
   void forceSmoothBeta(float beta, uint8_t update_mode);
@@ -74,6 +77,15 @@ class ImuManager {
   const char* lastError() const { return last_error_; }
 
  private:
+  template<class Output> void appendDiagnostics(Output& json) const;
+  template<class Output> void appendPollProfile(Output& json) const;
+  struct StartupView {
+    const char* reason = "not_started";
+    bool confirmed = false;
+    uint32_t hold_ms = 0, age_us = UINT32_MAX, sequence = 0;
+    float direction = NAN, norm = NAN, gyro = NAN;
+  };
+  StartupView startup_view_;
   static constexpr uint32_t kQueueLength = 32;
   static constexpr uint32_t kMaximumDeliveryAgeUs = 10000;
   static constexpr uint8_t kReaderCore = 1;

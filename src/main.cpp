@@ -1,13 +1,9 @@
 #include <Arduino.h>
 #include <M5Unified.h>
-#include <WebServer.h>
-#include "esp_heap_caps.h"
-
+#include "esp_timer.h"
 #include "config.h"
 #include "camera_coexistence.h"
-#include "camera_serial_debug.h"
 #include "bounded_web_server.h"
-#include "tcp_transport_debug.h"
 #include "experiment_runner.h"
 #include "imu_manager.h"
 #include "psram_logger.h"
@@ -15,6 +11,8 @@
 #include "upright_pose_guide.h"
 #include "web_ui.h"
 #include "run_control_worker.h"
+#include "foot_observer.h"
+#include "immutable_export.h"
 
 BoundedWriteWebServer server(Config::HTTP_PORT);
 OneShotCamera camera_probe;
@@ -22,481 +20,125 @@ PsramLogger logger;
 ImuManager imu;
 Roller485Manager roller;
 ExperimentRunner runner;
-WebUi web;
 RunControlWorker run_control;
+FootObserver feet;
+ImmutableExport log_export;
+WebUi web;
 
-static bool runControlStep(void*);
-static void captureRunState(void*, RunControlSnapshot&);
-
-static constexpr UBaseType_t kConsumerPriority = 2;
-static_assert(kConsumerPriority < RunControlWorker::kPriority, "Run control must preempt HTTP");
-static_assert(RunControlWorker::kPriority < 6, "BMI270 reader must preempt run control");
-
-static uint32_t startup_guide_boot_ms = 0;
-static uint32_t startup_upright_since_ms = 0;
-static uint32_t startup_guide_last_diag_ms = 0;
-static bool startup_guide_prompt_announced = false;
-static bool startup_upright_confirmed = false;
-
-// Phase 1N: one observation-only camera acquisition during an Autonomous run.
-// Camera work stays on the priority-2 Arduino/HTTP task. The priority-4
-// controller and priority-6 BMI270 reader can preempt it at all times.
-static constexpr uint32_t PHASE1N_CAMERA_TRIGGER_MS = 10000UL;
-struct Phase1nCameraValidation {
-  bool run_seen = false;
-  bool attempted = false;
-  bool capture_ok = false;
-  uint16_t run_id = 0;
-  uint32_t capture_measure_ms = 0;
-  bool pulse_active_at_trigger = false;
-  int16_t motor_cmd_mA_at_trigger = 0;
-  bool imu_healthy_before = false;
-  bool imu_healthy_after = false;
-  bool imu_stale_before = true;
-  bool imu_stale_after = true;
-  uint32_t frames_before = 0;
-  uint32_t frames_after = 0;
-  uint32_t failures_before = 0;
-  uint32_t failures_after = 0;
-  uint32_t frame_bytes = 0;
-  uint32_t capture_us = 0;
-  bool receiver_active_after = false;
-  bool xclk_active_after = false;
-  RunControlWorker::Health control_before;
-  RunControlWorker::Health control_after;
-};
-static Phase1nCameraValidation phase1n_camera;
-
-static bool phase1nWindowPass() {
-  const auto& p = phase1n_camera;
-  return p.attempted && p.capture_ok &&
-      p.frames_after == p.frames_before + 1 &&
-      p.failures_after == p.failures_before &&
-      p.imu_healthy_before && p.imu_healthy_after &&
-      !p.imu_stale_before && !p.imu_stale_after &&
-      !p.receiver_active_after && !p.xclk_active_after &&
-      p.control_after.sample_deadline_over == p.control_before.sample_deadline_over &&
-      p.control_after.runner_deadline_over == p.control_before.runner_deadline_over;
-}
-
-static String phase1nCameraValidationJson() {
-  const auto& p = phase1n_camera;
-  String s;
-  s.reserve(1700);
-  s = "{\"revision\":\"phase1n_run_oneshot_coexistence_20260923\"";
-  s += ",\"trigger_measure_ms\":" + String(PHASE1N_CAMERA_TRIGGER_MS);
-  s += ",\"run_seen\":" + String(p.run_seen ? "true" : "false");
-  s += ",\"attempted\":" + String(p.attempted ? "true" : "false");
-  s += ",\"capture_ok\":" + String(p.capture_ok ? "true" : "false");
-  s += ",\"window_pass\":" + String(phase1nWindowPass() ? "true" : "false");
-  s += ",\"final_rwlog_audit_required\":true";
-  s += ",\"run_id\":" + String(p.run_id);
-  s += ",\"capture_measure_ms\":" + String(p.capture_measure_ms);
-  s += ",\"pulse_active_at_trigger\":" + String(p.pulse_active_at_trigger ? "true" : "false");
-  s += ",\"motor_cmd_mA_at_trigger\":" + String(p.motor_cmd_mA_at_trigger);
-  s += ",\"frame_bytes\":" + String(p.frame_bytes);
-  s += ",\"capture_us\":" + String(p.capture_us);
-  s += ",\"frames_before\":" + String(p.frames_before);
-  s += ",\"frames_after\":" + String(p.frames_after);
-  s += ",\"failures_before\":" + String(p.failures_before);
-  s += ",\"failures_after\":" + String(p.failures_after);
-  s += ",\"receiver_active_after\":" + String(p.receiver_active_after ? "true" : "false");
-  s += ",\"xclk_active_after\":" + String(p.xclk_active_after ? "true" : "false");
-  s += ",\"imu_healthy_before\":" + String(p.imu_healthy_before ? "true" : "false");
-  s += ",\"imu_healthy_after\":" + String(p.imu_healthy_after ? "true" : "false");
-  s += ",\"imu_stale_before\":" + String(p.imu_stale_before ? "true" : "false");
-  s += ",\"imu_stale_after\":" + String(p.imu_stale_after ? "true" : "false");
-  s += ",\"control_steps_during_capture\":" +
-      String(p.control_after.steps - p.control_before.steps);
-  s += ",\"sample_deadline_over_before\":" + String(p.control_before.sample_deadline_over);
-  s += ",\"sample_deadline_over_after\":" + String(p.control_after.sample_deadline_over);
-  s += ",\"sample_deadline_max_us_before\":" + String(p.control_before.sample_deadline_max_us);
-  s += ",\"sample_deadline_max_us_after\":" + String(p.control_after.sample_deadline_max_us);
-  s += ",\"runner_deadline_over_before\":" + String(p.control_before.runner_deadline_over);
-  s += ",\"runner_deadline_over_after\":" + String(p.control_after.runner_deadline_over);
-  s += ",\"runner_deadline_max_us_before\":" + String(p.control_before.runner_deadline_max_us);
-  s += ",\"runner_deadline_max_us_after\":" + String(p.control_after.runner_deadline_max_us);
-  return s + "}";
-}
-
-static void servicePhase1nRunCameraValidation(const RunControlSnapshot& run) {
-  if (!phase1n_camera.run_seen) {
-    phase1n_camera = Phase1nCameraValidation{};
-    phase1n_camera.run_seen = true;
-    phase1n_camera.run_id = run.run_id;
-    Serial.println("PHASE1N,armed=1,trigger_measure_ms=10000");
-  }
-  if (!run.energy_control_autonomous || phase1n_camera.attempted) return;
-  if (run.state_id != static_cast<uint8_t>(ExperimentState::RUNNING_BATCH_SWEEP) ||
-      run.measure_elapsed_ms < PHASE1N_CAMERA_TRIGGER_MS) return;
-
-  phase1n_camera.attempted = true;
-  phase1n_camera.run_id = run.run_id;
-  phase1n_camera.capture_measure_ms = run.measure_elapsed_ms;
-  phase1n_camera.pulse_active_at_trigger = run.pulse_active;
-  phase1n_camera.motor_cmd_mA_at_trigger = run.motor_cmd_mA;
-
-  const CameraOneShotSnapshot camera_before = camera_probe.snapshot();
-  phase1n_camera.frames_before = camera_before.frame_count;
-  phase1n_camera.failures_before = camera_before.frame_failures;
-  phase1n_camera.imu_healthy_before = imu.acquisitionHealthy();
-  phase1n_camera.imu_stale_before = imu.stale(millis());
-  phase1n_camera.control_before = run_control.healthSnapshot();
-
-  camera_fb_t* frame = camera_probe.acquire(500);
-  phase1n_camera.capture_ok = frame != nullptr;
-  if (frame) {
-    phase1n_camera.frame_bytes = frame->len;
-    camera_probe.release(frame);
-  }
-
-  const CameraOneShotSnapshot camera_after = camera_probe.snapshot();
-  phase1n_camera.frames_after = camera_after.frame_count;
-  phase1n_camera.failures_after = camera_after.frame_failures;
-  phase1n_camera.capture_us = camera_after.last_capture_us;
-  phase1n_camera.receiver_active_after = camera_after.receiver_active;
-  phase1n_camera.xclk_active_after = camera_after.xclk_active;
-  phase1n_camera.imu_healthy_after = imu.acquisitionHealthy();
-  phase1n_camera.imu_stale_after = imu.stale(millis());
-  phase1n_camera.control_after = run_control.healthSnapshot();
-
-  Serial.printf(
-      "PHASE1N,run=%u,measure_ms=%lu,capture_ok=%u,capture_us=%lu,bytes=%lu,"
-      "pulse=%u,motor_mA=%d,imu=%u->%u,stale=%u->%u,frames=%lu->%lu,"
-      "fail=%lu->%lu,receiver_after=%u,xclk_after=%u,control_steps=%lu,"
-      "sample_deadline_over=%lu->%lu,runner_deadline_over=%lu->%lu,window_pass=%u\n",
-      static_cast<unsigned>(phase1n_camera.run_id),
-      static_cast<unsigned long>(phase1n_camera.capture_measure_ms),
-      phase1n_camera.capture_ok ? 1U : 0U,
-      static_cast<unsigned long>(phase1n_camera.capture_us),
-      static_cast<unsigned long>(phase1n_camera.frame_bytes),
-      phase1n_camera.pulse_active_at_trigger ? 1U : 0U,
-      static_cast<int>(phase1n_camera.motor_cmd_mA_at_trigger),
-      phase1n_camera.imu_healthy_before ? 1U : 0U,
-      phase1n_camera.imu_healthy_after ? 1U : 0U,
-      phase1n_camera.imu_stale_before ? 1U : 0U,
-      phase1n_camera.imu_stale_after ? 1U : 0U,
-      static_cast<unsigned long>(phase1n_camera.frames_before),
-      static_cast<unsigned long>(phase1n_camera.frames_after),
-      static_cast<unsigned long>(phase1n_camera.failures_before),
-      static_cast<unsigned long>(phase1n_camera.failures_after),
-      phase1n_camera.receiver_active_after ? 1U : 0U,
-      phase1n_camera.xclk_active_after ? 1U : 0U,
-      static_cast<unsigned long>(
-          phase1n_camera.control_after.steps - phase1n_camera.control_before.steps),
-      static_cast<unsigned long>(phase1n_camera.control_before.sample_deadline_over),
-      static_cast<unsigned long>(phase1n_camera.control_after.sample_deadline_over),
-      static_cast<unsigned long>(phase1n_camera.control_before.runner_deadline_over),
-      static_cast<unsigned long>(phase1n_camera.control_after.runner_deadline_over),
-      phase1nWindowPass() ? 1U : 0U);
-}
-
-static void displayLine(const char* line1, const char* line2 = "") {
-  if (!M5.Display.width()) return;
-  M5.Display.fillScreen(TFT_BLACK);
-  M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-  M5.Display.setTextSize(1);
-  M5.Display.setCursor(0, 4);
-  M5.Display.println(line1);
-  if (line2 && line2[0]) M5.Display.println(line2);
-}
-
-static void updateStartupPoseGuide() {
-  // Once a measurement starts, ExperimentRunner owns the LED completely so the
-  // existing START/MID/END video synchronization pattern is never modified.
-  if (startup_upright_confirmed || runner.running()) return;
-
-  const uint32_t now_ms = millis();
-  if (static_cast<uint32_t>(now_ms - startup_guide_boot_ms) <
-      UprightPoseGuide::GUIDE_LED_ON_AFTER_BOOT_MS) {
-    return;
-  }
-  if (!startup_guide_prompt_announced) {
-    startup_guide_prompt_announced = true;
-    Serial.println("Startup guide: 10 s elapsed; LED ON until upright pose is stable");
-    displayLine("Stand upright", "LED ON until stable");
-  }
-  digitalWrite(Config::SYNC_LED_PIN, HIGH);
-  const ImuReading& r = imu.reading();
-  const bool fresh = imu.ok() && r.last_gyro_update_us != 0 &&
-      static_cast<uint32_t>(micros() - r.last_gyro_update_us) <= 10000UL;
-  const char* reason = "stable_hold";
-  if (!imu.acquisitionHealthy()) reason = "imu_init_or_latched_fault";
-  else if (!fresh) reason = "waiting_fresh_imu";
-  else if (UprightPoseGuide::accelNormG(r) < UprightPoseGuide::UPRIGHT_MIN_ACCEL_NORM_G ||
-           UprightPoseGuide::accelNormG(r) > UprightPoseGuide::UPRIGHT_MAX_ACCEL_NORM_G) reason = "accel_norm_out_of_range";
-  else if (UprightPoseGuide::directionErrorDeg(r) > UprightPoseGuide::UPRIGHT_MAX_DIRECTION_ERROR_DEG) reason = "not_upright";
-  else if (UprightPoseGuide::gyroNormDps(r) > UprightPoseGuide::UPRIGHT_MAX_GYRO_NORM_DPS) reason = "still_moving";
-  imu.setStartupGuideState(reason, false, 0);
-
-  if (static_cast<uint32_t>(now_ms - startup_guide_last_diag_ms) >= 1000UL) {
-    startup_guide_last_diag_ms = now_ms;
-    Serial.printf(
-        "POSEDBG,ms=%lu,reason=%s,fresh=%u,dir=%.2f,acc=%.3f,gyro=%.2f,hold=%lu\n",
-        static_cast<unsigned long>(now_ms),
-        reason,
-        fresh ? 1U : 0U,
-        UprightPoseGuide::directionErrorDeg(r),
-        UprightPoseGuide::accelNormG(r),
-        UprightPoseGuide::gyroNormDps(r),
-        static_cast<unsigned long>(
-            startup_upright_since_ms ? now_ms - startup_upright_since_ms : 0U));
-  }
-
-  if (!fresh || !UprightPoseGuide::isUprightStableSample(r)) {
-    startup_upright_since_ms = 0;
-    return;
-  }
-  if (startup_upright_since_ms == 0) startup_upright_since_ms = now_ms;
-  imu.setStartupGuideState("stable_hold", false, now_ms - startup_upright_since_ms);
-  if (static_cast<uint32_t>(now_ms - startup_upright_since_ms) <
-      UprightPoseGuide::UPRIGHT_STABLE_HOLD_MS) {
-    return;
-  }
-  startup_upright_confirmed = true;
-  imu.setStartupGuideState("upright_ready", true, now_ms - startup_upright_since_ms);
-  digitalWrite(Config::SYNC_LED_PIN, LOW);
-  Serial.printf("Startup guide: upright confirmed; gravity error=%.2f deg, norm=%.3f g\n",
-                UprightPoseGuide::directionErrorDeg(r), UprightPoseGuide::accelNormG(r));
-  displayLine("Upright ready", "Start from Web UI");
-}
-
-void setup() {
-  startup_guide_boot_ms = millis();
-  // Reader priority 6 remains above this thread; system service priorities stay unchanged.
-  vTaskPrioritySet(nullptr, kConsumerPriority);
-  Serial.begin(Config::SERIAL_BAUD);
-  delay(300);
-  Serial.println();
-  // V46l is the frozen controller/attitude baseline, not the acquisition revision.
-  Serial.println("AtomS3R V46l MEKF dual-core motor validation");
-  Serial.println("V46q acquisition 0.46.16: priority BMI270 task / timestamped queue");
-  Serial.printf("IMU consumer: core=%d priority=%u; BMI270 reader core=1 priority=6\n",
-                xPortGetCoreID(), static_cast<unsigned>(uxTaskPriorityGet(nullptr)));
-
-  auto cfg = M5.config();
-  cfg.serial_baudrate = 0;
-  cfg.internal_imu = false;  // ImuManager initializes once, with bounded cold-start validation/retries.
-  M5.begin(cfg);
-  Serial.printf("V46l identity: board=%d imu_type=%d M5Unified=%s M5GFX=%s AHRS=%s base=%s attitude=%s\n",
-                static_cast<int>(M5.getBoard()), static_cast<int>(M5.Imu.getType()),
-                Config::RESOLVED_M5UNIFIED_VERSION, Config::RESOLVED_M5GFX_VERSION,
-                Config::RESOLVED_ADAFRUIT_AHRS_VERSION, Config::V62_BASE_COMMIT,
-                Config::ATTITUDE_VALIDATION_REVISION);
-  displayLine("V46q IMU", "DUAL-CORE V7");
-
-  const bool psram_ok = logger.begin();
-  Serial.printf("PSRAM: %s total=%u free=%u sample_capacity=%u\n", psram_ok ? "OK" : "FAILED",
-                static_cast<unsigned>(logger.psramTotal()), static_cast<unsigned>(logger.psramFree()),
-                static_cast<unsigned>(logger.sampleCapacity()));
-  if (!psram_ok) Serial.printf("PSRAM error: %s\n", logger.lastError());
-
-  const bool imu_ok = imu.begin();
-  Serial.printf("IMU acquisition: %s internal_i2c=%d SDA=%d SCL=%d error=%s\n",
-                imu_ok ? "OK" : "FAILED", static_cast<int>(M5.In_I2C.getPort()),
-                M5.In_I2C.getSDA(), M5.In_I2C.getSCL(), imu.lastError());
-
-  // Camera one-shot integration proof only. No marker detection or foot angle.
-  // SCCB borrows I2C0 only during boot; runtime capture never touches I2C.
-  const bool camera_ok = camera_probe.begin();
-  const CameraOneShotSnapshot camera_boot = camera_probe.snapshot();
-  Serial.printf("Camera true-one-shot: %s xclk=%luHz idle=%ums core=%d priority=%u "
-                "internal=%u->%u dma=%u->%u psram=%u->%u error=%s\n",
-                camera_ok ? "OK" : "FAILED",
-                static_cast<unsigned long>(camera_boot.xclk_hz),
-                static_cast<unsigned>(camera_boot.minimum_idle_ms),
-                static_cast<int>(camera_boot.consumer_core),
-                static_cast<unsigned>(camera_boot.consumer_priority),
-                static_cast<unsigned>(camera_boot.internal_free_before),
-                static_cast<unsigned>(camera_boot.internal_free_after),
-                static_cast<unsigned>(camera_boot.dma_free_before),
-                static_cast<unsigned>(camera_boot.dma_free_after),
-                static_cast<unsigned>(camera_boot.psram_free_before),
-                static_cast<unsigned>(camera_boot.psram_free_after),
-                camera_probe.lastError());
-  Serial.printf("Camera internal cam_task: patch=%s core=%d priority=%u->%u\n",
-                camera_boot.cam_task_priority_patch_observed ? "YES" : "NO",
-                static_cast<int>(camera_boot.cam_task_core),
-                static_cast<unsigned>(camera_boot.cam_task_original_priority),
-                static_cast<unsigned>(camera_boot.cam_task_effective_priority));
-
-  const bool roller_ok = roller.begin();
-  const bool roller_task_ok = roller_ok && roller.startIoTask(
-      Config::ROLLER_IO_TASK_CORE, Config::ROLLER_IO_TASK_PRIORITY,
-      Config::ROLLER_IO_TASK_STACK_BYTES);
-  Serial.printf("Roller485: %s task_ready=%s core=%u priority=%u\n",
-                roller_ok ? "OK" : "FAILED", roller_task_ok ? "OK" : "FAILED",
-                Config::ROLLER_IO_TASK_CORE, Config::ROLLER_IO_TASK_PRIORITY);
-
-  runner.begin(logger, imu, roller);
-  const bool control_task_ok = run_control.begin(runControlStep, captureRunState, nullptr);
-  Serial.printf("Run control worker: %s core=1 priority=4; HTTP core=1 priority=2\n",
-                control_task_ok ? "OK" : "FAILED");
-
-  // Minimal one-shot camera probe independent of the full Web UI/status JSON.
-  server.on("/net-probe", HTTP_GET, []() {
-    Serial.printf(
-        "NETDBG,webserver80_handler,path=/net-probe,ms=%lu,internal=%u,largest_internal=%u,dma=%u,largest_dma=%u\n",
-        static_cast<unsigned long>(millis()),
-        static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
-        static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)),
-        static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_DMA)),
-        static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_DMA)));
-    server.sendHeader("Cache-Control", "no-store");
-    server.send(200, "text/plain; charset=utf-8", "arduino WebServer port 80 ok\n");
-    Serial.println("NETDBG,webserver80_response_complete,path=/net-probe");
-  });
-
-  server.on("/camera-run-validation", HTTP_GET, []() {
-    server.sendHeader("Cache-Control", "no-store");
-    server.send(200, "application/json; charset=utf-8", phase1nCameraValidationJson());
-  });
-
-  server.on("/camera-health", HTTP_GET, []() {
-    Serial.println("NETDBG,webserver80_handler,path=/camera-health");
-    const CameraOneShotSnapshot c = camera_probe.snapshot();
-    char body[384];
-    snprintf(body, sizeof(body),
-        "ok camera=%u first_frame=%u frames=%lu failures=%lu "
-        "driver_active=%u sensor_powered=%u oneshot=%u receiver_active=%u xclk_active=%u "
-        "deinitialized=%u idle_ms=%u capture_us=%lu max_capture_us=%lu "
-        "cam_task_patch=%u cam_task_core=%d cam_task_priority=%u->%u "
-        "internal_free=%u dma_free=%u psram_free=%u\n",
-        c.camera_ok ? 1U : 0U,
-        c.first_frame_seen ? 1U : 0U,
-        static_cast<unsigned long>(c.frame_count),
-        static_cast<unsigned long>(c.frame_failures),
-        c.camera_driver_active ? 1U : 0U,
-        c.sensor_powered ? 1U : 0U,
-        c.one_shot_mode ? 1U : 0U,
-        c.receiver_active ? 1U : 0U,
-        c.xclk_active ? 1U : 0U,
-        c.camera_deinitialized ? 1U : 0U,
-        static_cast<unsigned>(c.minimum_idle_ms),
-        static_cast<unsigned long>(c.last_capture_us),
-        static_cast<unsigned long>(c.max_capture_us),
-        c.cam_task_priority_patch_observed ? 1U : 0U,
-        static_cast<int>(c.cam_task_core),
-        static_cast<unsigned>(c.cam_task_original_priority),
-        static_cast<unsigned>(c.cam_task_effective_priority),
-        static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
-        static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_DMA)),
-        static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM)));
-    server.sendHeader("Cache-Control", "no-store");
-    server.send(200, "text/plain; charset=utf-8", body);
-  });
-
-  web.begin(server, runner, imu, roller, logger);
-  tcpTransportDebugBegin();
-  cameraSerialDebugBegin(camera_probe);
-  Serial.printf("AP SSID: %s\n", Config::AP_SSID);
-  Serial.println("Open http://192.168.4.1/ and start Autonomous Energy Control V7");
-  displayLine("V46q / V7 ready", Config::AP_SSID);
-}
-
+static uint32_t boot_ms = 0, upright_epoch = 0;
+static uint64_t upright_since_us = 0, log_epoch_us = 0, measurement_epoch_us = 0;
+static bool upright_stable = false;
 static void updateAcquisitionContext() {
   imu.setAcquisitionContext(runner.running(),
       runner.status().state == ExperimentState::RUNNING_BATCH_SWEEP,
       static_cast<uint8_t>(runner.status().state));
 }
-static void checkAcquisitionHealth() {
-  // Added fail-closed condition; the established start and motor gates remain.
-  if (runner.running() && (!imu.acquisitionHealthy() || imu.stale(millis()))) {
-    runner.requestEmergencyStop("imu_acquisition_overflow_backlog_or_stale");
-  }
-}
-
 static void captureRunState(void*, RunControlSnapshot& out) {
   const auto& st = runner.status();
-  out.running = runner.running();
-  out.state_id = static_cast<uint8_t>(st.state);
-  out.run_id = st.run_id;
-  out.energy_control_autonomous = runner.energyControlAutonomousMode();
-  out.pulse_active = st.pulse_active;
-  out.measure_elapsed_ms = st.measure_elapsed_ms;
-  out.motor_cmd_mA = st.motor_cmd_mA;
-  out.actual_current_mA = st.roller_actual_current_mA;
-  out.remaining_ms = st.remaining_ms;
+  const auto& r = imu.reading();
+  out.running = runner.running(); out.state_id = static_cast<uint8_t>(st.state);
+  out.run_id = st.run_id; out.energy_control_autonomous = runner.energyControlAutonomousMode();
+  out.ready = st.state == ExperimentState::READY_TO_MEASURE;
+  out.imu_ok = imu.acquisitionHealthy() && !imu.stale(millis()); out.roller_ok = roller.ok();
+  out.downloadable = logger.rwlogDownloadable(); out.sample_count = logger.sampleCount();
+  out.heartbeat_us = micros(); out.imu_sample_us = r.last_gyro_update_us;
+  out.pulse_active = st.pulse_active; out.measure_elapsed_ms = st.measure_elapsed_ms;
+  out.motor_cmd_mA = st.motor_cmd_mA; out.actual_current_mA = st.roller_actual_current_mA;
+  out.remaining_ms = st.remaining_ms; out.battery_mV = st.roller_battery_mV;
+  out.pitch_deg = st.pitch_mekf_deg; out.rate_dps = st.physical_roll_rate_dps;
+  out.target_deg = runner.energyControlAutonomousTargetPeakDeg();
+  out.led_state = st.led_state; out.sync_event_id = st.sync_event_id;
+  out.upright_stable = upright_stable; out.upright_epoch = upright_epoch;
+  out.upright_since_us = upright_since_us;
+  out.log_epoch_us = log_epoch_us; out.measurement_epoch_us = measurement_epoch_us;
+  out.upright_error_deg = UprightPoseGuide::directionErrorDeg(r);
+  out.accel_norm_g = UprightPoseGuide::accelNormG(r); out.gyro_norm_dps = UprightPoseGuide::gyroNormDps(r);
   snprintf(out.state_name, sizeof(out.state_name), "%s", runner.stateName());
   snprintf(out.last_error, sizeof(out.last_error), "%s", st.last_error ? st.last_error : "");
 }
-
-static bool runControlStep(void*) {
-  const uint32_t loop_start_us = micros();
+static bool controlStep(void*) {
+  const uint32_t start = micros();
+  const bool was_running = runner.running();
+  if (run_control.takeStopRequest()) runner.requestEmergencyStop("web_estop");
   updateAcquisitionContext();
-  if (run_control.takeStopRequest()) {
-    runner.requestEmergencyStop("web_estop");
-    updateAcquisitionContext();
-    run_control.recordStep(loop_start_us, 0, 0, static_cast<uint32_t>(micros() - loop_start_us));
-    return false;
+  runner.serviceFast(); runner.updateImuDynamicBetaContext();
+  const uint32_t imu_start = micros(); imu.update();
+  const uint32_t imu_us = micros() - imu_start;
+  if (runner.running() && (!imu.acquisitionHealthy() || imu.stale(millis())))
+    runner.requestEmergencyStop("imu_acquisition_overflow_backlog_or_stale");
+  const auto& r = imu.reading();
+  const float norm = UprightPoseGuide::accelNormG(r);
+  const bool stable = millis() - boot_ms >= 10000 && imu.acquisitionHealthy() && r.last_gyro_update_us &&
+      static_cast<uint32_t>(micros() - r.last_gyro_update_us) <= 10000 &&
+      isfinite(norm) && fabsf(norm - 1.0f) <= appcfg::kAutoZeroAccelNormToleranceG &&
+      UprightPoseGuide::directionErrorDeg(r) <= appcfg::kAutoZeroMaxUprightErrorDeg &&
+      UprightPoseGuide::gyroNormDps(r) <= appcfg::kAutoZeroMaxGyroDps;
+  if (stable != upright_stable) { ++upright_epoch; upright_since_us = stable ? esp_timer_get_time() : 0; }
+  upright_stable = stable;
+  const auto command = run_control.takeCommand();
+  if (command == RunControlWorker::Command::Start) {
+    bool ok = false;
+    const char* error = "clear_previous_run_first";
+    if (runner.status().state == ExperimentState::READY_TO_MEASURE) {
+      if (!log_export.ready()) error = "export_worker_unavailable";
+      else if (!imu.acquisitionHealthy() || imu.stale(millis())) error = "imu_not_healthy";
+      else if (!feet.readyToStart()) error = "foot_camera_and_upright_zero_required";
+      else {
+        ok = runner.startEnergyControlAutonomousCapture();
+        error = ok ? "started" : runner.status().last_error;
+        if (ok) {
+          log_epoch_us = esp_timer_get_time() - static_cast<uint32_t>(micros() - logger.runStartUs());
+          measurement_epoch_us = 0;
+          feet.beginRun(runner.status().run_id, log_epoch_us);
+          run_control.beginRunAudit();
+        }
+      }
+    }
+    run_control.completeCommand(ok, error);
+  } else if (command == RunControlWorker::Command::Clear) {
+    runner.clearFinishedOrEstop(); feet.clearRun(); log_epoch_us = measurement_epoch_us = 0;
+    run_control.completeCommand(true, "cleared");
   }
-  runner.serviceFast();
-  runner.updateImuDynamicBetaContext();
-  const bool v46k_timing_probe_active = runner.energyControlAutonomousMode() && runner.running();
-  const uint32_t imu_t0_us = micros();
-  imu.update();
-  checkAcquisitionHealth();
-  const uint32_t imu_update_us = static_cast<uint32_t>(micros() - imu_t0_us);
-  const bool timing_measurement = runner.status().state == ExperimentState::RUNNING_BATCH_SWEEP;
-  const bool timing_fresh = imu.reading().gyro_fresh;
-  const uint32_t timing_sample_us = imu.reading().last_gyro_update_us;
-  const uint32_t runner_t0_us = micros();
-  runner.update();
-  const uint32_t runner_update_us = static_cast<uint32_t>(micros() - runner_t0_us);
-  const uint32_t timing_done_us = micros();
-  const uint32_t path_us = static_cast<uint32_t>(timing_done_us - loop_start_us);
-  run_control.recordSampleCompletion(timing_measurement, timing_fresh, timing_sample_us,
-                                    timing_done_us, runner_update_us);
-  if (v46k_timing_probe_active) runner.recordTimingProbeLoop(imu_update_us, runner_update_us, path_us);
-  runner.setLoopDt(path_us);
+  const bool measurement = runner.status().state == ExperimentState::RUNNING_BATCH_SWEEP;
+  const bool fresh = r.gyro_fresh;
+  const uint32_t sample_us = r.last_gyro_update_us;
+  const uint32_t runner_start = micros(); runner.update();
+  const uint32_t runner_us = micros() - runner_start, done = micros();
+  if (!measurement_epoch_us && runner.status().state == ExperimentState::RUNNING_BATCH_SWEEP)
+    measurement_epoch_us = esp_timer_get_time() - static_cast<uint64_t>(runner.status().measure_elapsed_ms) * 1000;
+  if (was_running || runner.running()) {
+    run_control.recordSampleCompletion(measurement, fresh, sample_us, done, runner_us);
+    runner.recordTimingProbeLoop(imu_us, runner_us, done - start);
+    run_control.recordStep(start, imu_us, runner_us, done - start);
+  }
+  runner.setLoopDt(done - start);
+  if (was_running && !runner.running()) { runner.sealCompletedLog(); feet.finishRun(); }
+  // The existing LED sync pattern has exclusive authority during every run.
+  if (!runner.running()) {
+    const auto foot = feet.snapshot();
+    const bool prompt = millis() - boot_ms >= 10000 && !foot.zero_ready;
+    digitalWrite(Config::SYNC_LED_PIN, prompt ? HIGH : LOW);
+    imu.setStartupGuideState(foot.zero_ready ? "upright_and_foot_ready" :
+        (stable ? "hold_upright_for_foot_zero" : "stand_upright"), foot.zero_ready,
+        stable ? (esp_timer_get_time() - upright_since_us) / 1000 : 0);
+  }
   updateAcquisitionContext();
-  run_control.recordStep(loop_start_us, imu_update_us, runner_update_us, path_us);
   return runner.running();
 }
-
-void loop() {
-  cameraSerialDebugUpdate(camera_probe, !runner.running());
-  tcpTransportDebugUpdate();
-
-  // While a run is active, this lower-priority Arduino task owns only HTTP.
-  // Never put a mutex around handleClient and the controller: that would
-  // reintroduce network waits into the IMU-consumer deadline.
-  if (run_control.active()) {
-    // Phase 1N deliberately runs on this lower-priority task. The camera can
-    // block this task while run control and BMI270 acquisition keep preempting it.
-    servicePhase1nRunCameraValidation(run_control.snapshot());
-    web.update();
-    delay(1);
-    return;
-  }
-
-  // Preserve the completed result for HTTP inspection, but arm a fresh Phase 1N
-  // record when the next run transfers ownership to the worker.
-  phase1n_camera.run_seen = false;
-
-  // Idle ownership is exclusive again after the worker's final snapshot.
-  const uint32_t loop_start_us = micros();
-  updateAcquisitionContext();
-  runner.serviceFast();
-  runner.updateImuDynamicBetaContext();
-  imu.update();
-  checkAcquisitionHealth();
-  runner.update();
-  if (!runner.running()) {
-    M5.update();
-    updateStartupPoseGuide();
-  }
-  runner.setLoopDt(static_cast<uint32_t>(micros() - loop_start_us));
-  web.update();
-
-  // Establish the V46p boundary after the Start HTTP response. Then transfer
-  // ownership exactly once; never touch the live controller after start().
-  if (runner.running()) {
-    updateAcquisitionContext();
-    if (!run_control.start()) {
-      runner.requestEmergencyStop("run_control_worker_not_ready");
-      updateAcquisitionContext();
-    }
-  }
-  taskYIELD();
+void setup() {
+  boot_ms = millis();
+  vTaskPrioritySet(nullptr, 2);
+  Serial.begin(Config::SERIAL_BAUD);
+  auto cfg = M5.config(); cfg.serial_baudrate = 0; cfg.internal_imu = false; M5.begin(cfg);
+  logger.begin(); imu.begin();
+  // Camera SCCB borrows I2C0 only during boot, before Roller485 owns this port.
+  camera_probe.begin();
+  if (roller.begin()) roller.startIoTask(Config::ROLLER_IO_TASK_CORE,
+      Config::ROLLER_IO_TASK_PRIORITY, Config::ROLLER_IO_TASK_STACK_BYTES);
+  runner.begin(logger, imu, roller);
+  run_control.begin(controlStep, captureRunState, nullptr);
+  feet.begin(camera_probe, run_control);
+  log_export.begin(logger);
+  web.begin(server, run_control, feet, log_export);
 }
+void loop() { web.update(); delay(1); }

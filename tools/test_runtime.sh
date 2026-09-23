@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+python3 tools/embed_runtime_web.py --check
+node --check web/runtime.js
+node tools/test_runtime_web.js
+python3 tools/test_rwlog_v46_converter.py
+for name in runtime_control export_protocol previous_peak_math; do
+  g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o -Isrc tools/test_${name}.cpp -o /tmp/test_${name}
+  /tmp/test_${name}
+done
+g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_foot_tracking.cpp src/white_marker_tracker.cpp src/foot_angle_estimator.cpp -o /tmp/test_foot
+/tmp/test_foot
+g++ -std=c++11 -O2 tools/test_v46n_acquisition.cpp -o /tmp/test_acq
+/tmp/test_acq
+g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_v46o_startup.cpp -o /tmp/test_startup
+/tmp/test_startup | tail -n 1
+g++ -std=c++17 -O2 tools/test_mekf_host.cpp src/mekf6.cpp -o /tmp/test_mekf
+/tmp/test_mekf
+g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wno-format -ffunction-sections -fdata-sections -Itools/host_v46o tools/test_runtime_logger.cpp src/psram_logger.cpp src/foot_observer.cpp src/foot_angle_estimator.cpp src/white_marker_tracker.cpp src/immutable_export.cpp -Wl,--gc-sections -o /tmp/test_logger
+/tmp/test_logger /tmp/runtime-fixture.rwlog
+python3 tools/test_runtime_fixture.py

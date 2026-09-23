@@ -1,3 +1,17 @@
+# Current integrated build: Free-foot Runtime V2 / 0.47.0
+
+[Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
+[Runtime architecture, tests and hardware checklist](docs/FREEFOOT_RUNTIME_V2.md)
+
+The current main branch integrates observation-only right/left foot angles with
+the V46al-R2 controller. It uses permanent control ownership, PSRAM event storage,
+and a resumable, CRC-verified RWLOG export. Integrated hardware validation is
+pending; build/host tests do not establish camera frame rate or control deadlines.
+
+The earlier implementation notes below are retained as history.
+
+---
+
 # AtomS3R Amplitude Control Development
 
 AtomS3Rを用いたリアクションホイール系の**振幅制御改善**を進めるための開発リポジトリです。

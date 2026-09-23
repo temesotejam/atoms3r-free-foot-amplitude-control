@@ -35,22 +35,24 @@ extern "C" BaseType_t __wrap_xTaskCreatePinnedToCore(
     TaskHandle_t* const pvCreatedTask,
     const BaseType_t xCoreID) {
   UBaseType_t effective_priority = uxPriority;
+  BaseType_t effective_core = xCoreID;
 
   if (pcName && strcmp(pcName, "cam_task") == 0) {
     effective_priority = kCameraInternalTaskPriority;
+    effective_core = 0;
     portENTER_CRITICAL(&g_patch_mux);
     g_patch_snapshot.observed = true;
     g_patch_snapshot.original_priority =
         static_cast<uint8_t>(uxPriority > 255 ? 255 : uxPriority);
     g_patch_snapshot.effective_priority =
         static_cast<uint8_t>(effective_priority);
-    g_patch_snapshot.core = static_cast<int8_t>(xCoreID);
+    g_patch_snapshot.core = static_cast<int8_t>(effective_core);
     portEXIT_CRITICAL(&g_patch_mux);
   }
 
   return __real_xTaskCreatePinnedToCore(
       pvTaskCode, pcName, usStackDepth, pvParameters,
-      effective_priority, pvCreatedTask, xCoreID);
+      effective_priority, pvCreatedTask, effective_core);
 }
 
 CameraTaskPriorityPatchSnapshot cameraTaskPriorityPatchSnapshot() {

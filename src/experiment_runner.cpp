@@ -3215,7 +3215,7 @@ void ExperimentRunner::maybeFinalizeTimingProbe() {
       (timing_probe_imu_captured_ ? 0x04U : 0U);
   timing_probe_event_.complete = timing_probe_event_.capture_mask == 0x07U;
   const bool run_ended = status_.state != ExperimentState::RUNNING_BATCH_SWEEP;
-  const bool terminal_partial = run_ended && timing_probe_loop_captured_ && timing_probe_imu_captured_;
+  const bool terminal_partial = run_ended;
   if (!timing_probe_event_.complete && !terminal_partial) return;
   logger_->addTimingProbeEvent(timing_probe_event_);
   timing_probe_pending_ = false;

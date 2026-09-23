@@ -31,7 +31,7 @@ constexpr int PIN_CAM_D5 = 17;
 constexpr int PIN_CAM_D6 = 11;
 constexpr int PIN_CAM_D7 = 13;
 
-constexpr uint32_t kCameraXclkHz = 16000000UL;
+constexpr uint32_t kCameraXclkHz = 20000000UL;
 constexpr uint32_t kCaptureTimeoutMs = 500;
 constexpr uint32_t kXclkWarmupMs = 20;
 
@@ -380,4 +380,42 @@ CameraOneShotSnapshot OneShotCamera::snapshot() const {
   const CameraOneShotSnapshot copy = snapshot_;
   portEXIT_CRITICAL(&mux_);
   return copy;
+}
+
+bool OneShotCamera::startContinuous() {
+  const auto s = snapshot();
+  if (!s.camera_ok || !s.camera_driver_active || !s.sensor_powered) return false;
+  if (s.receiver_active) return true;
+  setXclkEnabled(true); delay(kXclkWarmupMs);
+  cam_start();
+  portENTER_CRITICAL(&mux_);
+  snapshot_.one_shot_mode = false;
+  snapshot_.receiver_active = true;
+  snapshot_.consumer_core = xPortGetCoreID();
+  snapshot_.consumer_priority = uxTaskPriorityGet(nullptr);
+  portEXIT_CRITICAL(&mux_);
+  return true;
+}
+camera_fb_t* OneShotCamera::acquireContinuous(uint32_t timeout_ms) {
+  if (!snapshot().receiver_active) return nullptr;
+  const uint32_t start = micros();
+  camera_fb_t* fb = cam_take(pdMS_TO_TICKS(timeout_ms));
+  // The low-level cam_take API does not populate the wrapper's format fields.
+  // Length is checked by FootObserver before any image access.
+  if (fb) { fb->width = 320; fb->height = 240; fb->format = PIXFORMAT_GRAYSCALE; }
+  portENTER_CRITICAL(&mux_);
+  snapshot_.last_capture_us = static_cast<uint32_t>(micros() - start);
+  if (snapshot_.last_capture_us > snapshot_.max_capture_us) snapshot_.max_capture_us = snapshot_.last_capture_us;
+  if (fb) { ++snapshot_.frame_count; snapshot_.last_frame_bytes = fb->len; }
+  else ++snapshot_.frame_failures;
+  portEXIT_CRITICAL(&mux_);
+  return fb;
+}
+void OneShotCamera::releaseContinuous(camera_fb_t* fb) { if (fb) cam_give(fb); }
+void OneShotCamera::stopContinuous() {
+  if (!snapshot().receiver_active) return;
+  cam_stop(); setXclkEnabled(false); flushQueuedFrames();
+  portENTER_CRITICAL(&mux_);
+  snapshot_.receiver_active = false;
+  portEXIT_CRITICAL(&mux_);
 }

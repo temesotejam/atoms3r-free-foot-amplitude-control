@@ -88,7 +88,7 @@ template<unsigned Capacity> class Buffer {
   const Record& at(unsigned index) const {
     return records_[((count_ == Capacity ? next_ : 0U) + index) % Capacity];
   }
-  void appendJson(String& json) const {
+  template<class Output> void appendJson(Output& json) const {
     json += "{\"schema_version\":1,\"available\":true,\"solver_revision\":\"v46r_fast_solver_control_20260915\",";
     json += "\"policy\":\"diagnostic_only;elapsed_wall_time_includes_preemption;no_legacy_online;stopped_export\",";
     json += "\"capacity\":" + String(Capacity) + ",\"count\":" + String(count_);

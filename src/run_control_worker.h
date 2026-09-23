@@ -6,10 +6,18 @@
 #include <string.h>
 #include "timing_deadline.h"
 
-// The Arduino task owns the controller while idle. After the Start HTTP
-// response, ownership is transferred to this worker until END_SYNC/ESTOP.
-// Web handlers use snapshots and a stop request, never the live controller.
+// One permanent controller owner, including idle and calibration. HTTP sends
+// commands and consumes POD snapshots; it never calls the live runner/IMU.
 struct RunControlSnapshot {
+  bool ready = false, imu_ok = false, roller_ok = false, downloadable = false;
+  bool upright_stable = false;
+  uint32_t upright_epoch = 0, heartbeat_us = 0, sample_count = 0;
+  uint64_t log_epoch_us = 0, measurement_epoch_us = 0, upright_since_us = 0;
+  uint16_t battery_mV = 0;
+  uint8_t led_state = 0, sync_event_id = 0;
+  float pitch_deg = 0, rate_dps = 0, target_deg = 0;
+  float upright_error_deg = 180, accel_norm_g = 0, gyro_norm_dps = 0;
+  uint32_t imu_sample_us = 0;
   bool running = false;
   uint8_t state_id = 0;
   uint16_t run_id = 0;
@@ -27,7 +35,13 @@ class RunControlWorker {
  public:
   static constexpr uint8_t kCore = 1;
   static constexpr uint8_t kPriority = 4;
-  using Step = bool (*)(void*);  // returns whether the run is still active
+  enum class Command : uint8_t { None, Start, Clear };
+  struct CommandState {
+    uint32_t submitted = 0, completed = 0;
+    bool pending = false, ok = false;
+    char result[80] = {};
+  };
+  using Step = bool (*)(void*);
   using Capture = void (*)(void*, RunControlSnapshot&);
   struct Timing {
     uint32_t offset_us = 0, period_us = 0, consume_us = 0, runner_us = 0, path_us = 0;
@@ -66,24 +80,42 @@ class RunControlWorker {
     portEXIT_CRITICAL(&mux_);
     return result;
   }
-  // Called only by the Arduino owner after its HTTP handler has returned.
-  bool start() {
-    if (!ready() || active()) return false;
-    RunControlSnapshot next{};
-    capture_(context_, next);
-    if (!next.running) return false;
-    const uint32_t now_us = micros();
-    // Initialize the audit while exclusively idle; no large zero-fill in a lock.
-    audit_ = Audit{};
-    audit_.epoch_us = now_us;
-    last_step_start_us_ = now_us;
+  bool request(Command command) {
+    if (!ready() || command == Command::None) return false;
     portENTER_CRITICAL(&mux_);
-    snapshot_ = next;
-    stop_requested_ = false;
-    active_ = true;
+    const bool accepted = !command_state_.pending && !snapshot_.running && !stop_requested_;
+    if (accepted) {
+      command_ = command; command_state_.pending = true; ++command_state_.submitted;
+    }
     portEXIT_CRITICAL(&mux_);
-    xTaskNotifyGive(task_);
-    return true;
+    return accepted;
+  }
+  Command takeCommand() {
+    portENTER_CRITICAL(&mux_);
+    const Command command = stop_requested_ ? Command::None : command_;
+    if (command != Command::None) command_ = Command::None;
+    portEXIT_CRITICAL(&mux_);
+    return command;
+  }
+  void completeCommand(bool ok, const char* result) {
+    portENTER_CRITICAL(&mux_);
+    command_state_.completed = command_state_.submitted;
+    command_state_.pending = false; command_state_.ok = ok;
+    snprintf(command_state_.result, sizeof(command_state_.result), "%s", result ? result : "");
+    portEXIT_CRITICAL(&mux_);
+  }
+  CommandState commandState() const {
+    portENTER_CRITICAL(&mux_);
+    const auto copy = command_state_;
+    portEXIT_CRITICAL(&mux_);
+    return copy;
+  }
+  void beginRunAudit() {
+    // Owner only. The previous run has already been released by HTTP.
+    portENTER_CRITICAL(&mux_);
+    audit_ = Audit{}; audit_.epoch_us = micros();
+    last_step_start_us_ = audit_.epoch_us;
+    portEXIT_CRITICAL(&mux_);
   }
   RunControlSnapshot snapshot() const {
     portENTER_CRITICAL(&mux_);
@@ -106,7 +138,7 @@ class RunControlWorker {
   }
   bool requestStop() {
     portENTER_CRITICAL(&mux_);
-    const bool accepted = active_;
+    const bool accepted = ready();
     if (accepted) { stop_requested_ = true; ++audit_.stop_requests; }
     portEXIT_CRITICAL(&mux_);
     return accepted;
@@ -116,7 +148,14 @@ class RunControlWorker {
     portENTER_CRITICAL(&mux_);
     const bool requested = stop_requested_;
     stop_requested_ = false;
-    if (requested) ++audit_.stop_consumed;
+    if (requested) {
+      ++audit_.stop_consumed;
+      command_ = Command::None;
+      command_state_.pending = false;
+      command_state_.completed = command_state_.submitted;
+      command_state_.ok = false;
+      snprintf(command_state_.result, sizeof(command_state_.result), "%s", "stopped");
+    }
     portEXIT_CRITICAL(&mux_);
     return requested;
   }
@@ -154,7 +193,7 @@ class RunControlWorker {
     portEXIT_CRITICAL(&mux_);
     String json;
     json.reserve(3000);
-    json = "{\"revision\":\"v46p_run_control_worker_20260914\"";
+    json = "{\"revision\":\"permanent_control_owner_20260923\"";
     json += ",\"core\":" + String(a.observed_core);
     json += ",\"priority\":" + String(a.observed_priority);
     json += ",\"steps\":" + String(a.steps);
@@ -190,20 +229,20 @@ class RunControlWorker {
  private:
   static void entry(void* arg) { static_cast<RunControlWorker*>(arg)->loop(); }
   void oneStep() {
-    const bool still_running = step_(context_);
+    step_(context_);
     RunControlSnapshot next{};
     capture_(context_, next);
     portENTER_CRITICAL(&mux_);
     snapshot_ = next;
-    // This is the final shared-controller operation of the worker. Once false,
-    // it must not access runner/imu.reading/logger again until the next Start.
-    if (!still_running) active_ = false;
+    active_ = next.running;
     portEXIT_CRITICAL(&mux_);
   }
   void loop() {
     for (;;) {
-      ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-      while (active()) oneStep();
+      oneStep();
+      // imu.update() normally waits for delivery. Fault/idle paths must also
+      // yield so a latched sensor failure cannot starve Wi-Fi or the watchdog.
+      if (!active()) vTaskDelay(1);
     }
   }
   Step step_ = nullptr;
@@ -212,6 +251,8 @@ class RunControlWorker {
   TaskHandle_t task_ = nullptr;
   mutable portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
   bool active_ = false, stop_requested_ = false;
+  Command command_ = Command::None;
+  CommandState command_state_;
   RunControlSnapshot snapshot_;
   Audit audit_;
   uint32_t last_step_start_us_ = 0;

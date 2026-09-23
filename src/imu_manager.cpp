@@ -474,6 +474,10 @@ void ImuManager::forceSmoothBeta(float beta, uint8_t mode) {
 }
 
 String ImuManager::acquisitionDiagnosticsJson() const {
+  String json; json.reserve(10000); appendDiagnostics(json); return json;
+}
+void ImuManager::appendAcquisitionDiagnostics(PsramString& json) const { appendDiagnostics(json); }
+template<class Output> void ImuManager::appendDiagnostics(Output& json) const {
   bool fault;
   const char* reason;
   int reader_core, consumer_core;
@@ -489,9 +493,7 @@ String ImuManager::acquisitionDiagnosticsJson() const {
   total = total_captured_;
   portEXIT_CRITICAL(&mux_);
   const auto& a = audit_snapshot_;
-  String json;
-  json.reserve(10000);
-  json = "{\"revision\":\"v46q_lightweight_acquisition_20260914\",\"firmware_version\":\"0.46.16\"";
+  json += "{\"revision\":\"v46q_lightweight_acquisition_20260914\",\"firmware_version\":\"0.46.16\"";
   json += ",\"timestamp_semantics\":\"M5Unified_host_acquisition_not_sensor_clock\"";
   json += ",\"motor_controller\":\"unchanged_V46l_legacy_V7\"";
   json += ",\"reader_core\":" + String(reader_core) + ",\"reader_priority\":" + String(reader_priority);
@@ -545,20 +547,26 @@ String ImuManager::acquisitionDiagnosticsJson() const {
     json += "{\"time_us\":" + String(a.gaps[i].time_us);
     json += ",\"dt_us\":" + String(a.gaps[i].dt_us) + ",\"sequence\":" + String(a.gaps[i].sequence) + "}";
   }
-  json += "],\"v46q_poll_profile\":" + pollProfileJson() + "}";
-  return json;
+  json += "],\"v46q_poll_profile\":";
+  appendPollProfile(json);
+  json += "}";
 }
 
 void ImuManager::setStartupGuideState(const char* reason, bool confirmed, uint32_t hold_ms) {
-  startup_guide_reason_ = reason;
-  startup_guide_confirmed_ = confirmed;
-  startup_guide_hold_ms_ = hold_ms;
+  // Called only by the permanent IMU consumer. The export worker reads this
+  // bounded POD view, never the live reading_ or its mutable startup fields.
+  StartupView view;
+  view.reason = reason; view.confirmed = confirmed; view.hold_ms = hold_ms;
+  const auto& r = reading_;
+  view.age_us = r.last_gyro_update_us ? static_cast<uint32_t>(micros() - r.last_gyro_update_us) : UINT32_MAX;
+  view.sequence = r.gyro_sequence;
+  view.direction = UprightPoseGuide::directionErrorDeg(r);
+  view.norm = UprightPoseGuide::accelNormG(r); view.gyro = UprightPoseGuide::gyroNormDps(r);
+  portENTER_CRITICAL(&mux_); startup_view_ = view; portEXIT_CRITICAL(&mux_);
 }
 
 String ImuManager::startupDiagnosticsJson() const {
-  // Consumer-thread only. Used while idle/after Run, never in the reader task.
-  const ImuReading& r = reading_;
-  const uint32_t age = r.last_gyro_update_us ? static_cast<uint32_t>(micros() - r.last_gyro_update_us) : UINT32_MAX;
+  portENTER_CRITICAL(&mux_); const auto view = startup_view_; portEXIT_CRITICAL(&mux_);
   String s;
   s.reserve(640);
   s = "{\"init_attempts\":" + String(init_attempts_);
@@ -568,30 +576,31 @@ String ImuManager::startupDiagnosticsJson() const {
   s += ",\"init_valid_accel\":" + String(init_valid_accel_);
   s += ",\"init_valid_gyro\":" + String(init_valid_gyro_);
   s += ",\"imu_error\":\"" + String(last_error_) + "\"";
-  s += ",\"guide_reason\":\"" + String(startup_guide_reason_) + "\"";
-  s += ",\"upright_confirmed\":" + String(startup_guide_confirmed_ ? "true" : "false");
-  s += ",\"stable_hold_ms\":" + String(startup_guide_hold_ms_);
-  s += ",\"sample_age_us\":" + String(age);
-  s += ",\"gyro_sequence\":" + String(r.gyro_sequence);
-  s += ",\"direction_error_deg\":" + String(UprightPoseGuide::directionErrorDeg(r), 3);
-  s += ",\"accel_norm_g\":" + String(UprightPoseGuide::accelNormG(r), 4);
-  s += ",\"gyro_norm_dps\":" + String(UprightPoseGuide::gyroNormDps(r), 3) + "}";
+  s += ",\"guide_reason\":\"" + String(view.reason) + "\"";
+  s += ",\"upright_confirmed\":" + String(view.confirmed ? "true" : "false");
+  s += ",\"stable_hold_ms\":" + String(view.hold_ms);
+  s += ",\"sample_age_us\":" + String(view.age_us);
+  s += ",\"gyro_sequence\":" + String(view.sequence);
+  s += ",\"direction_error_deg\":" + String(view.direction, 3);
+  s += ",\"accel_norm_g\":" + String(view.norm, 4);
+  s += ",\"gyro_norm_dps\":" + String(view.gyro, 3) + "}";
   s.replace(":nan", ":null"); s.replace(":inf", ":null"); s.replace(":-inf", ":null");
   return s;
 }
 
 String ImuManager::pollProfileJson() const {
+  String s; s.reserve(48000); appendPollProfile(s); return s;
+}
+template<class Output> void ImuManager::appendPollProfile(Output& s) const {
   portENTER_CRITICAL(&mux_);
   const bool active = audit_.active;
   portEXIT_CRITICAL(&mux_);
   // This large profile has one high-priority same-core writer. During a live
   // measurement refuse export; do not block the writer with a serialization lock.
-  if (active) return String("{\"available\":false,\"reason\":\"measurement_active\"}");
+  if (active) { s += "{\"available\":false,\"reason\":\"measurement_active\"}"; return; }
   const auto& p = poll_profile_;
-  if (!p.initialized) return String("{\"available\":false,\"reason\":\"no_measurement_polls\"}");
-  String s;
-  s.reserve(48000);
-  s = "{\"available\":true,\"revision\":\"v46q_lightweight_acquisition_20260914\"";
+  if (!p.initialized) { s += "{\"available\":false,\"reason\":\"no_measurement_polls\"}"; return; }
+  s += "{\"available\":true,\"revision\":\"v46q_lightweight_acquisition_20260914\"";
   s += ",\"semantics\":\"host_wall_times;update_includes_driver;notify_age_from_latest_callback;not_ISR_latency\"";
   s += ",\"derived_accel_location\":\"consumer_new_accel_only_and_synchronous_startup\"";
   s += ",\"epoch_us\":" + String(p.epoch_us);
@@ -652,5 +661,5 @@ String ImuManager::pollProfileJson() const {
     s += "," + String(g.publish_us) + "," + String(g.total_us);
     s += "," + String(g.previous_total_us) + "," + String(g.previous_yield_us) + "," + String(g.wakes) + "]";
   }
-  return s + "]}";
+  s += "]}";
 }

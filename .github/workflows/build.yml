@@ -18,44 +18,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Verify V46al-R2 active layer and retained V46ak/V46aj envelope
-        run: |
-          set -euxo pipefail
-          python tools/test_v46u_timing.py
-          python tools/test_v46t_current_observation.py
-          python tools/test_v46r_fast_solver_control.py
-          python tools/test_v46s_solver_audit.py
-          python tools/test_current_audit_source_guards.py
-          python tools/test_v46g_highrate_source_guards.py
-          python tools/test_v46i_task_split_source_guards.py
-          python tools/test_rwlog_v46_converter.py
-          python tools/test_v46z_comparison_zero.py
-          python tools/test_v46aa_control_zero.py
-          python tools/test_v46ab_no_prediction.py
-          python tools/test_v46ac_delay_compensation.py
-          python tools/test_v46aj_fixed_timing.py
-          python tools/test_v46ae_mekf_amplitude.py
-          python tools/test_v46ai_rate_only.py
-          python tools/test_v46ak_pre_input_observation.py
-          python tools/test_v46ak_web_backend_cleanup.py
-          python tools/test_v46ak_download_freeze.py
-          python tools/test_v46al_r2_previous_peak_control.py
-          python tools/test_camera_coexistence.py
-      - name: Run retained native acquisition, startup, control and MEKF tests
-        run: |
-          set -euxo pipefail
-          g++ -std=c++11 -O2 tools/test_v46n_acquisition.cpp -o /tmp/test_acq
-          /tmp/test_acq
-          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_v46o_startup.cpp -o /tmp/test_v46o
-          /tmp/test_v46o
-          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_v46p_run_control.cpp -o /tmp/test_v46p
-          /tmp/test_v46p
-          g++ -std=c++17 -O2 tools/test_mekf_host.cpp src/mekf6.cpp -o /tmp/test_mekf
-          /tmp/test_mekf
-          python -m json.tool site/manifest.json >/dev/null
+      - name: Verify runtime, transfer, calibrated vision, acquisition and control math
+        run: bash tools/test_runtime.sh
       - name: Install PlatformIO
         run: pip install platformio
-      - name: Build V46al-R2 firmware on frozen V46ak/V46aj baseline
+      - name: Build Free-foot Runtime V2 firmware
         run: |
           set -euxo pipefail
           pio pkg install -e atoms3cam
@@ -72,12 +39,12 @@ jobs:
           cp bmi270-build-patch.json dist/
           python "$HOME/.platformio/packages/tool-esptoolpy/esptool.py" --chip esp32s3 merge_bin -o dist/merged-firmware.bin 0x0000 dist/bootloader.bin 0x8000 dist/partitions.bin 0xe000 dist/boot_app0.bin 0x10000 dist/firmware.bin
           printf '%s\n' "$GITHUB_SHA" > dist/build-sha.txt
-          printf '%s\n' 'V46al-R2 0.46.42; stable baseline bb9c5ed07c5ca8b3c6c6b5813b6c2f1b1f57a6ec; bounded A_prev residual correction active; RWLOG format/header/converter retained; native download uses 256-byte internal-RAM staging, adaptive partial-write retry, 15s no-progress guard and polling suppression; MEKF, fixed 3ms compensation, Ki, current model, solver, 300mA/100ms envelope and ESTOP retained' > dist/FLASH_LAYOUT.txt
+          printf '%s\n' 'Free-foot Runtime V2 0.47.0; RWLOG v51; immutable resumable chunks; PSRAM event store and export metadata; observation-only calibrated left/right feet; V46al-R2 control math, fixed 3ms compensation, 300mA/100ms and ESTOP retained; hardware validation pending' > dist/FLASH_LAYOUT.txt
           (cd dist && sha256sum *.bin > SHA256SUMS.txt)
           git diff --exit-code
       - uses: actions/upload-artifact@v4
         with:
-          name: atoms3r-v46al-r2-${{ github.sha }}
+          name: atoms3r-freefoot-runtime-v2-${{ github.sha }}
           path: dist/
           if-no-files-found: error
           retention-days: 30

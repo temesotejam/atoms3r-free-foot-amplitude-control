@@ -162,6 +162,11 @@ public:
   float q1ShadowActiveTargetPeakAbsDeg() const { return q1_shadow_run_target_peak_abs_deg_; }
   void requestEmergencyStop(const char* reason);
   void clearFinishedOrEstop();
+  void sealCompletedLog() {
+    if (running() || !logger_) return;
+    maybeFinalizeTimingProbe();
+    logger_->seal();
+  }
   void setInputSettings(int16_t current_mA, uint16_t pulse_width_ms, uint16_t input_interval_ms);
 
   const ExperimentStatus& status() const { return status_; }

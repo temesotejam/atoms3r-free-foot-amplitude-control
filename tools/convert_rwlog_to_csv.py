@@ -1028,6 +1028,25 @@ def write_energy_control_autonomous_events(metadata: dict, out_dir: Path) -> tup
                     zero_count += 1
     return peak_count, zero_count
 
+FOOT_COLUMNS = ["sequence", "run_id", "frame_us", "delivered_us", "log_time_us",
+    "measurement_time_us", "imu_sample_us", "state_id", "led_state", "sync_event_id",
+    "processing_us", "timestamp_valid", "frame_valid", "zero_ready", "right_valid",
+    "left_valid", "right_in_range", "left_in_range", "right_x", "left_x", "right_deg",
+    "left_deg", "right_contrast", "left_contrast"]
+
+def write_foot_frames(metadata: dict, out_dir: Path) -> int:
+    rows = metadata.get("foot_frames")
+    if not isinstance(rows, list):
+        return 0
+    with (out_dir / "foot_angles.csv").open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=FOOT_COLUMNS)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({key: row.get(key) for key in FOOT_COLUMNS})
+    (out_dir / "foot_calibration.json").write_text(
+        json.dumps(metadata.get("foot_observation", {}), indent=2), encoding="utf-8")
+    return len(rows)
+
 def convert(path: Path, out_dir: Path) -> None:
     data = path.read_bytes()
     header = parse_header(data)
@@ -1037,12 +1056,21 @@ def convert(path: Path, out_dir: Path) -> None:
     if header["log_sample_size"] != struct.calcsize(sample_format):
         raise ValueError("unexpected sample size")
     crc_ok = verify_crc(data, header)
+    if not crc_ok:
+        raise ValueError("RWLOG CRC mismatch; refusing to convert corrupted data")
+    if header["crc_offset"] + 4 != len(data):
+        raise ValueError("unexpected trailing bytes")
+    metadata_end = header["header_size"] + header["metadata_json_size"]
+    samples_end = header["samples_offset"] + header["sample_count"] * header["log_sample_size"]
+    if metadata_end != header["samples_offset"] or samples_end > header["crc_offset"]:
+        raise ValueError("inconsistent metadata/sample offsets")
 
     out_dir.mkdir(parents=True, exist_ok=True)
     metadata_start = header["header_size"]
     metadata_end = metadata_start + header["metadata_json_size"]
     metadata = json.loads(data[metadata_start:metadata_end].decode("utf-8"))
     (out_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    foot_count = write_foot_frames(metadata, out_dir)
     e2_shadow_peak_count = write_e2_shadow_peaks(metadata, out_dir)
     q1_shadow_event_count = write_q1_shadow_events(metadata, out_dir)
     q_ident_event_count = write_q_ident_events(metadata, out_dir)
@@ -1067,6 +1095,8 @@ def convert(path: Path, out_dir: Path) -> None:
     print(f"format_version={header['format_version']}")
     print(f"samples={header['sample_count']}")
     print(f"crc_ok={crc_ok}")
+    if foot_count:
+        print(f"foot_frames={foot_count}")
     if e2_shadow_peak_count:
         print(f"e2_shadow_peak_events={e2_shadow_peak_count}")
     if q1_shadow_event_count:
@@ -1083,7 +1113,7 @@ def convert(path: Path, out_dir: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Convert supported RWLOG v23-v50 files to CSV, including control and diagnostic metadata events.")
+    parser = argparse.ArgumentParser(description="Convert supported RWLOG v23-v51 files to CSV, including control and diagnostic metadata events.")
     parser.add_argument("rwlog", type=Path)
     parser.add_argument("--out", type=Path, default=Path("converted_dynamic_beta_hold73_tau73_compare"))
     args = parser.parse_args()

@@ -1,34 +1,21 @@
 #pragma once
-
-#include <Arduino.h>
 #include <WebServer.h>
-
-#include "experiment_runner.h"
+#include "run_control_worker.h"
+#include "foot_observer.h"
+#include "immutable_export.h"
 
 class WebUi {
-public:
-  void begin(WebServer& server, ExperimentRunner& runner, ImuManager& imu, Roller485Manager& roller, PsramLogger& logger);
+ public:
+  void begin(WebServer&, RunControlWorker&, FootObserver&, ImmutableExport&);
   void update();
-
-private:
-  void handleRoot();
-  void handleStatus();
-  void handleStart();
-  void handleStartQIdent();
-  void handleStartEnergyControlAutonomous();
-  void handleStartZeroCross();
-  void handleStartIdentification();
-  void handleStartControl();
-  void handleZero();
-  void handleStop();
-  void handleClear();
-  void handleRwLog();
-  String statusJson() const;
-
+ private:
+  void status();
+  void command(RunControlWorker::Command);
+  void manifest();
+  void chunk();
   WebServer* server_ = nullptr;
-  ExperimentRunner* runner_ = nullptr;
-  ImuManager* imu_ = nullptr;
-  Roller485Manager* roller_ = nullptr;
-  PsramLogger* logger_ = nullptr;
+  RunControlWorker* control_ = nullptr;
+  FootObserver* feet_ = nullptr;
+  ImmutableExport* export_ = nullptr;
+  uint8_t chunk_buffer_[export_protocol::kChunkBytes + 16] = {};
 };
-

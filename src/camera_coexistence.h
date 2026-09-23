@@ -51,6 +51,10 @@ class OneShotCamera {
   // enough to obtain one frame and disables both before it returns.
   camera_fb_t* acquire(uint32_t timeout_ms = 500);
   void release(camera_fb_t* fb);
+  bool startContinuous();
+  camera_fb_t* acquireContinuous(uint32_t timeout_ms = 200);
+  void releaseContinuous(camera_fb_t* fb);
+  void stopContinuous();
 
   // USB-serial diagnostic actions. No automatic capture is performed.
   bool debugCaptureOnce();
