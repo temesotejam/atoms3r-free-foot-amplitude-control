@@ -47,6 +47,34 @@
       </details>
     </section>
 
+    <section class="panel important" id="usb-serial-panel">
+      <h2>USBシリアルログ</h2>
+      <p>Phase 1Hのデバッグログをこのページ上で直接確認できます。AtomS3RをUSB接続し、<strong>115200 bps</strong>で接続します。書き込み直後はWeb Flasherがポートを使用している場合があるため、書き込み画面を閉じてから接続してください。</p>
+
+      <div class="serial-toolbar">
+        <button id="serial-connect" class="serial-button serial-connect" type="button">USBシリアルに接続</button>
+        <button id="serial-disconnect" class="serial-button" type="button" disabled>切断</button>
+        <button id="serial-copy" class="serial-button" type="button">ログをコピー</button>
+        <button id="serial-clear" class="serial-button" type="button">ログをクリア</button>
+      </div>
+
+      <p class="serial-status">状態: <strong id="serial-status">未接続</strong></p>
+
+      <div class="serial-commands">
+        <span>Camera debug:</span>
+        <button type="button" class="serial-command" data-cmd="s">s 状態表示</button>
+        <button type="button" class="serial-command" data-cmd="c">c 1枚撮影</button>
+        <button type="button" class="serial-command" data-cmd="i">i 強制idle</button>
+        <button type="button" class="serial-command danger" data-cmd="p">p センサ電源OFF</button>
+        <button type="button" class="serial-command danger" data-cmd="d">d Camera deinit</button>
+        <button type="button" class="serial-command" data-cmd="h">h ヘルプ</button>
+      </div>
+
+      <pre id="serial-log" class="serial-log" aria-live="polite">USBシリアル未接続
+</pre>
+      <p class="hint"><code>p</code>と<code>d</code>は再起動まで戻せません。制御実験中はCamera操作コマンドがファーム側で拒否されます。</p>
+    </section>
+
     <section class="panel">
       <h2>書き込み後の実験</h2>
       <ol>
@@ -97,6 +125,161 @@
       .then(r => { if (!r.ok) throw new Error('build identity unavailable'); return r.text(); })
       .then(s => { document.getElementById('build-sha').textContent = s.trim(); })
       .catch(() => { document.getElementById('build-sha').textContent = '取得できません。上のリンクで確認してください。'; });
+
+    let serialPort = null;
+    let serialReader = null;
+    let serialReadLoopActive = false;
+    let serialLogText = '';
+
+    const serialLog = document.getElementById('serial-log');
+    const serialStatus = document.getElementById('serial-status');
+    const connectButton = document.getElementById('serial-connect');
+    const disconnectButton = document.getElementById('serial-disconnect');
+    const copyButton = document.getElementById('serial-copy');
+    const clearButton = document.getElementById('serial-clear');
+    const commandButtons = [...document.querySelectorAll('.serial-command')];
+
+    function setSerialStatus(text, state = '') {
+      serialStatus.textContent = text;
+      serialStatus.dataset.state = state;
+    }
+
+    function setSerialControls(connected) {
+      connectButton.disabled = connected;
+      disconnectButton.disabled = !connected;
+      commandButtons.forEach(button => { button.disabled = !connected; });
+    }
+
+    function appendSerial(text) {
+      if (!text) return;
+      if (serialLogText === 'USBシリアル未接続\n') serialLogText = '';
+      serialLogText += text;
+      // Prevent an accidentally endless session from making the page unusable.
+      // Keep the newest 2 MiB, which is far larger than the expected CAMDBG log.
+      const maxChars = 2 * 1024 * 1024;
+      if (serialLogText.length > maxChars) {
+        serialLogText = '[古いログを省略しました]\n' + serialLogText.slice(-maxChars);
+      }
+      serialLog.textContent = serialLogText;
+      serialLog.scrollTop = serialLog.scrollHeight;
+    }
+
+    async function readSerialLoop() {
+      const decoder = new TextDecoder();
+      serialReadLoopActive = true;
+      try {
+        while (serialPort && serialPort.readable && serialReadLoopActive) {
+          serialReader = serialPort.readable.getReader();
+          try {
+            while (serialReadLoopActive) {
+              const { value, done } = await serialReader.read();
+              if (done) break;
+              if (value) appendSerial(decoder.decode(value, {stream: true}));
+            }
+          } finally {
+            serialReader.releaseLock();
+            serialReader = null;
+          }
+        }
+      } catch (error) {
+        appendSerial('\n[Serial read error] ' + error.message + '\n');
+        setSerialStatus('読取エラー', 'error');
+      }
+    }
+
+    async function connectSerial() {
+      if (!('serial' in navigator)) {
+        setSerialStatus('Web Serial非対応ブラウザ', 'error');
+        appendSerial('[ERROR] PC版Chrome/Edgeを使用してください。\n');
+        return;
+      }
+      try {
+        setSerialStatus('ポート選択中…');
+        serialPort = await navigator.serial.requestPort();
+        await serialPort.open({ baudRate: 115200, bufferSize: 65536 });
+        serialLogText = '';
+        serialLog.textContent = '';
+        setSerialControls(true);
+        setSerialStatus('接続中 115200 bps', 'ok');
+        appendSerial('[Browser] USB Serial connected @ 115200 bps\n');
+        readSerialLoop();
+      } catch (error) {
+        serialPort = null;
+        setSerialControls(false);
+        setSerialStatus('接続失敗', 'error');
+        appendSerial('[Serial connect error] ' + error.message + '\n');
+      }
+    }
+
+    async function disconnectSerial() {
+      serialReadLoopActive = false;
+      try {
+        if (serialReader) {
+          try { await serialReader.cancel(); } catch (_) {}
+        }
+        if (serialPort) {
+          try { await serialPort.close(); } catch (_) {}
+        }
+      } finally {
+        serialReader = null;
+        serialPort = null;
+        setSerialControls(false);
+        setSerialStatus('未接続');
+        appendSerial('[Browser] USB Serial disconnected\n');
+      }
+    }
+
+    async function sendSerialCommand(command) {
+      if (!serialPort || !serialPort.writable) {
+        setSerialStatus('未接続', 'error');
+        return;
+      }
+      const writer = serialPort.writable.getWriter();
+      try {
+        await writer.write(new TextEncoder().encode(command + '\n'));
+        appendSerial('[Browser -> AtomS3R] ' + command + '\n');
+      } catch (error) {
+        appendSerial('[Serial write error] ' + error.message + '\n');
+        setSerialStatus('送信エラー', 'error');
+      } finally {
+        writer.releaseLock();
+      }
+    }
+
+    connectButton.addEventListener('click', connectSerial);
+    disconnectButton.addEventListener('click', disconnectSerial);
+    clearButton.addEventListener('click', () => {
+      serialLogText = '';
+      serialLog.textContent = '';
+    });
+    copyButton.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(serialLogText);
+        const before = copyButton.textContent;
+        copyButton.textContent = 'コピーしました';
+        setTimeout(() => { copyButton.textContent = before; }, 1200);
+      } catch (error) {
+        setSerialStatus('コピー失敗', 'error');
+        appendSerial('[Clipboard error] ' + error.message + '\n');
+      }
+    });
+    commandButtons.forEach(button => {
+      button.disabled = true;
+      button.addEventListener('click', () => sendSerialCommand(button.dataset.cmd));
+    });
+
+    setSerialControls(false);
+
+    navigator.serial?.addEventListener('disconnect', event => {
+      if (serialPort && event.target === serialPort) {
+        serialReadLoopActive = false;
+        serialReader = null;
+        serialPort = null;
+        setSerialControls(false);
+        setSerialStatus('USB切断');
+        appendSerial('[Browser] USB device disconnected\n');
+      }
+    });
   </script>
 </body>
 </html>
