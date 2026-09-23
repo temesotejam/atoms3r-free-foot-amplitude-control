@@ -1717,16 +1717,24 @@ bool PsramLogger::writeBytes(WebServer& server, const uint8_t* data, size_t len)
     return false;
   }
 
+  // Header bytes live in internal RAM and have always transmitted successfully.
+  // Metadata String storage and the 6 MiB sample buffer can live in PSRAM.
+  // Always stage each body chunk through this small internal task-stack buffer
+  // before giving it to lwIP, so all four RWLOG sections use the same source
+  // memory class at the socket boundary.
+  alignas(4) uint8_t staging[STREAM_CHUNK_BYTES];
+
   size_t chunk_limit = STREAM_CHUNK_BYTES;
   uint32_t last_progress_ms = millis();
   while (len > 0) {
     const size_t want = len < chunk_limit ? len : chunk_limit;
+    memcpy(staging, data, want);
     rwlogDownloadDiagRequest(want, chunk_limit);
 
     errno = 0;
     const int result = ::send(
         socket_fd,
-        reinterpret_cast<const void*>(data),
+        reinterpret_cast<const void*>(staging),
         want,
         MSG_DONTWAIT);
 

@@ -130,3 +130,18 @@ last errno, EAGAIN/ENOMEM counts, adaptive chunk size, and Internal/DMA/PSRAM fr
 Because the observed failed file stopped at exactly 110 bytes (the packed RWLOG header
 size), the initial body chunk is now 256 bytes and automatically shrinks to 128 then
 64 bytes on ENOMEM.
+
+### Internal-RAM staging for the RWLOG body
+
+Three independent runs stopped after exactly 110 downloaded bytes, which is exactly
+the packed `RwLogFileHeader` size. The header object is stack/internal RAM, while
+the large metadata String and the sample array can reside in PSRAM.
+
+The socket writer therefore no longer passes the RWLOG source pointer directly to
+lwIP. Each 256-byte piece is first copied into an aligned task-stack buffer in
+internal RAM and only that staging buffer is passed to `send(..., MSG_DONTWAIT)`.
+The existing 256 -> 128 -> 64 byte ENOMEM shrink behavior remains.
+
+The Web diagnostic endpoint identifies this build with
+`revision=rwlog_download_diag_v4_internal_staging_20260923` and reports
+`socket_source_memory=internal_stack_staging`.
