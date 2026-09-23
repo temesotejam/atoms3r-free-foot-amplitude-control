@@ -6,16 +6,11 @@ ROOT = Path(__file__).resolve().parents[1]
 web = (ROOT / "src/web_ui.cpp").read_text(encoding="utf-8").replace("\r\n", "\n")
 logger = (ROOT / "src/psram_logger.cpp").read_text(encoding="utf-8").replace("\r\n", "\n")
 
+def git_blob_sha_bytes(data: bytes) -> str:
+    return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+
 def git_blob_sha(path: Path) -> str:
-    data = path.read_bytes()
-    header = f"blob {len(data)}\0".encode()
-    return hashlib.sha1(header + data).hexdigest()
-
-# Full logger/converter files are frozen to the verified stable blobs.
-assert git_blob_sha(ROOT / "src/psram_logger.cpp") == "e61167fba2869ad948df37d999a7bcb6e5346817"
-assert git_blob_sha(ROOT / "src/psram_logger.h") == "63a16781660142a5e3a82721f90cadd9cc2ce9b7"
-assert git_blob_sha(ROOT / "tools/convert_rwlog_to_csv.py") == "7a2c1229376e1ec204a3d9305cedf0b67af7a231"
-
+    return git_blob_sha_bytes(path.read_bytes())
 
 def extract_function(text: str, signature: str) -> str:
     start = text.index(signature)
@@ -31,8 +26,32 @@ def extract_function(text: str, signature: str) -> str:
                 return text[start:i + 1]
     raise AssertionError(f"unterminated function: {signature}")
 
+old_constants = "static constexpr size_t STREAM_CHUNK_BYTES = 4096;\n"
+new_constants = "// RWLOG download transport only. 1460 bytes stays within one common TCP MSS\n// and the writer below accepts partial progress instead of treating it as fatal.\nstatic constexpr size_t STREAM_CHUNK_BYTES = 1460;\nstatic constexpr uint32_t STREAM_NO_PROGRESS_TIMEOUT_MS = 15000UL;\n"
+old_write = "bool PsramLogger::writeBytes(WebServer& server, const uint8_t* data, size_t len) {\n  WiFiClient client = server.client();\n  while (len > 0) {\n    const size_t n = len > STREAM_CHUNK_BYTES ? STREAM_CHUNK_BYTES : len;\n    if (client.write(data, n) != n) return false;\n    data += n;\n    len -= n;\n    delay(0);\n  }\n  return true;\n}"
+new_write = "bool PsramLogger::writeBytes(WebServer& server, const uint8_t* data, size_t len) {\n  WiFiClient client = server.client();\n  uint32_t last_progress_ms = millis();\n  while (len > 0) {\n    const size_t want = len > STREAM_CHUNK_BYTES ? STREAM_CHUNK_BYTES : len;\n    const size_t written = client.write(data, want);\n    if (written > 0) {\n      data += written;\n      len -= written;\n      last_progress_ms = millis();\n      delay(0);\n      continue;\n    }\n    if (!client.connected()) return false;\n    if (static_cast<uint32_t>(millis() - last_progress_ms) >\n        STREAM_NO_PROGRESS_TIMEOUT_MS) return false;\n    delay(2);\n  }\n  return true;\n}"
+old_stream = "bool PsramLogger::streamRwLog(WebServer& server) {\n  if (!rwlogDownloadable()) {\n    last_error_ = \"rwlog_not_ready\";\n    server.send(409, \"text/plain\", last_error_);\n    return false;\n  }\n\n  downloading_ = true;\n  const String metadata = buildMetadataJson();\n  const RwLogFileHeader header = buildHeader(metadata.length());\n  const uint32_t crc = calculateCrc(header, metadata);\n  char filename[72];\n  downloadFilename(filename, sizeof(filename));\n\n  server.sendHeader(\"Content-Disposition\", String(\"attachment; filename=\\\"\") + filename + \"\\\"\");\n  server.sendHeader(\"Cache-Control\", \"no-store, no-cache, must-revalidate, max-age=0\");\n  server.setContentLength(header.crc_offset + sizeof(crc));\n  server.send(200, \"application/octet-stream\", \"\");\n\n  bool ok = true;\n  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(&header), sizeof(header));\n  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(metadata.c_str()), metadata.length());\n  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(samples_), sample_count_ * sizeof(LogSample));\n  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(&crc), sizeof(crc));\n\n  downloading_ = false;\n  last_error_ = ok ? \"\" : \"rwlog_stream_failed\";\n  return ok;\n}"
+new_stream = "bool PsramLogger::streamRwLog(WebServer& server) {\n  if (!rwlogDownloadable()) {\n    last_error_ = \"rwlog_not_ready\";\n    server.send(409, \"text/plain\", last_error_);\n    return false;\n  }\n\n  downloading_ = true;\n  const uint32_t prepare_start_ms = millis();\n  Serial.printf(\"RWLOGDL,prepare_begin,samples=%u,psram_free=%u\\n\",\n                static_cast<unsigned>(sample_count_),\n                static_cast<unsigned>(ESP.getFreePsram()));\n  const String metadata = buildMetadataJson();\n  const RwLogFileHeader header = buildHeader(metadata.length());\n  const uint32_t crc = calculateCrc(header, metadata);\n  char filename[72];\n  downloadFilename(filename, sizeof(filename));\n  Serial.printf(\"RWLOGDL,prepare_end,ms=%lu,metadata=%u,total=%u,file=%s\\n\",\n                static_cast<unsigned long>(millis() - prepare_start_ms),\n                static_cast<unsigned>(metadata.length()),\n                static_cast<unsigned>(header.crc_offset + sizeof(crc)),\n                filename);\n\n  server.sendHeader(\"Content-Disposition\", String(\"attachment; filename=\\\"\") + filename + \"\\\"\");\n  server.sendHeader(\"Cache-Control\", \"no-store, no-cache, must-revalidate, max-age=0\");\n  server.sendHeader(\"Connection\", \"close\");\n  server.setContentLength(header.crc_offset + sizeof(crc));\n  server.send(200, \"application/octet-stream\", \"\");\n\n  const uint32_t stream_start_ms = millis();\n  bool ok = true;\n  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(&header), sizeof(header));\n  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(metadata.c_str()), metadata.length());\n  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(samples_), sample_count_ * sizeof(LogSample));\n  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(&crc), sizeof(crc));\n\n  downloading_ = false;\n  last_error_ = ok ? \"\" : \"rwlog_stream_failed\";\n  Serial.printf(\"RWLOGDL,stream_end,ok=%u,ms=%lu,error=%s\\n\",\n                ok ? 1U : 0U,\n                static_cast<unsigned long>(millis() - stream_start_ms),\n                ok ? \"none\" : last_error_);\n  return ok;\n}"
+old_begin = "function beginDownload(){\n  downloading=true;\n  apply(lastStatus);\n  setTimeout(()=>{\n    downloading=false;\n    refresh();\n  },3000);\n}"
+new_begin = "function beginDownload(){\n  // Keep the browser's 1 Hz status traffic off the AP while the native\n  // attachment transfer owns the socket. No fetch/blob buffering is used.\n  downloading=true;\n  apply(lastStatus);\n  setTimeout(()=>{\n    downloading=false;\n    refresh();\n  },60000);\n}"
 
-expected_handle = """void WebUi::handleRwLog() {
+assert git_blob_sha(ROOT / "src/psram_logger.h") == "63a16781660142a5e3a82721f90cadd9cc2ce9b7"
+assert git_blob_sha(ROOT / "tools/convert_rwlog_to_csv.py") == "7a2c1229376e1ec204a3d9305cedf0b67af7a231"
+
+assert new_constants in logger
+assert extract_function(logger, "bool PsramLogger::writeBytes(") == new_write
+assert extract_function(logger, "bool PsramLogger::streamRwLog(") == new_stream
+assert 'server.sendHeader("Connection", "close");' in logger
+assert "RWLOGDL,prepare_begin" in logger
+assert "RWLOGDL,stream_end" in logger
+
+normalized_logger = logger.replace(new_constants, old_constants, 1)
+normalized_logger = normalized_logger.replace(new_write, old_write, 1)
+normalized_logger = normalized_logger.replace(new_stream, old_stream, 1)
+assert git_blob_sha_bytes(normalized_logger.encode()) == "e61167fba2869ad948df37d999a7bcb6e5346817"
+
+assert 'server_->on("/download/rwlog", HTTP_GET, [this]() { handleRwLog(); });' in web
+assert extract_function(web, "void WebUi::handleRwLog()") == """void WebUi::handleRwLog() {
   if (run_control.active()) { server_->send(409, "text/plain", "run_in_progress"); return; }
   if (runner_->running()) {
     server_->send(409, "text/plain", "measurement_running");
@@ -40,53 +59,15 @@ expected_handle = """void WebUi::handleRwLog() {
   }
   logger_->streamRwLog(*server_);
 }"""
+assert new_begin in web
+assert "if(downloading||refreshInFlight)return;" in web
 
-expected_write = """bool PsramLogger::writeBytes(WebServer& server, const uint8_t* data, size_t len) {
-  WiFiClient client = server.client();
-  while (len > 0) {
-    const size_t n = len > STREAM_CHUNK_BYTES ? STREAM_CHUNK_BYTES : len;
-    if (client.write(data, n) != n) return false;
-    data += n;
-    len -= n;
-    delay(0);
-  }
-  return true;
-}"""
+normalized_web = web.replace(new_begin, old_begin, 1)
+normalized_web = normalized_web.replace(
+    "if(downloading||refreshInFlight)return;",
+    "if(refreshInFlight)return;",
+    1,
+)
+assert git_blob_sha_bytes(normalized_web.encode()) == "c63bb11581c8252fe92f151fb97c9208175bd336"
 
-expected_stream = """bool PsramLogger::streamRwLog(WebServer& server) {
-  if (!rwlogDownloadable()) {
-    last_error_ = "rwlog_not_ready";
-    server.send(409, "text/plain", last_error_);
-    return false;
-  }
-
-  downloading_ = true;
-  const String metadata = buildMetadataJson();
-  const RwLogFileHeader header = buildHeader(metadata.length());
-  const uint32_t crc = calculateCrc(header, metadata);
-  char filename[72];
-  downloadFilename(filename, sizeof(filename));
-
-  server.sendHeader("Content-Disposition", String("attachment; filename=\\\"") + filename + "\\\"");
-  server.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-  server.setContentLength(header.crc_offset + sizeof(crc));
-  server.send(200, "application/octet-stream", "");
-
-  bool ok = true;
-  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(&header), sizeof(header));
-  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(metadata.c_str()), metadata.length());
-  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(samples_), sample_count_ * sizeof(LogSample));
-  ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(&crc), sizeof(crc));
-
-  downloading_ = false;
-  last_error_ = ok ? "" : "rwlog_stream_failed";
-  return ok;
-}"""
-
-assert 'server_->on("/download/rwlog", HTTP_GET, [this]() { handleRwLog(); });' in web
-assert "static constexpr size_t STREAM_CHUNK_BYTES = 4096;" in logger
-assert extract_function(web, "void WebUi::handleRwLog()") == expected_handle
-assert extract_function(logger, "bool PsramLogger::writeBytes(") == expected_write
-assert extract_function(logger, "bool PsramLogger::streamRwLog(") == expected_stream
-
-print("RWLOG download freeze PASS: full logger/converter blobs and direct download path equal stable")
+print("RWLOG download recovery PASS: format/converter frozen; native download + partial-write retry + polling suppression")

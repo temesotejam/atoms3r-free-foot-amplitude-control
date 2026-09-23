@@ -4,6 +4,8 @@ import hashlib
 ROOT = Path(__file__).resolve().parents[1]
 
 main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
+webui = (ROOT / "src/web_ui.cpp").read_text(encoding="utf-8")
+logger = (ROOT / "src/psram_logger.cpp").read_text(encoding="utf-8")
 camera = (ROOT / "src/camera_coexistence.cpp").read_text(encoding="utf-8")
 header = (ROOT / "src/camera_coexistence.h").read_text(encoding="utf-8")
 serial = (ROOT / "src/camera_serial_debug.cpp").read_text(encoding="utf-8")
@@ -19,9 +21,7 @@ def git_blob_sha(path):
     return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
 
 expected = {
-    "src/web_ui.cpp": "c63bb11581c8252fe92f151fb97c9208175bd336",
     "src/experiment_runner.cpp": "58688977951627cdab038d73ca4d64b0c6b3d645",
-    "src/psram_logger.cpp": "e61167fba2869ad948df37d999a7bcb6e5346817",
     "src/psram_logger.h": "63a16781660142a5e3a82721f90cadd9cc2ce9b7",
     "src/imu_manager.cpp": "4842be2a4d91bcd8f2895cfe046489a47a3ce64c",
     "src/roller485_manager.cpp": "c891e50cc832654034d9a6bc64848f48713741c5",
@@ -34,9 +34,13 @@ assert main.index("const bool psram_ok = logger.begin();") < main.index("const b
 assert main.index("const bool imu_ok = imu.begin();") < main.index("const bool camera_ok = camera_probe.begin();")
 assert main.index("const bool camera_ok = camera_probe.begin();") < main.index("const bool roller_ok = roller.begin();")
 
-# WebUI source itself remains byte-identical to the fixed-foot baseline; only
-# the WebServer transport object is replaced underneath it.
-assert git_blob_sha("src/web_ui.cpp") == "c63bb11581c8252fe92f151fb97c9208175bd336"
+# Phase 1N download recovery changes only transport/UI behavior; the detailed
+# normalization guard lives in test_v46ak_download_freeze.py.
+assert "if(downloading||refreshInFlight)return;" in webui
+assert "},60000);" in webui
+assert "STREAM_CHUNK_BYTES = 1460" in logger
+assert "STREAM_NO_PROGRESS_TIMEOUT_MS = 15000UL" in logger
+assert 'server.sendHeader("Connection", "close");' in logger
 assert '#include "bounded_web_server.h"' in main
 assert "BoundedWriteWebServer server(Config::HTTP_PORT);" in main
 assert "class BoundedWriteWebServer : public WebServer" in bounded_h

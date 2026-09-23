@@ -13,7 +13,10 @@ extern Roller485Manager roller;
 
 static constexpr uint16_t RWLOG_FORMAT_VERSION = 51;
 static constexpr uint32_t RWLOG_FLAG_CRC32 = 1U << 0;
-static constexpr size_t STREAM_CHUNK_BYTES = 4096;
+// RWLOG download transport only. 1460 bytes stays within one common TCP MSS
+// and the writer below accepts partial progress instead of treating it as fatal.
+static constexpr size_t STREAM_CHUNK_BYTES = 1460;
+static constexpr uint32_t STREAM_NO_PROGRESS_TIMEOUT_MS = 15000UL;
 
 namespace {
 String jsonFloatOrNull(float value, unsigned int decimals) {
@@ -1704,12 +1707,21 @@ uint32_t PsramLogger::calculateCrc(const RwLogFileHeader& header, const String& 
 
 bool PsramLogger::writeBytes(WebServer& server, const uint8_t* data, size_t len) {
   WiFiClient client = server.client();
+  uint32_t last_progress_ms = millis();
   while (len > 0) {
-    const size_t n = len > STREAM_CHUNK_BYTES ? STREAM_CHUNK_BYTES : len;
-    if (client.write(data, n) != n) return false;
-    data += n;
-    len -= n;
-    delay(0);
+    const size_t want = len > STREAM_CHUNK_BYTES ? STREAM_CHUNK_BYTES : len;
+    const size_t written = client.write(data, want);
+    if (written > 0) {
+      data += written;
+      len -= written;
+      last_progress_ms = millis();
+      delay(0);
+      continue;
+    }
+    if (!client.connected()) return false;
+    if (static_cast<uint32_t>(millis() - last_progress_ms) >
+        STREAM_NO_PROGRESS_TIMEOUT_MS) return false;
+    delay(2);
   }
   return true;
 }
@@ -1722,17 +1734,28 @@ bool PsramLogger::streamRwLog(WebServer& server) {
   }
 
   downloading_ = true;
+  const uint32_t prepare_start_ms = millis();
+  Serial.printf("RWLOGDL,prepare_begin,samples=%u,psram_free=%u\n",
+                static_cast<unsigned>(sample_count_),
+                static_cast<unsigned>(ESP.getFreePsram()));
   const String metadata = buildMetadataJson();
   const RwLogFileHeader header = buildHeader(metadata.length());
   const uint32_t crc = calculateCrc(header, metadata);
   char filename[72];
   downloadFilename(filename, sizeof(filename));
+  Serial.printf("RWLOGDL,prepare_end,ms=%lu,metadata=%u,total=%u,file=%s\n",
+                static_cast<unsigned long>(millis() - prepare_start_ms),
+                static_cast<unsigned>(metadata.length()),
+                static_cast<unsigned>(header.crc_offset + sizeof(crc)),
+                filename);
 
   server.sendHeader("Content-Disposition", String("attachment; filename=\"") + filename + "\"");
   server.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+  server.sendHeader("Connection", "close");
   server.setContentLength(header.crc_offset + sizeof(crc));
   server.send(200, "application/octet-stream", "");
 
+  const uint32_t stream_start_ms = millis();
   bool ok = true;
   ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(&header), sizeof(header));
   ok = ok && writeBytes(server, reinterpret_cast<const uint8_t*>(metadata.c_str()), metadata.length());
@@ -1741,6 +1764,10 @@ bool PsramLogger::streamRwLog(WebServer& server) {
 
   downloading_ = false;
   last_error_ = ok ? "" : "rwlog_stream_failed";
+  Serial.printf("RWLOGDL,stream_end,ok=%u,ms=%lu,error=%s\n",
+                ok ? 1U : 0U,
+                static_cast<unsigned long>(millis() - stream_start_ms),
+                ok ? "none" : last_error_);
   return ok;
 }
 

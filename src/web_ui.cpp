@@ -143,12 +143,14 @@ async function postClear(){
 }
 
 function beginDownload(){
+  // Keep the browser's 1 Hz status traffic off the AP while the native
+  // attachment transfer owns the socket. No fetch/blob buffering is used.
   downloading=true;
   apply(lastStatus);
   setTimeout(()=>{
     downloading=false;
     refresh();
-  },3000);
+  },60000);
 }
 
 function stateLabel(j){
@@ -205,7 +207,7 @@ function applyFrozenState(){
 }
 
 async function refresh(){
-  if(refreshInFlight)return;
+  if(downloading||refreshInFlight)return;
   refreshInFlight=true;
   const epoch=controlEpoch;
   let timer;

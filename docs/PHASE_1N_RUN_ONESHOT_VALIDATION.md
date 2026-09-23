@@ -86,3 +86,22 @@ The run should still satisfy the established acquisition/control criteria, espec
 
 If these pass, the next phase can increase camera usage cautiously (low-frequency repeated
 one-shots before any ROI or feature-tracking work).
+
+## RWLOG download recovery
+
+A real Phase 1N run exposed a transport weakness that the camera-only Phase 1M
+check did not exercise: the previous direct writer treated any partial TCP write
+as a fatal download failure.
+
+The RWLOG binary format, header, CRC semantics and converter are unchanged.
+The native browser attachment route is retained, with these transport-only changes:
+
+- maximum write attempt: 1460 bytes,
+- partial writes advance by the number of bytes actually accepted,
+- zero-progress writes retry while the client remains connected,
+- 15 s no-progress timeout,
+- `Connection: close`,
+- browser status polling suppressed for 60 s after download starts,
+- serial diagnostics: `RWLOGDL,prepare_begin`, `prepare_end`, `stream_end`.
+
+No Range/resume protocol and no fetch-to-Blob buffering are used.
