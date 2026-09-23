@@ -20,6 +20,7 @@ def normalize_camera_coexistence(path, data):
     data=data.replace('BoundedWriteWebServer server(Config::HTTP_PORT);\n',
                       'WebServer server(Config::HTTP_PORT);\n')
     data=data.replace('OneShotCamera camera_probe;\n','')
+    data=data.replace('static uint32_t startup_guide_last_diag_ms = 0;\n','')
     data=data.replace('  tcpTransportDebugBegin();\n','')
     data=data.replace('  cameraSerialDebugBegin(camera_probe);\n','')
     data=data.replace('  cameraSerialDebugUpdate(camera_probe, !runner.running());\n  tcpTransportDebugUpdate();\n\n','')
@@ -41,6 +42,35 @@ def normalize_camera_coexistence(path, data):
         data=data.replace(
             '                control_task_ok ? "OK" : "FAILED");\n\n  web.begin(server, runner, imu, roller, logger);',
             '                control_task_ok ? "OK" : "FAILED");\n  web.begin(server, runner, imu, roller, logger);')
+    data=data.replace('''  const float pose_direction_error_deg = UprightPoseGuide::directionErrorDeg(r);
+  const float pose_accel_norm_g = UprightPoseGuide::accelNormG(r);
+  const float pose_gyro_norm_dps = UprightPoseGuide::gyroNormDps(r);
+  const bool pose_stable_sample = fresh && UprightPoseGuide::isUprightStableSample(r);
+  const uint32_t pose_hold_ms =
+      (pose_stable_sample && startup_upright_since_ms != 0)
+          ? static_cast<uint32_t>(now_ms - startup_upright_since_ms)
+          : 0U;
+
+  if (static_cast<uint32_t>(now_ms - startup_guide_last_diag_ms) >= 1000UL) {
+    startup_guide_last_diag_ms = now_ms;
+    Serial.printf(
+        "POSEDBG,ms=%lu,reason=%s,fresh=%u,healthy=%u,imu_ok=%u,"
+        "direction_error_deg=%.3f,accel_norm_g=%.4f,gyro_norm_dps=%.3f,"
+        "hold_ms=%lu,ax=%.4f,ay=%.4f,az=%.4f,gx=%.3f,gy=%.3f,gz=%.3f\\n",
+        static_cast<unsigned long>(now_ms),
+        reason,
+        fresh ? 1U : 0U,
+        imu.acquisitionHealthy() ? 1U : 0U,
+        imu.ok() ? 1U : 0U,
+        pose_direction_error_deg,
+        pose_accel_norm_g,
+        pose_gyro_norm_dps,
+        static_cast<unsigned long>(pose_hold_ms),
+        r.ax_g, r.ay_g, r.az_g,
+        r.gx_dps, r.gy_dps, r.gz_dps);
+  }
+
+''','')
     camera_start='''  // Camera one-shot integration proof only. No marker detection or foot angle.
 '''
     if camera_start in data:
