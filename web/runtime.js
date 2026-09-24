@@ -347,10 +347,11 @@ function renderPoses() {
   const rows = [{label:'直立基準',comparison:null},...poseSession.poses];
   for (const [i,row] of rows.entries()) {
     const c = row.comparison, tr = document.createElement('tr');
-    const notes = {yaw_changed:'yaw変化大',sideways_changed:'左右傾斜あり',outside_range:'設定範囲外',large_tilt:'傾斜大'};
+    const notes = {yaw_changed:'yaw変化大',yaw_unstable:'静止中のyaw変化',sideways_changed:'左右傾斜あり',outside_range:'設定範囲外',large_tilt:'傾斜大'};
     for (const value of [row.label || `姿勢 ${i}`,
       ...[c?.delta.roll_deg,c?.right_residual_deg,c?.left_residual_deg,c?.delta.yaw_deg].map(v => c ? format(v) + '°' : '0.00°'),
-      c ? (c.planar_check ? '比較用' : '参考：' + c.flags.map(f => notes[f]).join('・')) : '基準']) {
+      c ? (c.planar_check ? '比較用' : '参考：' + c.flags.map(f => notes[f]).join('・'))
+        : (poseSession.baseline.summary.spread.yaw_deg>PoseComparison.limits.max_yaw_spread_deg ? '基準：静止中のyaw変化' : '基準')]) {
       const td = document.createElement('td'); td.textContent = value; tr.appendChild(td);
     }
     tbody.appendChild(tr);

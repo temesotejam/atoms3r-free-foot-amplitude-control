@@ -43,6 +43,9 @@ assert.deepStrictEqual(P.compare(base,P.summarize(rotated)).flags,['yaw_changed'
 const wrap=series();wrap.forEach((m,i)=>m.mekf.quaternion=qFromEuler(0,0,i%2?179.8:-179.8));
 assert(P.summarize(wrap).spread.yaw_deg<.5);
 const sign=series();sign[2].mekf.quaternion={w:-1,x:0,y:0,z:0};assert.strictEqual(P.summarize(sign).roll_deg,0);
+const drift=series();drift.forEach((m,i)=>m.mekf.quaternion=qFromEuler(0,0,i*.7));
+const driftBase=P.summarize(drift,true);assert(driftBase.spread.yaw_deg>2.7);
+assert(P.compare(driftBase,pose).flags.includes('yaw_unstable')); // Keep stationary heading-drift evidence.
 // Actual 0.47.5 endpoint values; no claim these supplied files were multi-frame holds.
 const b={...base,...P.orientation({w:.999103,x:.016590,y:.004115,z:-.038735}),right_deg:-.0884,left_deg:-.0062};
 const p={...pose,...P.orientation({w:.986237,x:-.161376,y:.002497,z:.035901}),right_deg:21.5289,left_deg:21.0602};

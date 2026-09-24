@@ -71,7 +71,9 @@ const PoseComparison = (() => {
       ['right_x',frames.map(m => m.right.x),limits.max_marker_spread_px],
       ['left_x',frames.map(m => m.left.x),limits.max_marker_spread_px]]) {
       summary[key] = mean(values); summary.spread[key] = Math.max(...values) - Math.min(...values);
-      if (summary.spread[key] > maxSpread) throw Error('姿勢または足の位置が動いています。静止させて再取得してください');
+      // Heading may drift even when the camera, feet and gravity tilt are still.
+      // Preserve that evidence; comparison flags it instead of blocking capture.
+      if (key !== 'yaw_deg' && summary.spread[key] > maxSpread) throw Error('姿勢または足の位置が動いています。静止させて再取得してください');
     }
     for (const side of ['right','left']) summary[side+'_deg'] = mean(frames.map(m => m[side+'_deg']));
     const accelRoll = frames.map(m => Math.atan2(m.mekf.inputs.accel_g[1],m.mekf.inputs.accel_g[2])*180/Math.PI);
@@ -89,6 +91,7 @@ const PoseComparison = (() => {
       right_deg:pose.right_deg-base.right_deg, left_deg:pose.left_deg-base.left_deg};
     const flags = [];
     if (Math.abs(delta.yaw_deg)>3) flags.push('yaw_changed');
+    if (base.spread.yaw_deg>limits.max_yaw_spread_deg || pose.spread.yaw_deg>limits.max_yaw_spread_deg) flags.push('yaw_unstable');
     if (Math.abs(delta.pitch_deg)>2) flags.push('sideways_changed');
     if (!base.right_in_range || !pose.right_in_range || !base.left_in_range || !pose.left_in_range) flags.push('outside_range');
     if (Math.abs(delta.roll_deg)>30) flags.push('large_tilt');
