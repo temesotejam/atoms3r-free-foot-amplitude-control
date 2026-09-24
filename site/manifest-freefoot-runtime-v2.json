@@ -1,6 +1,6 @@
 {
   "name": "AtomS3R Free-foot Runtime V2",
-  "version": "0.47.3-adaptive-markers",
+  "version": "0.47.4-marker-identity",
   "builds": [
     {
       "chipFamily": "ESP32-S3",

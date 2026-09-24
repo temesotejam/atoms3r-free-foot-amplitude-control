@@ -13,29 +13,30 @@
     <header class="hero">
       <p class="eyebrow">ATOMS3R / FREE-FOOT AMPLITUDE CONTROL</p>
       <h1>Free-foot Runtime V2<br><span>左右足角度・制御・ログを統合</span></h1>
-      <p class="lead">Free-foot Runtime V2 / 0.47.3 足マーカー上下探索版。傾いたときに足角度が消える症状へ対応するため、白マーカーの上下探索と未検出理由の表示を追加しました。</p>
+      <p class="lead">Free-foot Runtime V2 / 0.47.4 足マーカー識別・ゼロ点確認版。左右の角度差を調べるため、白マーカーの候補比較とゼロ点の品質判定を改善し、検出画像の取得・保存を追加しました。</p>
       <div class="badges"><span>ESP32-S3</span><span>BMI270 400/200 Hz</span><span>RWLOG v51</span><span>MEKF</span><span>左右足角度</span></div>
     </header>
     <section class="panel important">
       <h2>今回の構成</h2>
       <p>V46al-R2の制御計算、固定3ms補償、300mA・最大100msパルス、30秒測定、開始・終了のLED同期を維持。白マーカーの位置から左右足角度を取得・表示・保存します。足角度は観測用で、制御入力には使用しません。</p>
       <p>ログ用イベント配列と大きな説明データはPSRAMに配置します。測定後にログを確定し、CRCで検証できる4KB以下のチャンクで取得します。ブラウザの一時停止・再接続・再読み込み後も保存済みの部分を再利用できます。</p>
-      <p><strong>上下探索の効果と角度精度は実機確認待ちです。</strong>ビルドとホスト検証の範囲、実機で確認する項目は<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/MARKER_TRACKING_0473.md">設計・確認手順</a>を参照してください。カメラは15fpsを目標に設定し、画面に実測値を表示します。</p>
+      <p><strong>修正後の実機画像と角度精度は確認待ちです。</strong>ビルドとホスト検証の範囲、実機で確認する項目は<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/MARKER_IDENTITY_0474.md">設計・確認手順</a>を参照してください。カメラは15fpsを目標に設定し、画面に実測値を表示します。</p>
       <p>公開ビルド：<code id="build-sha">取得中</code><br><a href="build-sha.txt">ビルドSHA</a> / <a href="firmware/SHA256SUMS.txt">ファームウェアSHA-256</a></p>
     </section>
     <section class="panel important">
       <h2>書き込みと測定</h2>
       <p>書き込み時はAtomS3RをUSBでPCへ接続し、PC版ChromeまたはEdgeで下のボタンを押してください。</p>
       <esp-web-install-button manifest="manifest-freefoot-runtime-v2.json">
-        <button slot="activate" class="primary">0.47.3 足マーカー上下探索版を書き込む</button>
+        <button slot="activate" class="primary">0.47.4 足マーカー識別・ゼロ点確認版を書き込む</button>
         <span slot="unsupported" class="warning">PC版ChromeまたはEdgeを使用してください。</span>
       </esp-web-install-button>
       <ol>
         <li>測定時はバッテリーで起動し、Wi-Fi <code>AtomS3CAM_Q1_SHADOW</code>（パスワード <code>12345678</code>）へ接続します。</li>
-        <li><a href="http://192.168.4.1/">http://192.168.4.1/</a>を開きます。起動時のUSB待機8秒＋従来の10秒後のLED点灯を目安に直立させ、左右の白マーカーが見える状態で2秒以上静止してください。</li>
+        <li><a href="http://192.168.4.1/">http://192.168.4.1/</a>を開きます。起動時のUSB待機8秒＋従来の10秒後のLED点灯を目安に胴体と両足を直立させ、左右の白マーカーが見える状態で2秒以上静止してください。</li>
         <li>左右のゼロ点が確定して開始可能になったら測定します。測定終了後は「RWLOGを取得・再開」で保存します。足角度CSVも保存できます。</li>
         <li>次の測定には「ログを消去・次の測定へ」を使います。ゼロ点は同じ起動中は保持されます。</li>
       </ol>
+      <p>足角度を確認する場合は、測定を開始せず「検出画像を確認」を開きます。直立時と、両足を地面に固定して胴体を前後に傾けた時のそれぞれで「検出画像を取得」→「画像付き診断を保存」を押してください。緑の選択位置が左右の白四角に重なっているか確認できます。足角度は胴体に対する相対角、MEKF表示は胴体の左右揺動です。</p>
       <p>電源・通信・カメラ・制御の確認情報は装置のWeb画面からJSONで保存できます。この診断版はUSB接続がなくても8秒後に通常処理へ進みます。不安定な場合は下のUSBログを保存してください。</p>
       <details><summary>デバイスが表示されない場合</summary><p>AtomS3RをDownload Modeへ入れてから書き込み、完了後に通常起動してください。</p></details>
     </section>

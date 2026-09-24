@@ -19,6 +19,9 @@ struct FootFrame {
   MarkerDetectionReason right_reason = MarkerDetectionReason::NoFrame;
   MarkerDetectionReason left_reason = MarkerDetectionReason::NoFrame;
   uint8_t right_templates = 0, left_templates = 0;
+  uint8_t right_candidates = 0, left_candidates = 0;
+  float right_ambiguity = 0, left_ambiguity = 0;
+  FootZeroReason zero_reason = FootZeroReason::Waiting;
 };
 struct FootSnapshot {
   FootFrame latest;
@@ -28,10 +31,20 @@ struct FootSnapshot {
   uint32_t processing_max_us = 0;
   float right_zero = appcfg::kFootAngleAZeroXPx, left_zero = appcfg::kFootAngleBZeroXPx;
   float fps = 0;
+  FootZeroReason zero_reason = FootZeroReason::Waiting;
+  bool preview_available = false;
+};
+struct FootPreviewInfo {
+  FootFrame frame;
+  WhiteMarkerObservation right, left;
+  float right_zero = 0, left_zero = 0;
+  uint32_t zero_samples = 0;
 };
 class FootObserver {
  public:
   static constexpr uint32_t kCapacity = 768; // 40 s * 15 Hz, with margin
+  static constexpr uint32_t kPreviewWidth = 160, kPreviewHeight = 120;
+  static constexpr uint32_t kPreviewBytes = kPreviewWidth * kPreviewHeight;
   bool begin(OneShotCamera& camera, RunControlWorker& control);
   bool readyToStart() const;
   void beginRun(uint16_t id, uint64_t log_epoch_us);
@@ -40,9 +53,11 @@ class FootObserver {
   FootSnapshot snapshot() const;
   CameraOneShotSnapshot cameraSnapshot() const { return camera_ ? camera_->snapshot() : CameraOneShotSnapshot{}; }
   void appendMetadata(PsramString& json) const; // sealed, export worker only
+  bool copyPreview(uint8_t* out, FootPreviewInfo& info) const;
  private:
   static void entry(void* ptr) { static_cast<FootObserver*>(ptr)->loop(); }
   void loop();
+  void publishPreview(const uint8_t* gray, const FootPreviewInfo& info);
   OneShotCamera* camera_ = nullptr;
   RunControlWorker* control_ = nullptr;
   TaskHandle_t task_ = nullptr;
@@ -53,4 +68,7 @@ class FootObserver {
   FootSnapshot status_;
   uint16_t recording_run_id_ = 0;
   uint64_t log_epoch_us_ = 0;
+  uint8_t* preview_ = nullptr;
+  SemaphoreHandle_t preview_mutex_ = nullptr;
+  FootPreviewInfo preview_info_;
 };

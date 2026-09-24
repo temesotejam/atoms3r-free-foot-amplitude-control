@@ -13,9 +13,14 @@ class WebUi {
   void command(RunControlWorker::Command);
   void manifest();
   void chunk();
+  void previewCapture();
+  void previewChunk();
+  bool previewAllowed() const;
   WebServer* server_ = nullptr;
   RunControlWorker* control_ = nullptr;
   FootObserver* feet_ = nullptr;
   ImmutableExport* export_ = nullptr;
   uint8_t chunk_buffer_[export_protocol::kChunkBytes + 16] = {};
+  uint8_t* preview_buffer_ = nullptr;
+  uint32_t preview_token_ = 0;
 };

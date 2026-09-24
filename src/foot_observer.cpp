@@ -8,11 +8,30 @@ bool FootObserver::begin(OneShotCamera& camera, RunControlWorker& control) {
   camera_ = &camera; control_ = &control;
   frames_ = static_cast<FootFrame*>(ps_malloc(sizeof(FootFrame) * kCapacity));
   if (!frames_ || !camera.snapshot().camera_ok || !control.ready()) return false;
+  preview_ = static_cast<uint8_t*>(ps_malloc(kPreviewBytes));
+  preview_mutex_ = xSemaphoreCreateMutex();
   portENTER_CRITICAL(&mux_); status_.available = true; portEXIT_CRITICAL(&mux_);
   if (xTaskCreatePinnedToCore(entry, "foot_observer", 10240, this, 1, &task_, 0) != pdPASS) {
     portENTER_CRITICAL(&mux_); status_.available = false; portEXIT_CRITICAL(&mux_); return false;
   }
   return true;
+}
+bool FootObserver::copyPreview(uint8_t* out, FootPreviewInfo& info) const {
+  if (!out || !preview_ || !preview_mutex_ || xSemaphoreTake(preview_mutex_, 0) != pdTRUE) return false;
+  const bool valid = preview_info_.frame.frame_valid;
+  if (valid) { memcpy(out, preview_, kPreviewBytes); info = preview_info_; }
+  xSemaphoreGive(preview_mutex_);
+  return valid;
+}
+void FootObserver::publishPreview(const uint8_t* gray, const FootPreviewInfo& info) {
+  // Never hold an interrupt-disabling spinlock around PSRAM copies. The image
+  // and its detection metadata share a mutex; a busy reader simply skips this
+  // optional preview update. Network transmission never holds this mutex.
+  if (!preview_ || !preview_mutex_ || xSemaphoreTake(preview_mutex_, 0) != pdTRUE) return;
+  if (gray) for (uint32_t y = 0; y < kPreviewHeight; ++y)
+    for (uint32_t x = 0; x < kPreviewWidth; ++x) preview_[y * kPreviewWidth + x] = gray[(y * 2) * 320 + x * 2];
+  preview_info_ = info;
+  xSemaphoreGive(preview_mutex_);
 }
 FootSnapshot FootObserver::snapshot() const {
   portENTER_CRITICAL(&mux_); const auto copy = status_; portEXIT_CRITICAL(&mux_);
@@ -93,6 +112,14 @@ void FootObserver::loop() {
     f.right_weight = a.weight_sum; f.left_weight = b.weight_sum;
     f.right_reason = a.reason; f.left_reason = b.reason;
     f.right_templates = a.templates_tested; f.left_templates = b.templates_tested;
+    f.right_candidates = a.candidate_count; f.left_candidates = b.candidate_count;
+    f.right_ambiguity = a.ambiguity_ratio; f.left_ambiguity = b.ambiguity_ratio;
+    f.zero_reason = zero_.reason;
+    f.processing_us = micros() - processing_start;
+    FootPreviewInfo preview;
+    preview.frame = f; preview.right = a; preview.left = b;
+    preview.right_zero = zero_.a_zero; preview.left_zero = zero_.b_zero; preview.zero_samples = zero_.count;
+    publishPreview(f.frame_valid ? fb->buf : nullptr, preview);
     f.processing_us = micros() - processing_start;
     RuntimeDiag::phase(RuntimeDiag::Lane::Camera, RuntimeDiag::Phase::CameraRelease);
     camera_->releaseContinuous(fb);
@@ -121,6 +148,8 @@ void FootObserver::loop() {
     status_.latest = f; status_.zero_ready = zero_.ready;
     status_.right_zero = zero_.a_zero; status_.left_zero = zero_.b_zero;
     status_.zero_samples = zero_.count;
+    status_.zero_reason = zero_.reason;
+    status_.preview_available = preview_ && preview_mutex_;
     status_.fps = fps;
     portEXIT_CRITICAL(&mux_);
     RuntimeDiag::beat(RuntimeDiag::Lane::Camera, seq);
@@ -134,7 +163,7 @@ void FootObserver::loop() {
 static String number(float v) { return isfinite(v) ? String(v, 5) : String("null"); }
 void FootObserver::appendMetadata(PsramString& json) const {
   const auto s = snapshot();
-  json += "\"foot_observation\":{\"revision\":\"freefoot_runtime_v2_0473\",\"observation_only\":true,";
+  json += "\"foot_observation\":{\"revision\":\"freefoot_runtime_v2_0474\",\"observation_only\":true,";
   json += "\"detector\":\"" + String(appcfg::kWhiteDetectorRevision) + "\",";
   json += "\"scan_y_semantics\":\"selected_row_template_center_not_marker_centroid\",";
   json += "\"vertical_recovery_angle_accuracy_validated\":false,";
@@ -148,6 +177,9 @@ void FootObserver::appendMetadata(PsramString& json) const {
   json += ",\"count\":" + String(s.count) + ",\"overflow\":" + String(s.overflow ? "true" : "false");
   json += ",\"available\":" + String(s.available ? "true" : "false");
   json += ",\"zero_ready\":" + String(s.zero_ready ? "true" : "false");
+  json += ",\"zero_reason\":\"" + String(footZeroReasonName(s.zero_reason)) + "\"";
+  json += ",\"zero_max_nominal_offset_px\":" + number(appcfg::kAutoZeroMaxNominalOffsetXPx);
+  json += ",\"zero_max_spread_px\":" + number(appcfg::kAutoZeroMaxSpreadXPx);
   json += ",\"right_zero_x\":" + number(s.right_zero) + ",\"left_zero_x\":" + number(s.left_zero);
   json += ",\"right_deg_per_px\":0.167779119,\"left_deg_per_px\":0.162645305,";
   json += "\"right_support_x\":[42,173],\"left_support_x\":[43.5,177.5]},\"foot_frames\":[";
@@ -176,7 +208,10 @@ void FootObserver::appendMetadata(PsramString& json) const {
     json += ",\"right_weight\":" + number(f.right_weight) + ",\"left_weight\":" + number(f.left_weight);
     json += ",\"right_reason\":\"" + String(markerDetectionReasonName(f.right_reason)) + "\"";
     json += ",\"left_reason\":\"" + String(markerDetectionReasonName(f.left_reason)) + "\"";
-    json += ",\"right_templates\":" + String(f.right_templates) + ",\"left_templates\":" + String(f.left_templates) + "}";
+    json += ",\"right_templates\":" + String(f.right_templates) + ",\"left_templates\":" + String(f.left_templates);
+    json += ",\"right_candidates\":" + String(f.right_candidates) + ",\"left_candidates\":" + String(f.left_candidates);
+    json += ",\"right_ambiguity\":" + number(f.right_ambiguity) + ",\"left_ambiguity\":" + number(f.left_ambiguity);
+    json += ",\"zero_reason\":\"" + String(footZeroReasonName(f.zero_reason)) + "\"}";
   }
   json += "]";
 }

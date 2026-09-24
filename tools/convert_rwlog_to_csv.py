@@ -1033,7 +1033,8 @@ FOOT_COLUMNS = ["sequence", "run_id", "frame_us", "delivered_us", "log_time_us",
     "processing_us", "timestamp_valid", "frame_valid", "zero_ready", "right_valid",
     "left_valid", "right_in_range", "left_in_range", "right_x", "left_x", "right_deg",
     "left_deg", "right_contrast", "left_contrast", "right_scan_y", "left_scan_y",
-    "right_weight", "left_weight", "right_reason", "left_reason", "right_templates", "left_templates"]
+    "right_weight", "left_weight", "right_reason", "left_reason", "right_templates", "left_templates",
+    "right_candidates", "left_candidates", "right_ambiguity", "left_ambiguity", "zero_reason"]
 
 def write_foot_frames(metadata: dict, out_dir: Path) -> int:
     rows = metadata.get("foot_frames")
@@ -1128,5 +1129,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
 

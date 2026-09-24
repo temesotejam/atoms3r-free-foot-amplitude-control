@@ -1,10 +1,12 @@
 'use strict';
 const fs = require('fs'), vm = require('vm'), assert = require('assert');
 const elements = new Map();
-function element(id) {if(!elements.has(id)) elements.set(id, {textContent:'',getContext:()=>new Proxy({}, {get:()=>()=>{}})}); return elements.get(id);}
+function canvasContext() {return new Proxy({}, {get:(_target,name)=>name==='createImageData'
+  ? (w,h)=>({data:new Uint8Array(w*h*4)}) : ()=>{}});}
+function element(id) {if(!elements.has(id)) elements.set(id, {textContent:'',style:{},width:640,height:480,getContext:canvasContext}); return elements.get(id);}
 const code=fs.readFileSync('web/runtime.js','utf8').replace(/poll\(\);\s*$/, '');
-const context=vm.createContext({document:{getElementById:element},setTimeout,clearTimeout,AbortController,
-  Date,DataView,Uint8Array,TextDecoder,Map,console,fetch:()=>{throw Error('unset');}});
+const context=vm.createContext({document:{getElementById:element,createElement:()=>({getContext:canvasContext})},setTimeout,clearTimeout,AbortController,
+  Date,DataView,Uint8Array,TextDecoder,Map,console,btoa:s=>Buffer.from(s,'binary').toString('base64'),fetch:()=>{throw Error('unset');}});
 vm.runInContext(code,context);
 (async()=>{
   // Headers succeed immediately, response body never completes until aborted.
@@ -80,5 +82,52 @@ vm.runInContext(code,context);
   assert.strictEqual(vm.runInContext('validateChunk(packet,4096,3).length',context),3);
   assert.throws(()=>vm.runInContext('validateChunk(packet,0,3)',context),/不一致/);
   packet[18]^=1;assert.throws(()=>vm.runInContext('validateChunk(packet,4096,3)',context),/CRC/);
+  valid.foot.zero_ready=false;valid.foot.zero_reason='position_mismatch';valid.ready=false;
+  await vm.runInContext('refresh()',context);
+  assert.match(element('guide').textContent,/基準位置から大きく外れ/);
+  assert.strictEqual(element('start').disabled,true);
+  valid.foot.zero_ready=true;valid.foot.zero_reason='ready';valid.foot.preview_available=true;valid.ready=true;
+  await vm.runInContext('refresh()',context);
+  const pixels=Uint8Array.from({length:19200},(_,i)=>i%256);context.pixels=pixels;
+  const manifest={format:'gray8',width:160,height:120,source_width:320,source_height:240,bytes:19200,
+    token:7,sequence:17,crc32:vm.runInContext('crc32(pixels)',context),age_ms:30,zero_reason:'ready',
+    right:{valid:true,candidates:1,x:172,scan_y:66,width:19,reason:'detected'},
+    left:{valid:true,candidates:1,x:175,scan_y:184,width:19,reason:'detected'}};
+  context.manifest=manifest;
+  assert.throws(()=>vm.runInContext('validatePreviewManifest({...manifest,bytes:76800})',context),/形式/);
+  let chunks=0,badWholeCrc=false,wrongToken=false;
+  context.fetch=async(path,opts)=>{
+    if(path==='/vision/capture'){
+      assert.strictEqual(opts.method,'POST');assert.strictEqual(element('start').disabled,true);
+      return {ok:true,json:async()=>({...manifest,crc32:badWholeCrc ? (manifest.crc32^1)>>>0 : manifest.crc32})};
+    }
+    const url=new URL(path,'http://device');assert.strictEqual(url.pathname,'/vision/chunk');
+    assert.strictEqual(url.searchParams.get('token'),'7');
+    if(wrongToken)return {ok:false,status:409,text:async()=>'preview_token_or_range_mismatch'};
+    ++chunks;
+    const offset=Number(url.searchParams.get('offset')),length=Number(url.searchParams.get('length'));
+    assert(length<=4096 && offset+length<=pixels.length);
+    const body=new Uint8Array(length+16),header=new DataView(body.buffer);body.set(pixels.subarray(offset,offset+length),16);
+    context.payload=body.subarray(16);
+    header.setUint32(0,0x31484346,true);header.setUint32(4,offset,true);header.setUint32(8,length,true);
+    header.setUint32(12,vm.runInContext('crc32(payload)',context),true);
+    // Independently polled values must never replace frozen image metadata.
+    vm.runInContext('latest.foot.left_x=35',context);
+    return {ok:true,arrayBuffer:async()=>body.buffer};
+  };
+  await vm.runInContext('capturePreview()',context);
+  assert.strictEqual(chunks,5);assert.strictEqual(vm.runInContext('previewRunning',context),false);
+  assert.strictEqual(vm.runInContext('previewEvidence.left.x',context),175);
+  assert.deepStrictEqual(Buffer.from(vm.runInContext('previewEvidence.pixels_gray8_base64',context),'base64'),Buffer.from(pixels));
+  assert.strictEqual(element('preview-save').disabled,false);assert.strictEqual(element('start').disabled,false);
+  badWholeCrc=true;await vm.runInContext('capturePreview()',context);
+  assert.match(element('preview-status').textContent,/画像全体のCRC/);
+  assert.match(element('preview-status').textContent,/前回の画像/);
+  assert.strictEqual(vm.runInContext('previewEvidence.sequence',context),17);
+  badWholeCrc=false;wrongToken=true;await vm.runInContext('capturePreview()',context);
+  assert.match(element('preview-status').textContent,/409/);
+  assert.strictEqual(vm.runInContext('previewRunning',context),false);
+  assert.strictEqual(element('start').disabled,false);
+  console.log('neutral-zero gate, frozen preview metadata/pixels, five bounded chunks, whole CRC and token failure recovery PASS');
   console.log('foot failure reasons, tilted/range/terminal display, body timeout, status recovery, stale authority and corrupt chunks PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});

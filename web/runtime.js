@@ -1,5 +1,6 @@
 'use strict';
 const $ = id => document.getElementById(id);
+let previewRunning = false, previewEvidence = null;
 let latest = null, lastSeen = 0, refreshInFlight = false, commandInFlight = false;
 let transferRunning = false, cancelTransfer = false, completedFile = null, completedName = '', completedFoot = null;
 const nap = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -25,13 +26,15 @@ async function request(path, {method = 'GET', kind = 'json', timeout = 3000} = {
 }
 function controls() {
   const fresh = latest && Date.now() - lastSeen < 3500;
-  const busy = commandInFlight || !!latest?.command?.pending;
+  const busy = commandInFlight || previewRunning || !!latest?.command?.pending;
   const building = latest?.export_phase === 'building';
   $('start').disabled = !fresh || busy || transferRunning || !latest.ready || latest.running || latest.export_phase !== 'empty';
   $('clear').disabled = !fresh || busy || transferRunning || building || latest.running || !['FINISHED', 'ESTOP'].includes(latest.state);
   $('download').disabled = !fresh || busy || transferRunning || !latest.downloadable || latest.running;
   $('cancel').disabled = !transferRunning;
   $('csv').disabled = !completedFoot;
+  $('preview').disabled = !fresh || busy || transferRunning || building || latest.running || !latest.foot?.preview_available;
+  $('preview-save').disabled = !previewEvidence || previewRunning;
 }
 const format = (n, digits = 2) => Number.isFinite(n) ? n.toFixed(digits) : '—';
 function drawMarkers(f) {
@@ -49,7 +52,9 @@ function footIssues(f, stale, terminal) {
   else if (stale) issues.push('画像更新なし');
   if (f.frame_valid === false) issues.push('画像取得失敗');
   else if (f.frame_timestamp_valid === false) issues.push('画像時刻が無効');
-  const reasons = {low_contrast: '未検出（明暗差不足）', low_weight: '未検出（白領域不足）'};
+  const reasons = {low_contrast: '未検出（明暗差不足）', low_weight: '未検出（白領域不足）',
+    bad_shape: '白領域の幅が不適合', ambiguous: '候補を区別できません',
+    track_jump: '検出位置が急変', reacquiring: '再捕捉中'};
   for (const [side, label] of [['right', '右'], ['left', '左']]) {
     if (f[side + '_valid']) {
       if (f[side + '_in_range'] === false) issues.push(label + '：校正範囲外');
@@ -73,13 +78,16 @@ function render(s) {
   $('right').textContent = f.right_valid && (!stale || terminal) ? format(f.right_deg) + '°' : '—';
   $('left').textContent = f.left_valid && (!stale || terminal) ? format(f.left_deg) + '°' : '—';
   $('fps').textContent = terminal ? '停止中' : `${format(stale ? 0 : f.fps, 1)} / 15 fps`;
-  $('foot-status').textContent = `${f.zero_ready ? 'ゼロ点確定' : 'ゼロ点待ち'} · 記録${f.frames ?? 0}枚 · 画像取得失敗${f.failures ?? 0}回` +
+  $('foot-status').textContent = `${f.zero_ready ? 'ゼロ点確定' : 'ゼロ点待ち（' + (f.zero_samples ?? 0) + '枚）'} · 記録${f.frames ?? 0}枚 · 画像取得失敗${f.failures ?? 0}回` +
     footIssues(f, stale, terminal);
   if (s.running) $('guide').textContent = '測定中。画面は更新されます。足角度は制御入力に使用しません。';
   else if (s.downloadable) $('guide').textContent = 'ログを保存してください。次の測定には「ログを消去・次の測定へ」を使います。';
   else if (!f.available) $('guide').textContent = 'カメラを初期化できませんでした。診断情報を保存してください。';
   else if (stale || f.frame_valid === false || f.frame_timestamp_valid === false) $('guide').textContent = 'カメラ画像の更新を確認しています。この状態が続く場合は診断JSONを保存してください。';
-  else if (!f.zero_ready) $('guide').textContent = `左右のマーカーが見える直立姿勢で静止してください。姿勢誤差 ${format(s.upright.error_deg, 1)}° / 角速度 ${format(s.upright.gyro_dps, 1)}°/s`;
+  else if (!f.zero_ready && f.zero_reason === 'position_mismatch') $('guide').textContent = 'ゼロ点候補が基準位置から大きく外れています。両足を直立させ、「検出画像を確認」で白四角を選んでいるか確認してください。';
+  else if (!f.zero_ready && f.zero_reason === 'marker_moving') $('guide').textContent = '足の位置が動いているためゼロ点を取り直しています。胴体と両足を静止させてください。';
+  else if (!f.zero_ready && f.zero_reason === 'marker_invalid') $('guide').textContent = '左右の白四角を確認しています。「検出画像を確認」で選択位置を確認できます。';
+  else if (!f.zero_ready) $('guide').textContent = `胴体と両足を直立させ、白四角が見える状態で2秒以上静止してください。姿勢誤差 ${format(s.upright.error_deg, 1)}° / 角速度 ${format(s.upright.gyro_dps, 1)}°/s`;
   else if (!f.right_valid || !f.left_valid) $('guide').textContent = '未検出の足があります。マーカーの見え方を確認してください。この姿勢の診断JSONを保存すると原因の確認に使えます。';
   else $('guide').textContent = s.ready ? '直立姿勢を保ち、測定を開始してください。' : 'IMUの初期化・静止確認を待っています。';
   $('diagnostic-view').textContent = JSON.stringify(s, null, 2);
@@ -242,11 +250,76 @@ function footCsv(rows) {
   const esc = v => v == null ? '' : '"' + String(v).replaceAll('"', '""') + '"';
   return keys.map(esc).join(',') + '\r\n' + rows.map(row => keys.map(k => esc(row[k])).join(',')).join('\r\n') + '\r\n';
 }
+function validatePreviewManifest(m) {
+  if (!m || m.format !== 'gray8' || m.width !== 160 || m.height !== 120 ||
+      m.source_width !== 320 || m.source_height !== 240 || m.bytes !== 19200 ||
+      !Number.isInteger(m.token) || m.token <= 0 || m.token > 0xffffffff ||
+      !Number.isInteger(m.crc32) || m.crc32 < 0 || m.crc32 > 0xffffffff ||
+      !Number.isInteger(m.sequence) || !m.right || !m.left)
+    throw new Error('画像診断の形式が不正です');
+}
+function previewReason(reason) {
+  return ({detected:'検出', no_frame:'画像なし', low_contrast:'明暗差不足', low_weight:'白領域不足',
+    bad_shape:'幅が不適合', ambiguous:'候補が競合', track_jump:'位置が急変', reacquiring:'再捕捉中',
+    waiting:'待機中', body_moving:'胴体の静止待ち', marker_invalid:'マーカー確認待ち',
+    position_mismatch:'基準位置から外れています', marker_moving:'足の静止待ち',
+    collecting:'取得中', ready:'確定'})[reason] ?? '未確認';
+}
+function drawPreview(m, pixels) {
+  const small = document.createElement('canvas'); small.width = m.width; small.height = m.height;
+  const smallCtx = small.getContext('2d'), bitmap = smallCtx.createImageData(m.width, m.height);
+  for (let i = 0; i < pixels.length; ++i) {
+    bitmap.data[i * 4] = bitmap.data[i * 4 + 1] = bitmap.data[i * 4 + 2] = pixels[i];
+    bitmap.data[i * 4 + 3] = 255;
+  }
+  smallCtx.putImageData(bitmap, 0, 0);
+  const canvas = $('preview-image'), ctx = canvas.getContext('2d');
+  canvas.style.display = 'block'; ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(small, 0, 0, canvas.width, canvas.height);
+  for (const [side, label] of [['right', 'A / 右足'], ['left', 'B / 左足']]) {
+    const c = m[side];
+    if (!c.candidates) continue;
+    const x = c.x * 2, y = c.scan_y * 2;
+    ctx.strokeStyle = ctx.fillStyle = c.valid ? '#43ff9c' : '#ffdc55'; ctx.lineWidth = 2;
+    ctx.strokeRect(x - c.width, y - 16, c.width * 2, 32);
+    ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.stroke();
+    ctx.font = 'bold 16px system-ui'; ctx.fillText(label, Math.max(4, Math.min(x + 10, 540)), Math.max(20, y - 22));
+    if (c.alternate_x >= 0 && c.alternate_y >= 0) {
+      ctx.strokeStyle = '#ffdc55'; ctx.beginPath(); ctx.arc(c.alternate_x * 2, c.alternate_y * 2, 9, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+}
+async function capturePreview() {
+  if (previewRunning || transferRunning || latest?.running) return;
+  previewRunning = true; controls(); $('preview-status').textContent = '画像を取得中…';
+  try {
+    const m = await request('/vision/capture', {method:'POST'});
+    validatePreviewManifest(m);
+    const pixels = new Uint8Array(m.bytes);
+    for (let offset = 0; offset < m.bytes; offset += 4096) {
+      const length = Math.min(4096, m.bytes - offset);
+      const packet = await request(`/vision/chunk?token=${m.token}&offset=${offset}&length=${length}`, {kind:'bytes'});
+      pixels.set(validateChunk(packet, offset, length), offset);
+      await nap(20);
+    }
+    if (crc32(pixels) !== m.crc32) throw new Error('画像全体のCRCが不一致です');
+    // Store exact gray pixels plus matching metadata in one downloadable JSON.
+    // Never substitute the separately polled live status for this frame.
+    let binary = ''; for (const value of pixels) binary += String.fromCharCode(value);
+    const evidence = {...m, pixels_gray8_base64: btoa(binary)};
+    drawPreview(m, pixels); previewEvidence = evidence;
+    $('preview-status').textContent = `画像 #${m.sequence} · 取得要求の${format(m.age_ms, 0)} ms前のフレーム · 右 ${previewReason(m.right.reason)} / 左 ${previewReason(m.left.reason)} · ゼロ点 ${previewReason(m.zero_reason)}。姿勢を変えたら再取得してください。`;
+  } catch (error) {
+    $('preview-status').textContent = `画像取得に失敗しました。${previewEvidence ? '表示と保存の対象は前回の画像です。' : ''}再取得してください: ${error.message}`;
+  } finally { previewRunning = false; controls(); }
+}
 $('start').onclick = () => command('/start-energy-control-autonomous');
 $('stop').onclick = () => command('/stop');
 $('clear').onclick = () => command('/clear');
 $('download').onclick = download;
 $('cancel').onclick = () => { cancelTransfer = true; };
 $('csv').onclick = () => saveBlob(new Blob(['\ufeff', footCsv(completedFoot)], {type: 'text/csv;charset=utf-8'}), completedName.replace(/\.rwlog$/, '_foot.csv'));
+$('preview').onclick = capturePreview;
+$('preview-save').onclick = () => saveBlob(new Blob([JSON.stringify(previewEvidence, null, 2)], {type:'application/json'}), `freefoot-vision-diagnostics-${previewEvidence.sequence}.json`);
 $('diagnostics').onclick = () => saveBlob(new Blob([JSON.stringify(latest, null, 2)], {type: 'application/json'}), 'freefoot-diagnostics.json');
 poll();

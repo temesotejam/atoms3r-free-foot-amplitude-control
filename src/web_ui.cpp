@@ -18,6 +18,7 @@ static const char* phase(ImmutableExport::Phase p) {
 }
 void WebUi::begin(WebServer& s, RunControlWorker& control, FootObserver& feet, ImmutableExport& exporter) {
   server_ = &s; control_ = &control; feet_ = &feet; export_ = &exporter;
+  preview_buffer_ = static_cast<uint8_t*>(ps_malloc(FootObserver::kPreviewBytes));
   WiFi.onEvent([](WiFiEvent_t event) {
     RuntimeDiag::wifiEvent(static_cast<uint32_t>(event),
         event == ARDUINO_EVENT_WIFI_AP_STACONNECTED ? 1 : event == ARDUINO_EVENT_WIFI_AP_STADISCONNECTED ? -1 : 0,
@@ -31,6 +32,8 @@ void WebUi::begin(WebServer& s, RunControlWorker& control, FootObserver& feet, I
     server_->send_P(200, "text/html; charset=utf-8", RUNTIME_HTML);
   });
   s.on("/status.json", HTTP_GET, [this]() { status(); });
+  s.on("/vision/capture", HTTP_POST, [this]() { previewCapture(); });
+  s.on("/vision/chunk", HTTP_GET, [this]() { previewChunk(); });
   s.on("/start-energy-control-autonomous", HTTP_POST, [this]() { command(RunControlWorker::Command::Start); });
   s.on("/clear", HTTP_POST, [this]() { command(RunControlWorker::Command::Clear); });
   s.on("/stop", HTTP_POST, [this]() {
@@ -109,6 +112,8 @@ void WebUi::status() {
   json += ",\"foot\":{\"available\":" + String(f.available ? "true" : "false");
   json += ",\"detector\":\"" + String(appcfg::kWhiteDetectorRevision) + "\"";
   json += ",\"zero_ready\":" + String(f.zero_ready ? "true" : "false") + ",\"zero_samples\":" + String(f.zero_samples);
+  json += ",\"zero_reason\":\"" + String(footZeroReasonName(f.zero_reason)) + "\"";
+  json += ",\"preview_available\":" + String(f.preview_available && preview_buffer_ ? "true" : "false");
   json += ",\"right_zero_x\":" + num(f.right_zero) + ",\"left_zero_x\":" + num(f.left_zero);
   json += ",\"right_x\":" + num(f.latest.right_x) + ",\"left_x\":" + num(f.latest.left_x);
   json += ",\"right_deg\":" + num(f.latest.right_deg) + ",\"left_deg\":" + num(f.latest.left_deg);
@@ -118,6 +123,8 @@ void WebUi::status() {
   json += ",\"right_reason\":\"" + String(markerDetectionReasonName(f.latest.right_reason)) + "\"";
   json += ",\"left_reason\":\"" + String(markerDetectionReasonName(f.latest.left_reason)) + "\"";
   json += ",\"right_templates\":" + String(f.latest.right_templates) + ",\"left_templates\":" + String(f.latest.left_templates);
+  json += ",\"right_candidates\":" + String(f.latest.right_candidates) + ",\"left_candidates\":" + String(f.latest.left_candidates);
+  json += ",\"right_ambiguity\":" + num(f.latest.right_ambiguity) + ",\"left_ambiguity\":" + num(f.latest.left_ambiguity);
   json += ",\"right_valid\":" + String(f.latest.right_valid ? "true" : "false");
   json += ",\"left_valid\":" + String(f.latest.left_valid ? "true" : "false");
   json += ",\"right_in_range\":" + String(f.latest.right_in_range ? "true" : "false");
@@ -189,5 +196,71 @@ void WebUi::chunk() {
   server_->sendHeader("Cache-Control", "no-store");
   server_->setContentLength(length + 16);
   server_->send(200, "application/octet-stream", "");
+  server_->sendContent(reinterpret_cast<const char*>(chunk_buffer_), length + 16);
+}
+
+bool WebUi::previewAllowed() const {
+  return !control_->snapshot().running && !control_->commandState().pending &&
+         export_->status().phase != ImmutableExport::Phase::Building;
+}
+static String previewMarkerJson(const WhiteMarkerObservation& m) {
+  String s;
+  s = "{\"valid\":" + String(m.valid ? "true" : "false");
+  s += ",\"reason\":\"" + String(markerDetectionReasonName(m.reason)) + "\"";
+  s += ",\"x\":" + num(m.center_x_px) + ",\"scan_y\":" + num(m.center_y_px);
+  s += ",\"width\":" + String(m.bright_width_px) + ",\"contrast\":" + num(m.peak_contrast);
+  s += ",\"weight\":" + num(m.weight_sum) + ",\"candidates\":" + String(m.candidate_count);
+  s += ",\"ambiguity_ratio\":" + num(m.ambiguity_ratio);
+  s += ",\"alternate_x\":" + num(m.alternate_x_px) + ",\"alternate_y\":" + num(m.alternate_y_px) + "}";
+  return s;
+}
+void WebUi::previewCapture() {
+  RuntimeDiag::Scope diagnostic(RuntimeDiag::Lane::Http, RuntimeDiag::Phase::HttpManifest);
+  if (!previewAllowed()) { server_->send(409, "text/plain", "preview_requires_idle"); return; }
+  FootPreviewInfo p;
+  if (!preview_buffer_ || !feet_->copyPreview(preview_buffer_, p)) {
+    server_->send(503, "text/plain", "preview_frame_unavailable"); return;
+  }
+  // HTTP owns this frozen copy until the next capture request. Subsequent
+  // camera frames cannot change bytes or metadata during chunked transfer.
+  if (++preview_token_ == 0) ++preview_token_;
+  const uint32_t crc = export_protocol::crc32(0, preview_buffer_, FootObserver::kPreviewBytes);
+  String json; json.reserve(1500);
+  json = "{\"revision\":\"" RUNTIME_VERSION "\",\"format\":\"gray8\",\"width\":160,\"height\":120,";
+  json += "\"source_width\":320,\"source_height\":240,\"bytes\":" + String(FootObserver::kPreviewBytes);
+  json += ",\"token\":" + String(preview_token_) + ",\"crc32\":" + String(crc);
+  json += ",\"sequence\":" + String(p.frame.sequence) + ",\"run_id\":" + String(p.frame.run_id);
+  char timestamp[24];
+  snprintf(timestamp, sizeof(timestamp), "%llu", static_cast<unsigned long long>(p.frame.frame_us));
+  json += ",\"frame_us\":" + String(timestamp);
+  snprintf(timestamp, sizeof(timestamp), "%llu", static_cast<unsigned long long>(p.frame.delivered_us));
+  json += ",\"delivered_us\":" + String(timestamp);
+  json += ",\"age_ms\":" + String((esp_timer_get_time() - p.frame.delivered_us) / 1000.0, 1);
+  json += ",\"timestamp_valid\":" + String(p.frame.timestamp_valid ? "true" : "false");
+  json += ",\"zero_ready\":" + String(p.frame.zero_ready ? "true" : "false");
+  json += ",\"zero_reason\":\"" + String(footZeroReasonName(p.frame.zero_reason)) + "\"";
+  json += ",\"zero_samples\":" + String(p.zero_samples);
+  json += ",\"right_zero_x\":" + num(p.right_zero) + ",\"left_zero_x\":" + num(p.left_zero);
+  json += ",\"right_deg\":" + num(p.frame.right_deg) + ",\"left_deg\":" + num(p.frame.left_deg);
+  json += ",\"right_valid\":" + String(p.frame.right_valid ? "true" : "false");
+  json += ",\"left_valid\":" + String(p.frame.left_valid ? "true" : "false");
+  json += ",\"right\":" + previewMarkerJson(p.right) + ",\"left\":" + previewMarkerJson(p.left) + "}";
+  server_->sendHeader("Cache-Control", "no-store"); server_->send(200, "application/json", json);
+}
+void WebUi::previewChunk() {
+  RuntimeDiag::Scope diagnostic(RuntimeDiag::Lane::Http, RuntimeDiag::Phase::HttpChunk);
+  uint32_t token = 0, offset = 0, length = 0;
+  if (!previewAllowed() || !preview_buffer_ || !preview_token_ ||
+      !unsignedArg(server_->arg("token"), token) || token != preview_token_ ||
+      !unsignedArg(server_->arg("offset"), offset) || !unsignedArg(server_->arg("length"), length) ||
+      !export_protocol::validRange(FootObserver::kPreviewBytes, offset, length, export_protocol::kChunkBytes)) {
+    server_->send(409, "text/plain", "preview_token_or_range_mismatch"); return;
+  }
+  memcpy(chunk_buffer_ + 16, preview_buffer_ + offset, length);
+  const uint32_t header[] = {export_protocol::kChunkMagic, offset, length,
+      export_protocol::crc32(0, chunk_buffer_ + 16, length)};
+  memcpy(chunk_buffer_, header, 16);
+  server_->sendHeader("Cache-Control", "no-store");
+  server_->setContentLength(length + 16); server_->send(200, "application/octet-stream", "");
   server_->sendContent(reinterpret_cast<const char*>(chunk_buffer_), length + 16);
 }

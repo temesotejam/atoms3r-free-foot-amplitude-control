@@ -1,8 +1,10 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.3 adaptive markers
+# Current integrated build: Free-foot Runtime V2 / 0.47.4 marker identity
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
 [USB diagnostic procedure](docs/USB_DIAGNOSTICS.md) ·
-[Marker-loss analysis and recovery](docs/MARKER_TRACKING_0473.md) ·
+[Marker identity, zero quality and image diagnosis](docs/MARKER_IDENTITY_0474.md) ·
+[Coordinate audit](docs/ROBOT_COORDINATE_AUDIT_20260924_JA.md) ·
+[Earlier marker-loss analysis](docs/MARKER_TRACKING_0473.md) ·
 [Instability review](docs/INSTABILITY_REVIEW.md) ·
 [Runtime architecture](docs/FREEFOOT_RUNTIME_V2.md)
 
@@ -10,16 +12,26 @@ The current main branch integrates observation-only right/left foot angles with
 the V46al-R2 controller. It uses permanent control ownership, PSRAM event storage,
 and a resumable, CRC-verified RWLOG export. Integrated hardware validation is
 pending; build/host tests do not establish camera frame rate or control deadlines.
-Version 0.47.3 addresses the next observed failure: foot markers disappear during
-tilt although WebUI and camera delivery continue. Four hardware status files show
-locked zeros, fresh images at about 10 fps, and marker loss/recovery. A synthetic
-image reproduces the old fixed-row detector losing a marker after 16 pixels of
-vertical displacement. Recovery now scans the original row template at offsets
-up to ±32 pixels, only when the nominal result is invalid. Contrast thresholds,
-the nominal X estimator, and calibration slopes are retained. Detection reasons,
-scan heights, quality and processing time are available in diagnostics; per-frame
-recovery evidence is also saved in RWLOG/CSV. Real-image recovery and angle
-accuracy at shifted heights still need hardware validation.
+Version 0.47.4 addresses a plausible source of the remaining left/right angle
+mismatch: a weaker nominal-row white region can be accepted as the left zero
+before a stronger displaced marker is examined. All 17 scan heights now compete,
+separate white islands stay separate, and ambiguous candidates or implausible
+track jumps are reported as invalid. A neutral-position envelope and stable
+marker positions gate automatic zero acquisition; the two zero values are still
+measured independently. A synthetic distractor case improves from right 22.99° /
+left 10.90° to right 22.99° / left 22.77°. This is a reproduced software failure
+pattern, not proof of the hardware diagnosis or calibrated angular accuracy.
+
+The device WebUI can capture one diagnostic image while measurement is stopped.
+Its selected positions, candidates, reasons and zeros belong to the same frame,
+transferred as a frozen 160×120 grayscale image in CRC-checked chunks. Save the
+image and metadata together with “画像付き診断を保存”. Capture an upright frame
+and a frame with both feet fixed while the body is tilted fore/aft to inspect the
+actual marker choice. The UI identifies MEKF as body side-to-side rocking and
+foot angles as body-relative; MEKF axes, gyro calibration, control math and foot
+angle slopes are unchanged. The user's fore/aft trial does not make the small
+side-to-side MEKF value a failure. Real-image identity and angle accuracy still
+need hardware confirmation; see the linked procedure and limitations.
 
 The 0.47.2 camera stack fix remains active. Subsequent USB logs extend to 237.5 s
 without another reset, and the user reports stable WebUI updates. Frame-size

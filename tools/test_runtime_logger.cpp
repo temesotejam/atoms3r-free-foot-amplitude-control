@@ -2,6 +2,7 @@
 #include <fstream>
 #include <cassert>
 #include <iostream>
+#include <vector>
 #define private public
 #include "../src/psram_logger.h"
 #include "../src/foot_observer.h"
@@ -18,6 +19,24 @@ void ImuManager::appendAcquisitionDiagnostics(PsramString& json) const {json += 
 // Camera and RTOS are not exercised here; actual serializers/export code are.
 int main(int argc,char** argv){
   assert(argc==2);
+  // A copied preview must stay paired with its own observation when the next
+  // camera frame arrives. No camera hardware or RTOS scheduling is simulated.
+  feet.preview_=static_cast<uint8_t*>(ps_malloc(FootObserver::kPreviewBytes));
+  feet.preview_mutex_=xSemaphoreCreateMutex();
+  std::vector<uint8_t> gray(320*240), frozen(FootObserver::kPreviewBytes);
+  for(unsigned y=0;y<240;++y)for(unsigned x=0;x<320;++x)gray[y*320+x]=(x+3*y)%256;
+  FootPreviewInfo first{};first.frame.sequence=17;first.frame.frame_valid=true;
+  first.left.center_x_px=175;first.frame.zero_reason=FootZeroReason::Collecting;
+  feet.publishPreview(gray.data(),first);
+  FootPreviewInfo copied{};assert(feet.copyPreview(frozen.data(),copied));
+  for(unsigned y=0;y<120;++y)for(unsigned x=0;x<160;++x)assert(frozen[y*160+x]==gray[y*2*320+x*2]);
+  auto next=first;next.frame.sequence=18;next.left.center_x_px=35;
+  std::fill(gray.begin(),gray.end(),91);feet.publishPreview(gray.data(),next);
+  assert(copied.frame.sequence==17 && copied.left.center_x_px==175 && frozen[0]==0);
+  assert(feet.copyPreview(frozen.data(),copied));
+  assert(copied.frame.sequence==18 && copied.left.center_x_px==35 && frozen[0]==91);
+  next.frame.frame_valid=false;feet.publishPreview(nullptr,next);
+  assert(!feet.copyPreview(frozen.data(),copied));
   PsramLogger logger;assert(logger.begin());
   assert(sizeof(PsramLogger)<4096);
   assert(PsramLogger::eventStorageBytes()==190144);
@@ -35,6 +54,7 @@ int main(int argc,char** argv){
   for(unsigned i=0;i<128;++i)logger.addSolverAuditEvent({});
   feet.frames_=static_cast<FootFrame*>(ps_malloc(sizeof(FootFrame)*FootObserver::kCapacity));
   feet.status_.available=true;feet.status_.zero_ready=true;feet.status_.count=FootObserver::kCapacity;
+  feet.status_.zero_reason=FootZeroReason::Ready;
   for(unsigned i=0;i<FootObserver::kCapacity;++i){
     FootFrame f{};f.sequence=i;f.run_id=1;f.frame_us=1000000+i*66667;
     f.delivered_us=f.frame_us+30000;f.log_time_us=f.frame_us-123456;
@@ -43,6 +63,7 @@ int main(int argc,char** argv){
     f.right_scan_y=42;f.left_scan_y=184;f.right_weight=3200;f.left_weight=3100;
     f.right_contrast=200;f.left_contrast=190;
     f.right_reason=f.left_reason=MarkerDetectionReason::Detected;f.right_templates=f.left_templates=17;
+    f.right_candidates=1;f.left_candidates=2;f.left_ambiguity=0.4f;f.zero_reason=FootZeroReason::Ready;
     if(i==1){f.right_valid=false;f.right_deg=NAN;f.right_scan_y=NAN;f.right_reason=MarkerDetectionReason::LowContrast;}
     feet.frames_[i]=f;
   }

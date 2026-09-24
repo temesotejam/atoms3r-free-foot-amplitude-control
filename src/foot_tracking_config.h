@@ -11,7 +11,7 @@ static constexpr int kCameraFpsTarget = 15;
 static constexpr int kMarkerAId = 0;
 static constexpr int kMarkerBId = 1;
 
-// Plain-white-marker sparse-line detector, with bounded vertical recovery.
+// Sparse-line candidates across the complete bounded vertical search.
 // Upper lane = A, lower lane = B.
 static constexpr int kWhiteMarkerRowCount = 5;
 static constexpr int kWhiteReferenceRowCount = 3;
@@ -28,7 +28,7 @@ static constexpr int kWhiteReferenceBRows[kWhiteReferenceRowCount] =
     {182, 186, 190};
 static constexpr int kWhiteMarkerBCenterY = 160;
 
-static constexpr char kWhiteDetectorRevision[] = "sparse_rows_vertical_v1";
+static constexpr char kWhiteDetectorRevision[] = "sparse_rows_identity_v2";
 static constexpr int kWhiteSearchRadiusYPx = 32;
 static constexpr int kWhiteSearchStepYPx = 4;
 static constexpr int kWhiteMaxTemplates =
@@ -45,6 +45,14 @@ static constexpr float kWhitePeakMinContrast = 55.0f;
 static constexpr float kWhiteCentroidBaseline = 35.0f;
 static constexpr float kWhiteMinWeightSum = 150.0f;
 static constexpr int kWhiteCentroidHalfWindowPx = 35;
+static constexpr int kWhiteMinWidthPx = 4;
+static constexpr int kWhiteMaxWidthPx = 72;
+static constexpr int kWhiteMaxCandidates = 24;
+static constexpr float kWhiteAmbiguousRatio = 0.82f;
+static constexpr float kWhiteMaxTrackStepXPx = 80.0f;
+static constexpr float kWhiteMaxTrackStepYPx = 32.0f;
+static constexpr uint32_t kWhiteTrackMemoryUs = 500000;
+static constexpr uint8_t kWhiteReacquireFrames = 3;
 
 // Foot-angle calibration v1, measured 2026-09-21.
 // Definition:
@@ -84,8 +92,12 @@ static constexpr float kTiltStaticAccelNormToleranceG = 0.05f;
 // on IMU gravity direction + stability; marker X is never used to decide
 // whether the body is upright.
 //
-// The condition must remain continuously true before marker A/B X positions
-// are averaged and locked as the 0 deg reference for the rest of the boot.
+// IMU upright does not establish foot neutrality or marker identity. The
+// measured neutral-image neighborhood is a plausibility gate, not the zero
+// value: accepted positions are still averaged independently on every boot.
+static constexpr float kAutoZeroMaxNominalOffsetXPx = 35.0f;
+static constexpr float kAutoZeroMaxSpreadXPx = 4.0f;
+// All conditions must remain continuously true before the reference locks.
 static constexpr float kAutoZeroMaxUprightErrorDeg = 5.0f;
 static constexpr float kAutoZeroMaxGyroDps = 1.5f;
 static constexpr float kAutoZeroAccelNormToleranceG = 0.03f;
