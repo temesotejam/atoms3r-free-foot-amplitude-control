@@ -435,7 +435,7 @@ PsramString PsramLogger::buildMetadataJson() const {
       (energy_control_v0_mode_ ? "rwlog_energy_control_v0" :
       (q_ident_mode_ ? "rwlog_q_ident_fixed_schedule" :
        (passive_capture_ ? "rwlog_passive_absolute_roll_free_decay" : "rwlog_dynamic_beta_vbat_hold_time_compare")))) + "\",";
-  json += "\"firmware_revision\":\"" + String(Config::PASSIVE_CAPTURE_FIRMWARE_REVISION) + "\",";
+  json += "\"firmware_revision\":\"" RUNTIME_VERSION "\",";
   json += "\"attitude_validation_revision\":\"" + String(Config::ATTITUDE_VALIDATION_REVISION) + "\",";
   json += "\"amplitude_control_observation_revision\":\"" + String(Config::AMPLITUDE_CONTROL_OBSERVATION_REVISION) + "\",";
   json += "\"v46ak_pre_input_observation_semantics\":\"latest_independent_coast_current_and_speed_snapshots_captured_before_solver_and_command;speed_readback_register_0x60_x100_rpm;observation_only_never_read_by_control\",";
@@ -1402,6 +1402,18 @@ PsramString PsramLogger::buildMetadataJson() const {
   imu.appendAcquisitionDiagnostics(json);
   json += ",";
   json += "\"v46p_control_worker\":" + run_control.diagnosticsJson() + ",";
+  json += "\"control_work_profile\":" + control_work::profile.json() + ",";
+  {
+    // Export runs only after completion; do not infer terminal output from the
+    // last regular sample, which may still precede an emergency stop.
+    const auto s = run_control.snapshot();
+    json += "\"terminal_state\":{\"state_id\":" + String(s.state_id);
+    json += ",\"state\":\"" + String(s.state_name) + "\"";
+    json += ",\"last_error\":\"" + String(s.last_error) + "\"";
+    json += ",\"motor_cmd_mA\":" + String(s.motor_cmd_mA);
+    json += ",\"actual_current_mA\":" + String(s.actual_current_mA);
+    json += ",\"heartbeat_us\":" + String(s.heartbeat_us) + "},";
+  }
   {
     const auto t = roller.telemetrySnapshot();
     json += "\"v46u_current_timing\":{\"scope\":\"since_boot_pulse_audit_only_not_per_run\",\"budget_us\":2000";

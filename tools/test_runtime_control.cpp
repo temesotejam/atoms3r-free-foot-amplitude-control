@@ -14,7 +14,9 @@ static bool step(void* p) {
   if(m.running){const auto t=micros();host_us+=750;m.worker->recordStep(t,100,600,750);}
   return m.running;
 }
-static void capture(void* p,RunControlSnapshot& s) {s.running=static_cast<Model*>(p)->running;}
+static void capture(void* p,RunControlSnapshot& s) {
+  s.running=static_cast<Model*>(p)->running;s.state_id=s.running?3:2;host_us+=100;
+}
 int main(){
   RunControlWorker w;Model m;m.worker=&w;
   assert(!w.request(RunControlWorker::Command::Start));
@@ -27,8 +29,12 @@ int main(){
   assert(!w.request(RunControlWorker::Command::Clear));
   for(int i=0;i<100;++i)w.oneStep();
   assert(w.requestStop());w.oneStep();assert(!w.active());
-  const auto audit=w.healthSnapshot();for(int i=0;i<100;++i)w.oneStep();
+  const auto audit=w.healthSnapshot();
+  const auto profile_done=control_work::profile.stages[0][static_cast<uint8_t>(control_work::Stage::Owner)];
+  assert(profile_done.count>0&&profile_done.max_us==850); // includes 100-us snapshot after 750-us work
+  for(int i=0;i<100;++i)w.oneStep();
   assert(w.healthSnapshot().steps==audit.steps); // idle cannot alter run deadlines
+  assert(control_work::profile.stages[0][static_cast<uint8_t>(control_work::Stage::Owner)].count==profile_done.count);
   assert(w.request(RunControlWorker::Command::Start));
   assert(w.requestStop());w.oneStep();assert(!w.active()&&!w.commandState().pending);
   assert(!w.commandState().ok); // STOP cancels queued START

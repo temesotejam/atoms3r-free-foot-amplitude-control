@@ -1,4 +1,5 @@
 #include "experiment_runner.h"
+#include "control_work_profile.h"
 #include "rate_baseline_correction.h"
 #include "previous_peak_control_correction.h"
 
@@ -147,6 +148,7 @@ void ExperimentRunner::update() {
     if (status_.state == ExperimentState::STARTUP_GYRO_CALIB) updateStartupCalibration(r);
     updateCurrentRollState(r, now_ms);
     if ((passive_capture_mode_ || q_ident_mode_ || energy_control_v0_mode_ || energy_control_autonomous_mode_) && status_.state == ExperimentState::RUNNING_BATCH_SWEEP) {
+      control_work::Scope work(control_work::Stage::Motion, true, status_.pulse_active);
       updateQ1ShadowAtZeroCross(now_ms);
       if (energy_control_autonomous_mode_) updateEnergyControlAutonomousMotion(now_ms);
     }
@@ -210,6 +212,8 @@ void ExperimentRunner::update() {
 }
 
 void ExperimentRunner::updateFilterSeries(const ImuReading& r) {
+  control_work::Scope work(control_work::Stage::Filter,
+      status_.state == ExperimentState::RUNNING_BATCH_SWEEP, status_.pulse_active);
   const float dt_s = r.gyro_update_dt_us > 0 ? static_cast<float>(r.gyro_update_dt_us) / 1000000.0f
                                              : static_cast<float>(Config::IMU_POLL_PERIOD_US) / 1000000.0f;
   const bool accel_is_new_for_filter = r.accel_sequence != 0 && r.accel_sequence != last_mekf_accel_sequence_;
@@ -372,7 +376,8 @@ void ExperimentRunner::updateFilterSeries(const ImuReading& r) {
     status_.beta_target_series[i] = beta_target;
     status_.beta_smooth_series[i] = beta_smooth_[i];
   }
-  raw_accel_pitch_deg_ = accelPitchDeg(r);
+  // ImuManager already evaluates this identical expression once per new accel.
+  raw_accel_pitch_deg_ = r.pitch_accel_only_deg;
 
   if (dt_s > 0.0f && dt_s < 1.0f) {
     gyro_raw_deg_ += pitch_rate * dt_s;
@@ -446,6 +451,8 @@ void ExperimentRunner::updateStartupCalibration(const ImuReading& r) {
 }
 
 void ExperimentRunner::updateDisplayedAngles(const ImuReading& r) {
+  control_work::Scope work(control_work::Stage::AngleDisplay,
+      status_.state == ExperimentState::RUNNING_BATCH_SWEEP, status_.pulse_active);
   status_.pitch_mekf_abs_deg = raw_mekf_pitch_abs_deg_;
   status_.pitch_mekf_predicted_abs_deg = raw_mekf_predicted_abs_deg_;
   status_.pitch_madgwick_dynamic_abs_deg = raw_dynamic_bias_pitch_deg_[Config::FILTER_ADOPTED_INDEX];
@@ -499,6 +506,8 @@ void ExperimentRunner::updateDisplayedAngles(const ImuReading& r) {
 }
 
 void ExperimentRunner::updateCurrentRollState(const ImuReading& r, uint32_t now_ms) {
+  control_work::Scope work(control_work::Stage::CurrentRoll,
+      status_.state == ExperimentState::RUNNING_BATCH_SWEEP, status_.pulse_active);
   status_.physical_roll_candidate_deg = physicalRollCandidateDeg(r);
   status_.physical_roll_abs_deg =
       Config::PHYSICAL_ROLL_AFFINE_SLOPE * status_.physical_roll_candidate_deg +
@@ -5714,6 +5723,8 @@ void ExperimentRunner::logSampleIfDue() {
 }
 
 void ExperimentRunner::logSampleNow() {
+  control_work::Scope work(control_work::Stage::LogRow,
+      status_.state == ExperimentState::RUNNING_BATCH_SWEEP, status_.pulse_active);
   if (!logger_ || !logger_->ready()) return;
   // V46t: copy telemetry before taking its reference clock. Never re-read it
   // while constructing this row; Core0 may publish between any two statements.
@@ -5901,7 +5912,8 @@ float ExperimentRunner::accelPitchDeg(const ImuReading& r) const {
 }
 
 float ExperimentRunner::physicalRollCandidateDeg(const ImuReading& r) const {
-  return atan2f(r.ax_g, sqrtf(r.ay_g * r.ay_g + r.az_g * r.az_g)) * 57.2957795f;
+  static_assert(Config::PITCH_SIGN == -1.0f || Config::PITCH_SIGN == 1.0f, "Pitch sign");
+  return -Config::PITCH_SIGN * r.pitch_accel_only_deg;
 }
 
 float ExperimentRunner::pitchBiasFromGyroBias() const {

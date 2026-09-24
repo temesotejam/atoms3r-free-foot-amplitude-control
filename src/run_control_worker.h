@@ -7,6 +7,7 @@
 #include "timing_deadline.h"
 #include "runtime_diagnostics.h"
 #include "mekf_attitude_diagnostics.h"
+#include "control_work_profile.h"
 
 // One permanent controller owner, including idle and calibration. HTTP sends
 // commands and consumes POD snapshots; it never calls the live runner/IMU.
@@ -115,6 +116,7 @@ class RunControlWorker {
   }
   void beginRunAudit(uint32_t epoch_us = 0) {
     // Owner only. The previous run has already been released by HTTP.
+    control_work::profile.reset();
     portENTER_CRITICAL(&mux_);
     audit_ = Audit{}; audit_.epoch_us = epoch_us ? epoch_us : micros();
     last_step_start_us_ = audit_.epoch_us;
@@ -232,10 +234,17 @@ class RunControlWorker {
  private:
   static void entry(void* arg) { static_cast<RunControlWorker*>(arg)->loop(); }
   void oneStep() {
+    const bool measurement = snapshot_.state_id == 3;
+    const bool pulse = snapshot_.pulse_active;
+    control_work::Scope owner_work(control_work::Stage::Owner, measurement, pulse);
     step_(context_);
     RunControlSnapshot next{};
     RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::Snapshot);
-    capture_(context_, next);
+    {
+      control_work::Scope snapshot_work(control_work::Stage::Snapshot, measurement, pulse);
+      capture_(context_, next);
+    }
+    control_work::Scope publish_work(control_work::Stage::Publish, measurement, pulse);
     RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::Publish);
     portENTER_CRITICAL(&mux_);
     snapshot_ = next;

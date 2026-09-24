@@ -29,6 +29,7 @@ WebUi web;
 static uint32_t boot_ms = 0, upright_epoch = 0;
 static uint64_t upright_since_us = 0, log_epoch_us = 0, measurement_epoch_us = 0;
 static bool upright_stable = false;
+static UprightPoseGuide::CachedMetrics pose_metrics;
 static void updateAcquisitionContext() {
   imu.setAcquisitionContext(runner.running(),
       runner.status().state == ExperimentState::RUNNING_BATCH_SWEEP,
@@ -53,8 +54,8 @@ static void captureRunState(void*, RunControlSnapshot& out) {
   out.upright_stable = upright_stable; out.upright_epoch = upright_epoch;
   out.upright_since_us = upright_since_us;
   out.log_epoch_us = log_epoch_us; out.measurement_epoch_us = measurement_epoch_us;
-  out.upright_error_deg = UprightPoseGuide::directionErrorDeg(r);
-  out.accel_norm_g = UprightPoseGuide::accelNormG(r); out.gyro_norm_dps = UprightPoseGuide::gyroNormDps(r);
+  out.upright_error_deg = pose_metrics.direction_error_deg;
+  out.accel_norm_g = pose_metrics.accel_norm_g; out.gyro_norm_dps = pose_metrics.gyro_norm_dps;
   snprintf(out.state_name, sizeof(out.state_name), "%s", runner.stateName());
   snprintf(out.last_error, sizeof(out.last_error), "%s", st.last_error ? st.last_error : "");
 }
@@ -62,23 +63,37 @@ static bool controlStep(void*) {
   RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::ControlService);
   const uint32_t start = micros();
   const bool was_running = runner.running();
-  if (run_control.takeStopRequest()) runner.requestEmergencyStop("web_estop");
-  updateAcquisitionContext();
-  runner.serviceFast(); runner.updateImuDynamicBetaContext();
+  const bool profile_measurement = runner.status().state == ExperimentState::RUNNING_BATCH_SWEEP;
+  const bool profile_pulse = runner.status().pulse_active;
+  {
+    control_work::Scope work(control_work::Stage::Service, profile_measurement, profile_pulse);
+    if (run_control.takeStopRequest()) runner.requestEmergencyStop("web_estop");
+    updateAcquisitionContext();
+    runner.serviceFast(); runner.updateImuDynamicBetaContext();
+  }
   RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::ControlImu);
-  const uint32_t imu_start = micros(); imu.update();
+  const uint32_t imu_start = micros();
+  {
+    control_work::Scope work(control_work::Stage::ImuDelivery, profile_measurement, profile_pulse);
+    imu.update();
+  }
   const uint32_t imu_us = micros() - imu_start;
   if (runner.running() && (!imu.acquisitionHealthy() || imu.stale(millis())))
     runner.requestEmergencyStop("imu_acquisition_overflow_backlog_or_stale");
   const auto& r = imu.reading();
-  const float norm = UprightPoseGuide::accelNormG(r);
-  const bool stable = millis() - boot_ms >= 10000 && imu.acquisitionHealthy() && r.last_gyro_update_us &&
-      static_cast<uint32_t>(micros() - r.last_gyro_update_us) <= 10000 &&
-      isfinite(norm) && fabsf(norm - 1.0f) <= appcfg::kAutoZeroAccelNormToleranceG &&
-      UprightPoseGuide::directionErrorDeg(r) <= appcfg::kAutoZeroMaxUprightErrorDeg &&
-      UprightPoseGuide::gyroNormDps(r) <= appcfg::kAutoZeroMaxGyroDps;
-  if (stable != upright_stable) { ++upright_epoch; upright_since_us = stable ? esp_timer_get_time() : 0; }
-  upright_stable = stable;
+  bool stable;
+  {
+    control_work::Scope work(control_work::Stage::PoseGuide, profile_measurement, profile_pulse);
+    pose_metrics.update(r);
+    const float norm = pose_metrics.accel_norm_g;
+    stable = millis() - boot_ms >= 10000 && imu.acquisitionHealthy() && r.last_gyro_update_us &&
+        static_cast<uint32_t>(micros() - r.last_gyro_update_us) <= 10000 &&
+        isfinite(norm) && fabsf(norm - 1.0f) <= appcfg::kAutoZeroAccelNormToleranceG &&
+        pose_metrics.direction_error_deg <= appcfg::kAutoZeroMaxUprightErrorDeg &&
+        pose_metrics.gyro_norm_dps <= appcfg::kAutoZeroMaxGyroDps;
+    if (stable != upright_stable) { ++upright_epoch; upright_since_us = stable ? esp_timer_get_time() : 0; }
+    upright_stable = stable;
+  }
   RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::ControlCommand);
   const auto command = run_control.takeCommand();
   if (command == RunControlWorker::Command::Start) {

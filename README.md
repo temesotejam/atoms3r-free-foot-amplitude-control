@@ -1,6 +1,7 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.7 fixed-pose foot calibration
+# Current integrated build: Free-foot Runtime V2 / 0.47.8 control work profiling
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
+[ESTOP analysis and control work profiling](docs/ESTOP_BACKLOG_0478.md) ·
 [USB diagnostic procedure](docs/USB_DIAGNOSTICS.md) ·
 [Fixed-pose foot calibration](docs/FOOT_CALIBRATION_0477.md) ·
 [Static-pose comparison and yaw diagnostics](docs/POSE_COMPARISON_0476.md) ·
@@ -15,6 +16,16 @@ The current main branch integrates observation-only right/left foot angles with
 the V46al-R2 controller. It uses permanent control ownership, PSRAM event storage,
 and a resumable, CRC-verified RWLOG export. Integrated hardware validation is
 pending; build/host tests do not establish camera frame rate or control deadlines.
+Version 0.47.8 follows a hardware ESTOP about 0.77 seconds into measurement:
+IMU delivery age reached 10,284 us and exceeded the unchanged 10,000 us guard.
+It reuses duplicate pose geometry calculations and records per-stage wall times
+separately for pulse-on and pulse-off work, including control snapshot publication.
+RWLOG metadata now includes the terminal state/current command and actual runtime
+version. The supplied log shows age rising during pulses, but does not isolate
+one bottleneck. This is a diagnostic build; resolution on hardware is unverified.
+The foot calibration, controller, acquisition sequence and protection limits
+remain unchanged. See the linked analysis for evidence and one-run retry steps.
+
 Version 0.47.7 updates the independent foot-angle scales using the two supplied
 poses captured without hand contact: a 20.2764165-degree body roll change and
 right/left marker displacements of 130.69222 / 130.39768 pixels. New scales are

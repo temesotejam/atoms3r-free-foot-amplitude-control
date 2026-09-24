@@ -1,6 +1,6 @@
 {
   "name": "AtomS3R Free-foot Runtime V2",
-  "version": "0.47.7-fixed-pose-calibration",
+  "version": "0.47.8-control-work-profile",
   "builds": [
     {
       "chipFamily": "ESP32-S3",

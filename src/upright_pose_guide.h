@@ -53,6 +53,26 @@ inline float directionErrorDeg(const ImuReading& r) {
   return acosf(dot) * 57.29577951308232f;
 }
 
+// The IMU consumer retains the same acceleration over gyro-only deliveries.
+// Reuse its geometric diagnostics until that sensor's sequence changes. Age,
+// health and the elapsed upright hold are still evaluated on every control step.
+struct CachedMetrics {
+  float accel_norm_g = 0, direction_error_deg = 180, gyro_norm_dps = 0;
+  uint32_t accel_sequence = 0, gyro_sequence = 0;
+  bool have_accel = false, have_gyro = false;
+  void update(const ImuReading& r) {
+    if (!have_accel || accel_sequence != r.accel_sequence) {
+      accel_norm_g = accelNormG(r);
+      direction_error_deg = directionErrorDeg(r);
+      accel_sequence = r.accel_sequence; have_accel = true;
+    }
+    if (!have_gyro || gyro_sequence != r.gyro_sequence) {
+      gyro_norm_dps = gyroNormDps(r);
+      gyro_sequence = r.gyro_sequence; have_gyro = true;
+    }
+  }
+};
+
 inline bool isUprightStableSample(const ImuReading& r) {
   const float a_norm = accelNormG(r);
   if (!isfinite(a_norm) || a_norm < UPRIGHT_MIN_ACCEL_NORM_G ||

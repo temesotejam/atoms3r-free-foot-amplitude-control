@@ -19,6 +19,14 @@ void ImuManager::appendAcquisitionDiagnostics(PsramString& json) const {json += 
 // Camera and RTOS are not exercised here; actual serializers/export code are.
 int main(int argc,char** argv){
   assert(argc==2);
+  run_control.snapshot_.state_id=5;
+  strcpy(run_control.snapshot_.state_name,"ESTOP");
+  strcpy(run_control.snapshot_.last_error,"imu_acquisition_overflow_backlog_or_stale");
+  run_control.snapshot_.motor_cmd_mA=0;
+  run_control.snapshot_.actual_current_mA=-7;
+  run_control.snapshot_.heartbeat_us=123456;
+  control_work::profile.reset();
+  control_work::profile.add(control_work::Stage::LogRow,true,777);
   // A copied preview must stay paired with its own observation when the next
   // camera frame arrives. No camera hardware or RTOS scheduling is simulated.
   feet.preview_=static_cast<uint8_t*>(ps_malloc(FootObserver::kPreviewBytes));

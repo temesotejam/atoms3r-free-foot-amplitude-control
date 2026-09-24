@@ -1,0 +1,25 @@
+#include "control_work_profile.h"
+namespace control_work {
+Profile profile;
+String Profile::json() const {
+  static const char* const names[] = {"owner_iteration", "service", "imu_delivery", "pose_guide",
+      "filter", "angle_display", "current_roll", "motion", "log_row", "snapshot", "publish"};
+  static_assert(sizeof(names) / sizeof(names[0]) == static_cast<uint8_t>(Stage::Count), "Stage names");
+  String out; out.reserve(2400);
+  out = "{\"revision\":\"control_work_0478\",\"scope\":\"measurement_only;host_wall_time_includes_preemption;nested_stages_not_additive\"";
+  out += ",\"cohort\":\"pulse_active_at_stage_entry;owner_includes_terminal_iteration;start_sync_excluded\"";
+  for (uint8_t group = 0; group < 2; ++group) {
+    out += group ? ",\"pulse_on\":{" : ",\"pulse_off\":{";
+    for (uint8_t i = 0; i < static_cast<uint8_t>(Stage::Count); ++i) {
+      const auto& s = stages[group][i];
+      if (i) out += ",";
+      out += "\"" + String(names[i]) + "\":{\"count\":" + String(s.count);
+      out += ",\"max_us\":" + String(s.max_us);
+      out += ",\"sum_us\":" + String(static_cast<double>(s.sum_us), 0);
+      out += ",\"mean_us\":" + String(s.count ? static_cast<double>(s.sum_us) / s.count : 0.0, 3) + "}";
+    }
+    out += "}";
+  }
+  return out + "}";
+}
+}
