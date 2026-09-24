@@ -242,8 +242,10 @@ void ExperimentRunner::updateFilterSeries(const ImuReading& r) {
       last_mekf_accel_sequence_ = r.accel_sequence;
     }
   }
-  status_.mekf_attitude = captureMekfAttitude(mekf_, mekf_initialized_,
-      posterior_updated ? r.last_gyro_update_us : status_.mekf_attitude.sample_us);
+  if (posterior_updated) {
+    status_.mekf_attitude = captureMekfAttitude(mekf_, mekf_initialized_,
+        r.last_gyro_update_us, mekf_accel, mekf_gyro, r.last_accel_update_us);
+  }
   if (mekf_initialized_) {
     raw_mekf_pitch_abs_deg_ = status_.mekf_attitude.pitch_deg;
     // V46ac autonomous diagnostic prediction begin
@@ -429,10 +431,12 @@ void ExperimentRunner::updateStartupCalibration(const ImuReading& r) {
   mekf_.reset();
   mekf_.setConfig(makeMekfConfig());
   mekf_initialized_ = mekf_.initializeFromAccel(mekfAccelFromRaw(r));
-  status_.mekf_attitude = captureMekfAttitude(mekf_, mekf_initialized_, r.last_gyro_update_us);
+  status_.mekf_attitude = MekfAttitudeSnapshot{};
   if (mekf_initialized_) {
     mekf_.setGyroBiasRadS(mekfStartupBiasFromRaw(
         status_.gyro_bias_x_dps, status_.gyro_bias_y_dps, status_.gyro_bias_z_dps));
+    status_.mekf_attitude = captureMekfAttitude(mekf_, true, r.last_gyro_update_us,
+        mekfAccelFromRaw(r), mekfGyroRadFromRaw(r), r.last_accel_update_us);
     raw_mekf_pitch_abs_deg_ = status_.mekf_attitude.pitch_deg;
     raw_mekf_predicted_abs_deg_ = raw_mekf_pitch_abs_deg_;
     status_.pitch_mekf_predicted_abs_deg = raw_mekf_predicted_abs_deg_;
@@ -3382,7 +3386,8 @@ void ExperimentRunner::updateStartSync(uint32_t now_ms) {
       // 5-ms IMU updates continue normal adaptive accel correction for the
       // remaining START sync time before any motor command is authorized.
       mekf_.updateAccel(mean_accel);
-      status_.mekf_attitude = captureMekfAttitude(mekf_, mekf_initialized_, r.last_gyro_update_us);
+      status_.mekf_attitude = captureMekfAttitude(mekf_, mekf_initialized_, r.last_gyro_update_us,
+          mean_accel, mekfGyroRadFromRaw(r), r.last_accel_update_us);
       raw_mekf_pitch_abs_deg_ = status_.mekf_attitude.pitch_deg;
       const auto q = status_.mekf_attitude.quaternion;
       status_.mekf_q_w = q.w;

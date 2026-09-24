@@ -2,6 +2,8 @@
 set -euo pipefail
 python3 tools/embed_runtime_web.py --check
 node --check web/runtime.js
+node --check web/pose_comparison.js
+node tools/test_pose_comparison.js
 node --check site/serial-monitor.js
 node tools/test_serial_monitor.js
 node tools/test_runtime_web.js

@@ -4,9 +4,10 @@ const elements = new Map();
 function canvasContext() {return new Proxy({}, {get:(_target,name)=>name==='createImageData'
   ? (w,h)=>({data:new Uint8Array(w*h*4)}) : ()=>{}});}
 function element(id) {if(!elements.has(id)) elements.set(id, {textContent:'',style:{},width:640,height:480,getContext:canvasContext}); return elements.get(id);}
-const code=fs.readFileSync('web/runtime.js','utf8').replace(/poll\(\);\s*$/, '');
+const code=fs.readFileSync('web/pose_comparison.js','utf8')+'\n'+fs.readFileSync('web/runtime.js','utf8').replace(/poll\(\);\s*$/, '');
 const context=vm.createContext({document:{getElementById:element,createElement:()=>({getContext:canvasContext})},setTimeout,clearTimeout,AbortController,
-  Date,DataView,Uint8Array,TextDecoder,Map,console,btoa:s=>Buffer.from(s,'binary').toString('base64'),fetch:()=>{throw Error('unset');}});
+  Date,DataView,Uint8Array,TextDecoder,Map,console,btoa:s=>Buffer.from(s,'binary').toString('base64'),
+  atob:s=>Buffer.from(s,'base64').toString('binary'),fetch:()=>{throw Error('unset');}});
 vm.runInContext(code,context);
 (async()=>{
   // Headers succeed immediately, response body never completes until aborted.

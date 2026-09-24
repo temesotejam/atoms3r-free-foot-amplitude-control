@@ -10,16 +10,27 @@ struct MekfAttitudeSnapshot {
   uint32_t sample_us = 0;
   float roll_deg = NAN, pitch_deg = NAN, yaw_deg = NAN;
   mekf6::Quaternion quaternion{NAN, NAN, NAN, NAN};
+  uint32_t accel_sample_us = 0;
+  mekf6::Vec3 accel_g{NAN, NAN, NAN}, gyro_rad_s{NAN, NAN, NAN};
+  mekf6::Vec3 bias_rad_s{NAN, NAN, NAN};
+  mekf6::Diagnostics accel_update;
 };
 
 inline MekfAttitudeSnapshot captureMekfAttitude(const mekf6::Mekf6& filter,
-                                              bool initialized, uint32_t sample_us) {
+                                              bool initialized, uint32_t sample_us,
+                                              const mekf6::Vec3& accel_g = {NAN, NAN, NAN},
+                                              const mekf6::Vec3& gyro_rad_s = {NAN, NAN, NAN},
+                                              uint32_t accel_sample_us = 0) {
   MekfAttitudeSnapshot out;
   if (!initialized) return out;
   const auto e = filter.eulerDeg();
   out.quaternion = filter.quaternion();
   out.roll_deg = e.roll; out.pitch_deg = e.pitch; out.yaw_deg = e.yaw;
   out.sample_us = sample_us;
+  out.accel_g = accel_g; out.gyro_rad_s = gyro_rad_s;
+  out.accel_sample_us = accel_sample_us;
+  out.bias_rad_s = filter.gyroBiasRadS();
+  out.accel_update = filter.diagnostics();
   const auto& q = out.quaternion;
   out.valid = isfinite(e.roll) && isfinite(e.pitch) && isfinite(e.yaw) &&
       isfinite(q.w) && isfinite(q.x) && isfinite(q.y) && isfinite(q.z);
@@ -29,7 +40,12 @@ inline MekfAttitudeSnapshot captureMekfAttitude(const mekf6::Mekf6& filter,
 inline String mekfAttitudeJson(const MekfAttitudeSnapshot& s, uint32_t now_us, bool imu_ok) {
   const auto num = [](float x) { return isfinite(x) ? String(x, 6) : String("null"); };
   const uint32_t age_us = now_us - s.sample_us; // wrap-safe host microsecond clock
-  String json; json.reserve(520);
+  const auto vector = [&num](const mekf6::Vec3& v, float scale) {
+    return String("[") + num(v.x * scale) + "," + num(v.y * scale) + "," + num(v.z * scale) + "]";
+  };
+  const auto finite = [](const mekf6::Vec3& v) { return isfinite(v.x) && isfinite(v.y) && isfinite(v.z); };
+  const bool inputs_valid = s.valid && finite(s.accel_g) && finite(s.gyro_rad_s) && finite(s.bias_rad_s);
+  String json; json.reserve(1024);
   json = "{\"valid\":" + String(s.valid ? "true" : "false");
   json += ",\"fresh\":" + String(s.valid && imu_ok && age_us < 500000 ? "true" : "false");
   json += ",\"sample_us\":" + String(s.sample_us);
@@ -39,6 +55,15 @@ inline String mekfAttitudeJson(const MekfAttitudeSnapshot& s, uint32_t now_us, b
   json += ",\"yaw_deg\":" + num(s.yaw_deg);
   json += ",\"quaternion\":{\"w\":" + num(s.quaternion.w) + ",\"x\":" + num(s.quaternion.x);
   json += ",\"y\":" + num(s.quaternion.y) + ",\"z\":" + num(s.quaternion.z) + "}";
-  json += ",\"yaw_reference\":\"gyro_integrated_since_filter_initialization\"}";
+  json += ",\"yaw_reference\":\"gyro_integrated_since_filter_initialization\"";
+  json += ",\"inputs\":{\"valid\":" + String(inputs_valid ? "true" : "false");
+  json += ",\"frame\":\"mekf\",\"axis_order\":\"xyz\",\"accel_g\":" + vector(s.accel_g, 1.0f);
+  json += ",\"gyro_dps\":" + vector(s.gyro_rad_s, mekf6::radToDeg(1.0f));
+  json += ",\"gyro_bias_dps\":" + vector(s.bias_rad_s, mekf6::radToDeg(1.0f));
+  json += ",\"accel_sample_us\":" + String(s.accel_sample_us);
+  json += ",\"accel_age_us\":" + (inputs_valid ? String(static_cast<uint32_t>(now_us - s.accel_sample_us)) : String("null"));
+  json += ",\"last_accel_update\":{\"used\":" + String(s.accel_update.accel_used ? "true" : "false");
+  json += ",\"confidence\":" + num(s.accel_update.accel_confidence);
+  json += ",\"residual_deg\":" + num(s.accel_update.accel_direction_residual_deg) + "}}}";
   return json;
 }

@@ -1,7 +1,8 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.5 observed range and all-axis MEKF
+# Current integrated build: Free-foot Runtime V2 / 0.47.6 static-pose comparison
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
 [USB diagnostic procedure](docs/USB_DIAGNOSTICS.md) ·
+[Static-pose comparison and yaw diagnostics](docs/POSE_COMPARISON_0476.md) ·
 [Observed range update and all-axis MEKF diagnostics](docs/RANGE_MEKF_DIAGNOSTICS_0475.md) ·
 [Marker identity, zero quality and image diagnosis](docs/MARKER_IDENTITY_0474.md) ·
 [Coordinate audit](docs/ROBOT_COORDINATE_AUDIT_20260924_JA.md) ·
@@ -13,6 +14,23 @@ The current main branch integrates observation-only right/left foot angles with
 the V46al-R2 controller. It uses permanent control ownership, PSRAM event storage,
 and a resumable, CRC-verified RWLOG export. Integrated hardware validation is
 pending; build/host tests do not establish camera frame rate or control deadlines.
+Version 0.47.6 adds a pre-measurement static-pose comparison in the device WebUI.
+Record an upright baseline and several held fore/aft tilts and return poses. Each
+pose checks five frozen frame/IMU snapshots over about three seconds and saves the
+last CRC-verified image. The display compares changes in relative foot angles
+and body roll; other-axis changes are flagged. All-axis MEKF inputs and estimated
+gyro bias are available in regular and image diagnostics. A bounded browser-side
+status history accompanies the comparison JSON. Reboots, changed zeros, movement,
+stale inputs and failed transfers cannot silently replace the baseline.
+
+The latest 0.47.5 hardware pair changes body roll by -20.434 degrees, foot angles
+by +21.617 / +21.066 degrees, and yaw by +8.446 degrees. These two points do not
+establish new slope coefficients. The added comparison is for collecting repeated
+poses and identifying the remaining error; it does not apply a calibration fit.
+A synthetic pure fore/aft out/hold/return replay with accelerometer corrections
+keeps yaw below 0.02 degrees; actual motion and estimator drift still need hardware
+evidence. See the procedure above. Control math and RWLOG v51 are unchanged.
+
 Version 0.47.5 incorporates the new 0.47.4 hardware observations. Both feet remain
 detected through 781 captured frames, and the tilted status reports right 21.7630°
 and left 21.0887°. The observed X positions slightly exceed the old support, so

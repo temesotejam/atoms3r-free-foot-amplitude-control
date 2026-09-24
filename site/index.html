@@ -13,21 +13,21 @@
     <header class="hero">
       <p class="eyebrow">ATOMS3R / FREE-FOOT AMPLITUDE CONTROL</p>
       <h1>Free-foot Runtime V2<br><span>左右足角度・制御・ログを統合</span></h1>
-      <p class="lead">Free-foot Runtime V2 / 0.47.5 範囲更新・MEKF全軸診断版。今回の実測位置を含むように足角度の判定範囲を更新し、診断JSONにMEKFのroll・pitch・yawとクォータニオンを追加しました。</p>
+      <p class="lead">Free-foot Runtime V2 / 0.47.6 静止姿勢比較版。直立を基準に、複数の前後傾斜で胴体と左右足の角度変化を比較できます。各姿勢の画像、MEKF全軸、ジャイロ・バイアスをまとめて保存します。</p>
       <div class="badges"><span>ESP32-S3</span><span>BMI270 400/200 Hz</span><span>RWLOG v51</span><span>MEKF</span><span>左右足角度</span></div>
     </header>
     <section class="panel important">
       <h2>今回の構成</h2>
       <p>V46al-R2の制御計算、固定3ms補償、300mA・最大100msパルス、30秒測定、開始・終了のLED同期を維持。白マーカーの位置から左右足角度を取得・表示・保存します。足角度は観測用で、制御入力には使用しません。</p>
       <p>ログ用イベント配列と大きな説明データはPSRAMに配置します。測定後にログを確定し、CRCで検証できる4KB以下のチャンクで取得します。ブラウザの一時停止・再接続・再読み込み後も保存済みの部分を再利用できます。</p>
-      <p><strong>今回は実測に基づく範囲の更新です。拡張した部分の角度精度は確認待ちです。</strong>ビルドとホスト検証の範囲、実機で確認する項目は<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/RANGE_MEKF_DIAGNOSTICS_0475.md">設計・確認手順</a>を参照してください。カメラは15fpsを目標に設定し、画面に実測値を表示します。</p>
+      <p><strong>今回の追加は角度精度を確認するための記録機能です。角度換算係数の再校正は次の実測をもとに判断します。</strong>ビルドとホスト検証の範囲、実機で確認する項目は<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/POSE_COMPARISON_0476.md">設計・確認手順</a>を参照してください。カメラは15fpsを目標に設定し、画面に実測値を表示します。</p>
       <p>公開ビルド：<code id="build-sha">取得中</code><br><a href="build-sha.txt">ビルドSHA</a> / <a href="firmware/SHA256SUMS.txt">ファームウェアSHA-256</a></p>
     </section>
     <section class="panel important">
       <h2>書き込みと測定</h2>
       <p>書き込み時はAtomS3RをUSBでPCへ接続し、PC版ChromeまたはEdgeで下のボタンを押してください。</p>
       <esp-web-install-button manifest="manifest-freefoot-runtime-v2.json">
-        <button slot="activate" class="primary">0.47.5 範囲更新・MEKF全軸診断版を書き込む</button>
+        <button slot="activate" class="primary">0.47.6 静止姿勢比較版を書き込む</button>
         <span slot="unsupported" class="warning">PC版ChromeまたはEdgeを使用してください。</span>
       </esp-web-install-button>
       <ol>
@@ -36,7 +36,7 @@
         <li>左右のゼロ点が確定して開始可能になったら測定します。測定終了後は「RWLOGを取得・再開」で保存します。足角度CSVも保存できます。</li>
         <li>次の測定には「ログを消去・次の測定へ」を使います。ゼロ点は同じ起動中は保持されます。</li>
       </ol>
-      <p>足角度を確認する場合は、測定を開始せず「検出画像を確認」を開きます。直立時と、両足を地面に固定して胴体を前後に傾けた時のそれぞれで「検出画像を取得」→「画像付き診断を保存」を押してください。緑の選択位置が左右の白四角に重なっているか確認できます。足角度は胴体に対する相対角、MEKF表示は胴体の左右揺動です。「診断JSONを保存」にはMEKFの3軸角度とクォータニオンも入ります。</p>
+      <p>足角度の比較は、測定を開始せず「前後傾斜と足角度の比較」で行います。「直立基準を取得」→各傾斜で「この姿勢を追加」→「比較JSONを保存」の順に操作してください。各姿勢で約3秒静止します。個別の画像を見る場合は「検出画像を確認」を開きます。直立時と、両足を地面に固定して胴体を前後に傾けた時のそれぞれで「検出画像を取得」→「画像付き診断を保存」を押してください。緑の選択位置が左右の白四角に重なっているか確認できます。足角度は胴体に対する相対角、MEKF表示は胴体の左右揺動です。「診断JSONを保存」にはMEKFの3軸角度とクォータニオンも入ります。</p>
       <p>電源・通信・カメラ・制御の確認情報は装置のWeb画面からJSONで保存できます。この診断版はUSB接続がなくても8秒後に通常処理へ進みます。不安定な場合は下のUSBログを保存してください。</p>
       <details><summary>デバイスが表示されない場合</summary><p>AtomS3RをDownload Modeへ入れてから書き込み、完了後に通常起動してください。</p></details>
     </section>

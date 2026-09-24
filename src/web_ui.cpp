@@ -6,6 +6,7 @@
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 #include <esp_timer.h>
+#include <esp_system.h>
 #include <errno.h>
 
 static String num(float x) { return isfinite(x) ? String(x, 4) : String("null"); }
@@ -27,6 +28,7 @@ void WebUi::begin(WebServer& s, RunControlWorker& control, FootObserver& feet, I
   });
   RuntimeDiag::result(WiFi.mode(WIFI_AP));
   RuntimeDiag::result(WiFi.softAP(Config::AP_SSID, Config::AP_PASS, Config::AP_CHANNEL));
+  boot_id_ = esp_random();
   s.on("/", HTTP_GET, [this]() {
     RuntimeDiag::Scope diagnostic(RuntimeDiag::Lane::Http, RuntimeDiag::Phase::HttpRoot);
     server_->sendHeader("Cache-Control", "no-store");
@@ -90,8 +92,9 @@ void WebUi::status() {
   const auto camera = feet_->cameraSnapshot();
   const bool fresh = s.heartbeat_us && static_cast<uint32_t>(micros() - s.heartbeat_us) < 500000;
   RuntimeDiag::phase(RuntimeDiag::Lane::Http, RuntimeDiag::Phase::HttpJson);
-  String json; json.reserve(4600);
+  String json; json.reserve(5200);
   json = "{\"revision\":\"" RUNTIME_VERSION "\",\"state\":\"" + String(s.state_name) + "\"";
+  json += ",\"boot_id\":" + String(boot_id_);
   json += ",\"running\":" + String(s.running ? "true" : "false");
   json += ",\"ready\":" + String(s.ready && fresh && export_->ready() && feet_->readyToStart() ? "true" : "false");
   json += ",\"controller_fresh\":" + String(fresh ? "true" : "false");
@@ -228,11 +231,12 @@ void WebUi::previewCapture() {
   // camera frames cannot change bytes or metadata during chunked transfer.
   if (++preview_token_ == 0) ++preview_token_;
   const uint32_t crc = export_protocol::crc32(0, preview_buffer_, FootObserver::kPreviewBytes);
-  String json; json.reserve(2500);
+  String json; json.reserve(3200);
   json = "{\"revision\":\"" RUNTIME_VERSION "\",\"format\":\"gray8\",\"width\":160,\"height\":120,";
   json += "\"source_width\":320,\"source_height\":240,\"bytes\":" + String(FootObserver::kPreviewBytes);
   json += ",\"token\":" + String(preview_token_) + ",\"crc32\":" + String(crc);
   json += ",\"sequence\":" + String(p.frame.sequence) + ",\"run_id\":" + String(p.frame.run_id);
+  json += ",\"boot_id\":" + String(boot_id_) + ",\"state_id\":" + String(p.frame.state_id);
   char timestamp[24];
   snprintf(timestamp, sizeof(timestamp), "%llu", static_cast<unsigned long long>(p.frame.frame_us));
   json += ",\"frame_us\":" + String(timestamp);
@@ -247,6 +251,8 @@ void WebUi::previewCapture() {
   json += ",\"right_deg\":" + num(p.frame.right_deg) + ",\"left_deg\":" + num(p.frame.left_deg);
   json += ",\"right_valid\":" + String(p.frame.right_valid ? "true" : "false");
   json += ",\"left_valid\":" + String(p.frame.left_valid ? "true" : "false");
+  json += ",\"right_in_range\":" + String(p.frame.right_in_range ? "true" : "false");
+  json += ",\"left_in_range\":" + String(p.frame.left_in_range ? "true" : "false");
   json += ",\"range\":" + footRangeDiagnosticsJson();
   json += ",\"mekf\":" + mekfAttitudeJson(p.mekf_attitude, micros(), p.imu_ok);
   json += ",\"mekf_time_semantics\":\"control_snapshot_at_frame_delivery_not_exposure\"";

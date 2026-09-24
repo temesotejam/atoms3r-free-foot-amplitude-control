@@ -16,6 +16,15 @@ for axis, attitude in enumerate(diagnostics['axes']):
 assert diagnostics['stale']['valid'] and not diagnostics['stale']['fresh']
 assert not diagnostics['sensor_failed']['fresh']
 assert diagnostics['wrapped']['age_us'] == 251 and diagnostics['wrapped']['fresh']
+assert diagnostics['invalid']['inputs']['valid'] is False
+assert diagnostics['invalid']['inputs']['accel_g'] == [None,None,None]
+inputs=diagnostics['inputs']['inputs']
+assert inputs['valid'] and inputs['frame']=='mekf' and inputs['axis_order']=='xyz'
+assert inputs['accel_age_us']==3500 and inputs['accel_sample_us']==999000
+assert inputs['accel_g']==[.01,.02,1]
+for actual,expected in zip(inputs['gyro_dps'],[1,2,3]): assert abs(actual-expected)<.00001
+for actual,expected in zip(inputs['gyro_bias_dps'],[.1,-.2,.3]): assert abs(actual-expected)<.00001
+assert inputs['last_accel_update']['used'] and inputs['last_accel_update']['confidence']>.99
 assert diagnostics['range']['right_support_x'] == [40,173]
 assert diagnostics['range']['left_support_x'] == [39,177.5]
 assert diagnostics['range']['original_right_support_x'] == [42,173]

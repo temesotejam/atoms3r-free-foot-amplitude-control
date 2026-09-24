@@ -40,7 +40,7 @@ jobs:
           cp bmi270-build-patch.json dist/
           python "$HOME/.platformio/packages/tool-esptoolpy/esptool.py" --chip esp32s3 merge_bin -o dist/merged-firmware.bin 0x0000 dist/bootloader.bin 0x8000 dist/partitions.bin 0xe000 dist/boot_app0.bin 0x10000 dist/firmware.bin
           printf '%s\n' "$GITHUB_SHA" > dist/build-sha.txt
-          printf '%s\n' 'Free-foot Runtime V2 0.47.5 observed pixel-range extension and all-axis MEKF posterior diagnostics; full-height marker identity and zero quality gates, frozen CRC-verified diagnostic image; cam_task 8192 bytes and cached high-water mark; 8s startup window; RTC reset evidence; independent USB observer; RWLOG v51; immutable resumable chunks; PSRAM event store and export metadata; observation-only calibrated left/right feet; V46al-R2 control math, fixed 3ms compensation, 300mA/100ms and ESTOP retained; hardware validation pending' > dist/FLASH_LAYOUT.txt
+          printf '%s\n' 'Free-foot Runtime V2 0.47.6 static multi-pose comparison, matched diagnostic images, all-axis MEKF input and bias diagnostics; full-height marker identity and zero quality gates, frozen CRC-verified diagnostic image; cam_task 8192 bytes and cached high-water mark; 8s startup window; RTC reset evidence; independent USB observer; RWLOG v51; immutable resumable chunks; PSRAM event store and export metadata; observation-only calibrated left/right feet; V46al-R2 control math, fixed 3ms compensation, 300mA/100ms and ESTOP retained; hardware validation pending' > dist/FLASH_LAYOUT.txt
           (cd dist && sha256sum *.bin > SHA256SUMS.txt)
           git diff --exit-code
       - uses: actions/upload-artifact@v4

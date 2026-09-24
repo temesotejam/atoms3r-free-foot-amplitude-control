@@ -1,6 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 let previewRunning = false, previewEvidence = null;
+let poseRunning = false, poseCancelled = false, poseSession = null, poseSaved = false;
 let latest = null, lastSeen = 0, refreshInFlight = false, commandInFlight = false;
 let transferRunning = false, cancelTransfer = false, completedFile = null, completedName = '', completedFoot = null;
 const nap = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -26,7 +27,7 @@ async function request(path, {method = 'GET', kind = 'json', timeout = 3000} = {
 }
 function controls() {
   const fresh = latest && Date.now() - lastSeen < 3500;
-  const busy = commandInFlight || previewRunning || !!latest?.command?.pending;
+  const busy = commandInFlight || previewRunning || poseRunning || !!latest?.command?.pending;
   const building = latest?.export_phase === 'building';
   $('start').disabled = !fresh || busy || transferRunning || !latest.ready || latest.running || latest.export_phase !== 'empty';
   $('clear').disabled = !fresh || busy || transferRunning || building || latest.running || !['FINISHED', 'ESTOP'].includes(latest.state);
@@ -35,6 +36,13 @@ function controls() {
   $('csv').disabled = !completedFoot;
   $('preview').disabled = !fresh || busy || transferRunning || building || latest.running || !latest.foot?.preview_available;
   $('preview-save').disabled = !previewEvidence || previewRunning;
+  const poseReady = fresh && latest.controller_fresh && !busy && !transferRunning && !building && !latest.running &&
+    latest.state === 'READY_TO_MEASURE' && latest.foot?.zero_ready && latest.foot?.preview_available && latest.mekf?.inputs?.valid;
+  $('pose-base').disabled = !poseReady || !!poseSession;
+  $('pose-add').disabled = !poseReady || !poseSession?.baseline || poseSession.poses.length >= PoseComparison.limits.max_poses;
+  $('pose-cancel').disabled = !poseRunning;
+  $('pose-save').disabled = !poseSession?.baseline || poseRunning;
+  $('pose-reset').disabled = !poseSession || poseRunning || (!!poseSession.baseline && !poseSaved);
 }
 const format = (n, digits = 2) => Number.isFinite(n) ? n.toFixed(digits) : '—';
 function drawMarkers(f) {
@@ -93,6 +101,9 @@ function render(s) {
   else if (!f.right_valid || !f.left_valid) $('guide').textContent = '未検出の足があります。マーカーの見え方を確認してください。この姿勢の診断JSONを保存すると原因の確認に使えます。';
   else $('guide').textContent = s.ready ? '直立姿勢を保ち、測定を開始してください。' : 'IMUの初期化・静止確認を待っています。';
   $('diagnostic-view').textContent = JSON.stringify(s, null, 2);
+  $('mekf-axes').textContent = s.mekf?.valid && s.mekf.fresh
+    ? `前後 roll ${format(s.mekf.roll_deg)}° · 左右 pitch ${format(s.mekf.pitch_deg)}° · yaw ${format(s.mekf.yaw_deg)}°`
+    : 'MEKFの更新を待っています。';
   drawMarkers(f); controls();
 }
 async function refresh() {
@@ -118,6 +129,13 @@ function adoptStatus(s) {
       ['running', 'ready', 'downloadable', 'controller_fresh'].some(key => typeof s[key] !== 'boolean'))
     throw new Error('装置の状態データが不完全です');
   latest = s; lastSeen = Date.now();
+  if (poseSession && !poseSaved) {
+    poseSession.trace.push(JSON.parse(JSON.stringify({client_time_ms:Date.now(), boot_id:s.boot_id,
+      run_id:s.run_id, revision:s.revision, state:s.state, mekf:s.mekf, controller_fresh:s.controller_fresh,
+      foot:{sequence:s.foot.sequence, age_ms:s.foot.age_ms, right_deg:s.foot.right_deg, left_deg:s.foot.left_deg,
+        right_x:s.foot.right_x, left_x:s.foot.left_x, right_valid:s.foot.right_valid, left_valid:s.foot.left_valid}})));
+    if (poseSession.trace.length > PoseComparison.limits.max_trace) { poseSession.trace.shift(); ++poseSession.trace_dropped; }
+  }
 }
 async function poll() {
   try { await refresh(); }
@@ -291,14 +309,10 @@ function drawPreview(m, pixels) {
     }
   }
 }
-async function capturePreview() {
-  if (previewRunning || transferRunning || latest?.running) return;
-  previewRunning = true; controls(); $('preview-status').textContent = '画像を取得中…';
-  try {
-    const m = await request('/vision/capture', {method:'POST'});
-    validatePreviewManifest(m);
+async function readPreviewPixels(m, cancelled = () => false) {
     const pixels = new Uint8Array(m.bytes);
     for (let offset = 0; offset < m.bytes; offset += 4096) {
+      if (cancelled()) throw Error('取得を中止しました');
       const length = Math.min(4096, m.bytes - offset);
       const packet = await request(`/vision/chunk?token=${m.token}&offset=${offset}&length=${length}`, {kind:'bytes'});
       pixels.set(validateChunk(packet, offset, length), offset);
@@ -308,15 +322,79 @@ async function capturePreview() {
     // Store exact gray pixels plus matching metadata in one downloadable JSON.
     // Never substitute the separately polled live status for this frame.
     let binary = ''; for (const value of pixels) binary += String.fromCharCode(value);
-    const evidence = {...m, pixels_gray8_base64: btoa(binary)};
+    return {...m, pixels_gray8_base64: btoa(binary)};
+}
+function showEvidence(evidence) {
+    const {pixels_gray8_base64:binary,...m} = evidence;
+    const pixels = Uint8Array.from(atob(binary), c => c.charCodeAt(0));
     drawPreview(m, pixels); previewEvidence = evidence;
     $('preview-status').textContent = `画像 #${m.sequence} · 取得要求の${format(m.age_ms, 0)} ms前のフレーム · 右 ${previewReason(m.right.reason)} / 左 ${previewReason(m.left.reason)} · ゼロ点 ${previewReason(m.zero_reason)}。姿勢を変えたら再取得してください。`;
+}
+async function capturePreview() {
+  if (previewRunning || poseRunning || transferRunning || latest?.running) return;
+  previewRunning = true; controls(); $('preview-status').textContent = '画像を取得中…';
+  try {
+    const m = await request('/vision/capture', {method:'POST'});
+    validatePreviewManifest(m);
+    showEvidence(await readPreviewPixels(m));
   } catch (error) {
     $('preview-status').textContent = `画像取得に失敗しました。${previewEvidence ? '表示と保存の対象は前回の画像です。' : ''}再取得してください: ${error.message}`;
   } finally { previewRunning = false; controls(); }
 }
+function renderPoses() {
+  const tbody = $('pose-rows'); tbody.replaceChildren();
+  if (!poseSession?.baseline) return;
+  const rows = [{label:'直立基準',comparison:null},...poseSession.poses];
+  for (const [i,row] of rows.entries()) {
+    const c = row.comparison, tr = document.createElement('tr');
+    const notes = {yaw_changed:'yaw変化大',sideways_changed:'左右傾斜あり',outside_range:'設定範囲外',large_tilt:'傾斜大'};
+    for (const value of [row.label || `姿勢 ${i}`,
+      ...[c?.delta.roll_deg,c?.right_residual_deg,c?.left_residual_deg,c?.delta.yaw_deg].map(v => c ? format(v) + '°' : '0.00°'),
+      c ? (c.planar_check ? '比較用' : '参考：' + c.flags.map(f => notes[f]).join('・')) : '基準']) {
+      const td = document.createElement('td'); td.textContent = value; tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+}
+async function capturePose(baseline) {
+  controls();
+  if ($(baseline ? 'pose-base' : 'pose-add').disabled) return;
+  if (baseline) poseSession = {schema:'freefoot-static-poses-v1', created_at:new Date().toISOString(),
+    assumptions:['feet_fixed_to_ground','fore_aft_rotation_about_mekf_x'],
+    residual_semantics:'delta_foot_body_relative_plus_delta_body_roll; planar approximation, not absolute foot attitude',
+    timing_semantics:'camera exposure and delivery-time control snapshot differ; hold each pose stationary',
+    trace_semantics:'existing status polls; not a high-rate IMU integration log',
+    limits:PoseComparison.limits, baseline:null, poses:[], trace:[], trace_dropped:0};
+  poseRunning = true; poseCancelled = false; poseSaved = false; controls();
+  const frames = [];
+  try {
+    for (let i=0;i<PoseComparison.limits.samples;i++) {
+      if (i) await nap(PoseComparison.limits.interval_ms);
+      if (poseCancelled) throw Error('取得を中止しました');
+      if (Date.now()-lastSeen >= 3500 || latest?.running || latest?.state !== 'READY_TO_MEASURE' ||
+          !latest.controller_fresh || latest.command.pending) throw Error('接続と待機状態を確認してください');
+      $('pose-status').textContent = `その姿勢を保ってください… ${i+1}/${PoseComparison.limits.samples}`;
+      const m = await request('/vision/capture', {method:'POST'});
+      validatePreviewManifest(m); PoseComparison.validateFrame(m); frames.push(m);
+    }
+    const summary = PoseComparison.summarize(frames, baseline);
+    const comparison = baseline ? null : PoseComparison.compare(poseSession.baseline.summary, summary);
+    const last = frames[frames.length-1];
+    $('pose-status').textContent = '静止を確認しました。最後の画像を保存しています…';
+    const image = await readPreviewPixels(last, () => poseCancelled);
+    if (poseCancelled) throw Error('取得を中止しました');
+    const record = {label:baseline ? '直立基準' : `姿勢 ${poseSession.poses.length+1}`, summary, comparison, frames, image};
+    if (baseline) poseSession.baseline = record; else poseSession.poses.push(record);
+    showEvidence(image); renderPoses();
+    $('pose-status').textContent = baseline ? '基準を記録しました。足を固定したまま本体を傾け、「この姿勢を追加」を押してください。'
+      : `姿勢 ${poseSession.poses.length} を記録しました。次の姿勢を追加するか、比較JSONを保存してください。`;
+  } catch (error) {
+    $('pose-status').textContent = error.message + ' 取得済みの姿勢は保持しています。';
+    if (baseline && !poseSession.baseline) poseSession = null;
+  } finally { poseRunning = false; controls(); }
+}
 $('start').onclick = () => command('/start-energy-control-autonomous');
-$('stop').onclick = () => command('/stop');
+$('stop').onclick = () => { poseCancelled = true; return command('/stop'); };
 $('clear').onclick = () => command('/clear');
 $('download').onclick = download;
 $('cancel').onclick = () => { cancelTransfer = true; };
@@ -324,4 +402,16 @@ $('csv').onclick = () => saveBlob(new Blob(['\ufeff', footCsv(completedFoot)], {
 $('preview').onclick = capturePreview;
 $('preview-save').onclick = () => saveBlob(new Blob([JSON.stringify(previewEvidence, null, 2)], {type:'application/json'}), `freefoot-vision-diagnostics-${previewEvidence.sequence}.json`);
 $('diagnostics').onclick = () => saveBlob(new Blob([JSON.stringify(latest, null, 2)], {type: 'application/json'}), 'freefoot-diagnostics.json');
+$('pose-base').onclick = () => capturePose(true);
+$('pose-add').onclick = () => capturePose(false);
+$('pose-cancel').onclick = () => { poseCancelled = true; };
+$('pose-save').onclick = () => {
+  saveBlob(new Blob([JSON.stringify(poseSession, null, 2)], {type:'application/json'}), 'freefoot-pose-comparison.json');
+  poseSaved = true; controls();
+};
+$('pose-reset').onclick = () => {
+  if ($('pose-reset').disabled) return;
+  poseSession = null; poseSaved = false; renderPoses(); controls();
+  $('pose-status').textContent = '胴体と両足を直立させ、基準を取得してください。';
+};
 poll();

@@ -1,6 +1,6 @@
 {
   "name": "AtomS3R Free-foot Runtime V2",
-  "version": "0.47.5-range-mekf-all-axes",
+  "version": "0.47.6-pose-comparison",
   "builds": [
     {
       "chipFamily": "ESP32-S3",

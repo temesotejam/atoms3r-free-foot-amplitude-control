@@ -4,8 +4,31 @@
 #include <iostream>
 #include "../src/mekf_attitude_diagnostics.h"
 #include "../src/foot_range_diagnostics.h"
+static void pureForeAftReplay() {
+  mekf6::Mekf6 filter;
+  const float pitch=mekf6::degToRad(.544745f), start=1.881578f;
+  const auto gravity=[&](float roll_deg) {
+    const float roll=mekf6::degToRad(roll_deg);
+    return mekf6::Vec3{-std::sin(pitch),std::cos(pitch)*std::sin(roll),std::cos(pitch)*std::cos(roll)};
+  };
+  assert(filter.initializeFromAccel(gravity(start)));
+  float roll=start;
+  // Fixed-axis out/hold/return/hold, with accelerometer corrections enabled.
+  for(int step=0;step<1600;++step) {
+    const float rate=step<400 ? -10.0f : step<800 ? 0.0f : step<1200 ? 10.0f : 0.0f;
+    roll+=rate*.005f;
+    assert(filter.predict({mekf6::degToRad(rate),0,0},.005f));
+    filter.updateAccel(gravity(roll));
+    const auto e=filter.eulerDeg();
+    assert(std::abs(e.roll-roll)<.02f);
+    assert(std::abs(e.pitch-mekf6::radToDeg(pitch))<.02f);
+    assert(std::abs(e.yaw)<.02f);
+  }
+  std::cout<<"Pure fore/aft out/hold/return with accel correction: no spurious yaw >0.02 deg PASS\n";
+}
 int main(int argc,char** argv) {
   assert(argc==2);
+  pureForeAftReplay();
   mekf6::Mekf6 filter;
   std::ofstream out(argv[1]);
   out<<"{\"invalid\":"<<mekfAttitudeJson(captureMekfAttitude(filter,false,0),1000,true).c_str();
@@ -32,6 +55,14 @@ int main(int argc,char** argv) {
   out<<",\"sensor_failed\":"<<mekfAttitudeJson(snapshot,1002500,false).c_str();
   const auto wrapped=captureMekfAttitude(filter,true,UINT32_MAX-100);
   out<<",\"wrapped\":"<<mekfAttitudeJson(wrapped,150,true).c_str();
+  filter.setGyroBiasRadS({mekf6::degToRad(.1f),mekf6::degToRad(-.2f),mekf6::degToRad(.3f)});
+  filter.updateAccel({0,0,1});
+  const auto inputs=captureMekfAttitude(filter,true,1000000,{.01f,.02f,1.0f},
+      {mekf6::degToRad(1),mekf6::degToRad(2),mekf6::degToRad(3)},999000);
+  const auto frozen=inputs;
+  filter.reset();
+  assert(inputs.bias_rad_s.z==frozen.bias_rad_s.z && inputs.gyro_rad_s.y==frozen.gyro_rad_s.y);
+  out<<",\"inputs\":"<<mekfAttitudeJson(inputs,1002500,true).c_str();
   out<<",\"range\":"<<footRangeDiagnosticsJson().c_str()<<"}";
   std::cout<<"MEKF all-axis posterior capture, quaternion consistency and non-mutating observation PASS\n";
 }
