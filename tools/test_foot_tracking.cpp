@@ -72,8 +72,10 @@ static void wrongZeroReproduction(){
     zero.observe(2300+step*100,2,false,true,ma.center_x_px,mb.center_x_px);
   }
   const auto right=estimateFootAngle(ma,zero.a_zero,true),left=estimateFootAngle(mb,zero.b_zero,true);
-  assert(std::abs(right.angle_deg-left.angle_deg)<.3);
-  assert(std::abs(right.angle_deg-22.9857)<.001&&std::abs(left.angle_deg-22.7703)<.001);
+  assert(right.valid&&left.valid);
+  // This synthetic image moves A by 137 px and B by 140 px. Verify each
+  // independent displacement, not an artificial left/right angle constraint.
+  assert(std::abs(right.angle_deg-21.2550454)<.001&&std::abs(left.angle_deg-21.7695462)<.001);
   std::cout<<"wrong-feature zero reproduction: right="<<right.angle_deg<<" left="<<left.angle_deg<<" deg\n";
 }
 static void identityAndAmbiguity(){
@@ -98,10 +100,10 @@ static void identityAndAmbiguity(){
   const auto missing=tracked.process(nullptr);
   assert(!missing.valid&&missing.reason==MarkerDetectionReason::NoFrame&&missing.center_x_px==0);
   // The two feet remain independent after zero; different actual angles must
-  // not be forced to agree by a left/right constraint or altered coefficients.
+  // not be forced to agree by a left/right constraint.
   WhiteMarkerObservation a,b;a.valid=b.valid=true;a.id=0;b.id=1;a.center_x_px=160;b.center_x_px=120;
-  assert(std::abs(estimateFootAngle(a,170,true).angle_deg-1.67779119)<.00001);
-  assert(std::abs(estimateFootAngle(b,170,true).angle_deg-8.13226525)<.00001);
+  assert(std::abs(estimateFootAngle(a,170,true).angle_deg-1.55146317)<.00001);
+  assert(std::abs(estimateFootAngle(b,170,true).angle_deg-7.77483791)<.00001);
   assert(!estimateFootAngle(a,170,false).valid);
   a.center_x_px=10;const auto outside=estimateFootAngle(a,170,true);
   assert(outside.valid&&!outside.in_calibration_range);
@@ -127,9 +129,9 @@ static void zeroGates(){
   FootZero slow;for(uint32_t t=0;t<10000;t+=500)slow.observe(t,1,true,true,169,174);assert(!slow.ready);
 }
 static void hardwareRangeReplay(){
-  // Actual 0.47.4 status files (6)/(7), sequences 694/781, unchanged slopes.
-  const float rows[][4]={{171.7313f,170.7977f,-.0479f,-.1279f},
-                        {41.7336f,40.3504f,21.7630f,21.0887f}};
+  // Original 0.47.4 pixel positions remain accepted with the new v2 slopes.
+  const float rows[][4]={{171.7313f,170.7977f,-.04427876f,-.12231375f},
+                        {41.7336f,40.3504f,20.12438555f,20.16181853f}};
   for(const auto& row:rows)for(int side=0;side<2;++side){
     WhiteMarkerObservation m;m.id=side;m.valid=true;m.center_x_px=row[side];
     const auto estimate=estimateFootAngle(m,side==0?171.4459f:170.0111f,true);
@@ -142,8 +144,26 @@ static void hardwareRangeReplay(){
     for(float x:{lo,hi}){m.center_x_px=x;assert(estimateFootAngle(m,170,true).in_calibration_range);}
     for(float x:{lo-.01f,hi+.01f,35.f}){m.center_x_px=x;assert(!estimateFootAngle(m,170,true).in_calibration_range);}
   }
-  std::cout<<"hardware frames 694/781: both feet in updated range; angles unchanged; boundaries bounded PASS\n";
+  std::cout<<"hardware frames 694/781: accepted pixel range preserved with v2 angle calibration PASS\n";
 }
-int main(){verticalRecovery();wrongZeroReproduction();identityAndAmbiguity();zeroGates();hardwareRangeReplay();
+static void fixedPoseCalibrationReplay(){
+  // Means from the supplied 0.47.6 file; first two rows fit, last two held out.
+  // Expected residual = delta foot angle + delta body roll, in degrees.
+  const float rows[][5]={{171.64306f,169.55292f,0,0,0},
+    {40.95084f,39.15524f,-20.27641653f,0,0},
+    {148.0924f,146.0271f,-3.33639326f,.31740489f,.32179548f},
+    {115.27286f,113.29306f,-8.48587166f,.25975724f,.26235420f}};
+  for(const auto& row:rows)for(int side=0;side<2;++side){
+    WhiteMarkerObservation marker;marker.id=side;marker.valid=true;marker.center_x_px=row[side];
+    const auto angle=estimateFootAngle(marker,side==0?171.64306f:169.55292f,true);
+    assert(angle.valid&&angle.in_calibration_range);
+    assert(std::abs(angle.angle_deg+row[2]-row[3+side])<.00002f);
+    // A new measured boot zero changes the offset, not the calibrated scale.
+    const auto shifted=estimateFootAngle(marker,(side==0?171.64306f:169.55292f)+1,true);
+    assert(std::abs(shifted.angle_deg-angle.angle_deg-angle.deg_per_px)<.00001f);
+  }
+  std::cout<<"Fixed-pose scale fit and both held-out hand-supported pose residuals PASS\n";
+}
+int main(){verticalRecovery();wrongZeroReproduction();identityAndAmbiguity();zeroGates();hardwareRangeReplay();fixedPoseCalibrationReplay();
   std::cout<<"full-height candidates, separate peaks, identity gates, independent angles and neutral zero guards PASS\n";
 }

@@ -30,6 +30,21 @@ assert diagnostics['range']['left_support_x'] == [39,177.5]
 assert diagnostics['range']['original_right_support_x'] == [42,173]
 assert diagnostics['range']['original_left_support_x'] == [43.5,177.5]
 assert diagnostics['range']['extension_angle_accuracy_validated'] is False
+calibration=diagnostics['calibration']
+assert calibration['revision']=='fixed_two_poses_20260924' and calibration['provisional']
+assert abs(calibration['right_deg_per_px']-.155146317)<1e-8
+assert abs(calibration['left_deg_per_px']-.155496758)<1e-8
+assert calibration['fit_poses']==2 and calibration['heldout_hand_supported_poses']==2
+assert not calibration['independent_angular_accuracy_validated']
+evidence=json.loads(Path('tools/fixtures/foot_calibration_20260924.json').read_text())
+assert calibration['source_sha256']==evidence['source_sha256']
+upright,tilted,*heldout=[r['summary'] for r in evidence['records']]
+for side in ('right','left'):
+    slope=(upright['roll_deg']-tilted['roll_deg'])/(upright[side+'_x']-tilted[side+'_x'])
+    assert abs(slope-calibration[side+'_deg_per_px'])<1e-8
+    for pose in heldout:
+        residual=slope*(upright[side+'_x']-pose[side+'_x'])+pose['roll_deg']-upright['roll_deg']
+        assert .25<residual<.33
 source = Path('/tmp/runtime-fixture.rwlog')
 data = source.read_bytes()
 header = converter.parse_header(data)
@@ -45,6 +60,10 @@ assert metadata['foot_observation']['zero_max_nominal_offset_px'] == 35
 assert metadata['foot_observation']['zero_max_spread_px'] == 4
 assert metadata['foot_observation']['vertical_recovery_angle_accuracy_validated'] is False
 assert metadata['foot_observation']['range'] == diagnostics['range']
+assert metadata['foot_observation']['calibration']==calibration
+assert metadata['foot_observation']['calibration_source_commit'] is None
+for side in ('right','left'):
+    assert metadata['foot_observation'][side+'_deg_per_px']==calibration[side+'_deg_per_px']
 assert metadata['foot_observation']['right_support_x'] == [40,173]
 assert metadata['foot_observation']['left_support_x'] == [39,177.5]
 assert metadata['foot_frames'][0]['right_scan_y'] == 42

@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-#define RUNTIME_VERSION "0.47.6-pose-comparison"
+#define RUNTIME_VERSION "0.47.7-fixed-pose-calibration"
 
 namespace RuntimeDiag {
 enum class Lane : uint32_t { Control, Imu, Camera, Http, Roller, Export, Count };

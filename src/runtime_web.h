@@ -4,7 +4,7 @@ static const char RUNTIME_HTML[] PROGMEM = R"FREEFOOT(<!doctype html><html lang=
 <style>
 :root{font-family:system-ui,sans-serif;color:#1d293d;background:#eef2f5;font-size:16px}*{box-sizing:border-box}body{max-width:950px;margin:auto;padding:20px}h1{font-size:1.65rem;margin-bottom:4px}h2{font-size:1.08rem}p{line-height:1.6}.muted{color:#546477;font-size:.88rem}.card{background:white;border-radius:14px;padding:20px;margin:16px 0;border:1px solid #d9e1e8}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.value{font-size:2rem;font-variant-numeric:tabular-nums;margin:4px 0}.label{font-size:.85rem;color:#546477}button{padding:13px 18px;border:0;border-radius:8px;background:#174b8e;color:white;font:inherit;cursor:pointer;margin:4px 4px 4px 0}button:disabled{opacity:.4;cursor:default}#stop{background:#b62032}#clear,#cancel{background:#58677a}code,pre{font-family:ui-monospace,monospace}pre{white-space:pre-wrap;font-size:.78rem;overflow-wrap:anywhere}#connection{font-weight:600}progress{width:100%;height:24px}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px 4px;border-bottom:1px solid #e1e6eb}canvas{width:100%;height:120px;background:#f3f6fa;border-radius:8px}#message{min-height:26px;color:#9c2636}a{color:#174b8e}
 </style>
-<h1>AtomS3R Free-foot</h1><div class="muted">0.47.6 · 静止姿勢比較版 · 足角度は観測用</div>
+<h1>AtomS3R Free-foot</h1><div class="muted">0.47.7 · 固定姿勢校正版 · 足角度はMEKF基準の暫定校正・観測用</div>
 <p id="connection">接続を確認中…</p>
 <section class="card"><div class="grid"><div><div class="label">状態</div><div class="value" id="state">—</div></div><div><div class="label">残り時間</div><div class="value" id="remaining">—</div></div><div><div class="label">胴体の左右揺動 · MEKF</div><div class="value" id="pitch">—</div></div><div><div class="label">指令 / 実測電流</div><div class="value" style="font-size:1.5rem" id="current">—</div></div></div>
 <p id="guide">起動後は静止させてください。LEDが点灯したら直立させ、左右マーカーが見える状態で2秒以上静止します。</p>
@@ -19,7 +19,7 @@ static const char RUNTIME_HTML[] PROGMEM = R"FREEFOOT(<!doctype html><html lang=
 <button id="pose-base" disabled>直立基準を取得</button><button id="pose-add" disabled>この姿勢を追加</button><button id="pose-cancel" disabled>姿勢取得を中止</button><button id="pose-save" disabled>比較JSONを保存</button><button id="pose-reset" disabled>保存後に比較をやり直す</button>
 <p id="pose-status" role="status">胴体と両足を直立させ、基準を取得してください。</p>
 <div style="overflow-x:auto"><table><thead><tr><th>姿勢</th><th>胴体前後変化</th><th>右の差</th><th>左の差</th><th>yaw変化</th><th>確認</th></tr></thead><tbody id="pose-rows"></tbody></table></div>
-<p class="muted">「差」は基準からの足相対角の変化＋胴体前後角の変化です。足を固定した平面運動では0°が目安になります。yaw・左右傾斜が大きい場合は参考値とします。角度換算の係数は変更しません。最大12姿勢の画像と診断をまとめて保存します。再読み込みする前に比較JSONを保存してください。</p>
+<p class="muted">「差」は基準からの足相対角の変化＋胴体前後角の変化です。足を固定した平面運動では0°が目安になります。yaw・左右傾斜が大きい場合は参考値とします。各姿勢の取得では角度換算係数を変更しません。現在は固定2姿勢から求めた係数を使用しています。最大12姿勢の画像と診断をまとめて保存します。再読み込みする前に比較JSONを保存してください。</p>
 </section>
 <section class="card"><h2>測定ログ</h2><p>測定終了後にログを確定します。中断した場合は「取得・再開」で続きから取得できます。画面を再読み込みしても、端末に保存済みの部分を再利用します。</p>
 <button id="download" disabled>RWLOGを取得・再開</button><button id="cancel" disabled>取得を一時停止</button><button id="csv" disabled>足角度CSVを保存</button>

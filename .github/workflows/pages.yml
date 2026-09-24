@@ -84,9 +84,9 @@ jobs:
                   if published != expected:
                       raise ValueError('Published build SHA differs: ' + published)
                   manifest = json.loads(get('manifest-freefoot-runtime-v2.json'))
-                  if manifest['version'] != '0.47.6-pose-comparison':
+                  if manifest['version'] != '0.47.7-fixed-pose-calibration':
                       raise ValueError('Unexpected firmware version')
-                  if 'Free-foot Runtime V2 / 0.47.6' not in get('index.html').decode():
+                  if 'Free-foot Runtime V2 / 0.47.7' not in get('index.html').decode():
                       raise ValueError('Published page label differs')
                   provenance = json.loads(get('bmi270-build-patch.json'))
                   if provenance['upstream_git_blob'] != '41732382bbdfe413be758748bca24d9a15a3a1d8':

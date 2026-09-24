@@ -4,6 +4,7 @@
 #include <iostream>
 #include "../src/mekf_attitude_diagnostics.h"
 #include "../src/foot_range_diagnostics.h"
+#include "../src/foot_calibration_diagnostics.h"
 static void pureForeAftReplay() {
   mekf6::Mekf6 filter;
   const float pitch=mekf6::degToRad(.544745f), start=1.881578f;
@@ -63,6 +64,7 @@ int main(int argc,char** argv) {
   filter.reset();
   assert(inputs.bias_rad_s.z==frozen.bias_rad_s.z && inputs.gyro_rad_s.y==frozen.gyro_rad_s.y);
   out<<",\"inputs\":"<<mekfAttitudeJson(inputs,1002500,true).c_str();
-  out<<",\"range\":"<<footRangeDiagnosticsJson().c_str()<<"}";
+  out<<",\"range\":"<<footRangeDiagnosticsJson().c_str();
+  out<<",\"calibration\":"<<footCalibrationDiagnosticsJson().c_str()<<"}";
   std::cout<<"MEKF all-axis posterior capture, quaternion consistency and non-mutating observation PASS\n";
 }

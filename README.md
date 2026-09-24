@@ -1,7 +1,8 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.6 static-pose comparison
+# Current integrated build: Free-foot Runtime V2 / 0.47.7 fixed-pose foot calibration
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
 [USB diagnostic procedure](docs/USB_DIAGNOSTICS.md) ·
+[Fixed-pose foot calibration](docs/FOOT_CALIBRATION_0477.md) ·
 [Static-pose comparison and yaw diagnostics](docs/POSE_COMPARISON_0476.md) ·
 [Observed range update and all-axis MEKF diagnostics](docs/RANGE_MEKF_DIAGNOSTICS_0475.md) ·
 [Marker identity, zero quality and image diagnosis](docs/MARKER_IDENTITY_0474.md) ·
@@ -14,6 +15,16 @@ The current main branch integrates observation-only right/left foot angles with
 the V46al-R2 controller. It uses permanent control ownership, PSRAM event storage,
 and a resumable, CRC-verified RWLOG export. Integrated hardware validation is
 pending; build/host tests do not establish camera frame rate or control deadlines.
+Version 0.47.7 updates the independent foot-angle scales using the two supplied
+poses captured without hand contact: a 20.2764165-degree body roll change and
+right/left marker displacements of 130.69222 / 130.39768 pixels. New scales are
+0.155146317 / 0.155496758 deg/px. Applied to the two hand-supported poses held out
+from the fit, both sides have residuals of about 0.26--0.32 degrees. This is a
+provisional MEKF-referenced calibration, not independently established absolute
+accuracy; one held-out pose has a 7.36-degree yaw change. Per-boot independent
+zeros and pixel support bounds remain in use. Normal status, frozen images and
+RWLOG share the new calibration metadata and source-file hash.
+
 Version 0.47.6 adds a pre-measurement static-pose comparison in the device WebUI.
 Record an upright baseline and several held fore/aft tilts and return poses. Each
 pose checks five frozen frame/IMU snapshots over about three seconds and saves the
@@ -29,7 +40,7 @@ establish new slope coefficients. The added comparison is for collecting repeate
 poses and identifying the remaining error; it does not apply a calibration fit.
 A synthetic pure fore/aft out/hold/return replay with accelerometer corrections
 keeps yaw below 0.02 degrees; actual motion and estimator drift still need hardware
-evidence. See the procedure above. Control math and RWLOG v51 are unchanged.
+evidence. See the procedure above. Control math and RWLOG v51 are unchanged. The later 0.47.7 fixed-pose fit is described above.
 
 Version 0.47.5 incorporates the new 0.47.4 hardware observations. Both feet remain
 detected through 781 captured frames, and the tilted status reports right 21.7630°
@@ -62,8 +73,8 @@ transferred as a frozen 160×120 grayscale image in CRC-checked chunks. Save the
 image and metadata together with “画像付き診断を保存”. Capture an upright frame
 and a frame with both feet fixed while the body is tilted fore/aft to inspect the
 actual marker choice. The UI identifies MEKF as body side-to-side rocking and
-foot angles as body-relative; MEKF axes, gyro calibration, control math and foot
-angle slopes are unchanged. The user's fore/aft trial does not make the small
+foot angles as body-relative; MEKF axes, gyro calibration and control math are unchanged. Foot
+angle slopes use the 0.47.7 fixed-pose fit described above. The user's fore/aft trial does not make the small
 side-to-side MEKF value a failure. Real-image identity and angle accuracy still
 need hardware confirmation; see the linked procedure and limitations.
 

@@ -1,5 +1,6 @@
 #include "foot_observer.h"
 #include "foot_range_diagnostics.h"
+#include "foot_calibration_diagnostics.h"
 #include "runtime_diagnostics.h"
 #include "foot_angle_estimator.h"
 #include "esp_timer.h"
@@ -165,13 +166,14 @@ void FootObserver::loop() {
 static String number(float v) { return isfinite(v) ? String(v, 5) : String("null"); }
 void FootObserver::appendMetadata(PsramString& json) const {
   const auto s = snapshot();
-  json += "\"foot_observation\":{\"revision\":\"freefoot_runtime_v2_0475\",\"observation_only\":true,";
+  json += "\"foot_observation\":{\"revision\":\"freefoot_runtime_v2_0477\",\"observation_only\":true,";
   json += "\"detector\":\"" + String(appcfg::kWhiteDetectorRevision) + "\",";
   json += "\"scan_y_semantics\":\"selected_row_template_center_not_marker_centroid\",";
   json += "\"vertical_recovery_angle_accuracy_validated\":false,";
   json += "\"search_radius_y_px\":" + String(appcfg::kWhiteSearchRadiusYPx);
   json += ",\"search_step_y_px\":" + String(appcfg::kWhiteSearchStepYPx) + ",";
-  json += "\"calibration_source_commit\":\"ac6df8caf59c93956b87cba57521903c25ff9f00\",";
+  json += "\"calibration_source_commit\":null,\"original_calibration_source_commit\":\"ac6df8caf59c93956b87cba57521903c25ff9f00\",";
+  json += "\"calibration\":" + footCalibrationDiagnosticsJson() + ",";
   json += "\"mapping\":\"right=A upper lane;left=B lower lane\",\"positive_direction\":\"marker_x_decreases\",";
   json += "\"frame_timestamp_semantics\":\"camera_driver_frame_timestamp_not_verified_exposure_time\",";
   json += "\"control_context_semantics\":\"latest_control_snapshot_at_frame_delivery_not_exposure\",";
@@ -183,7 +185,8 @@ void FootObserver::appendMetadata(PsramString& json) const {
   json += ",\"zero_max_nominal_offset_px\":" + number(appcfg::kAutoZeroMaxNominalOffsetXPx);
   json += ",\"zero_max_spread_px\":" + number(appcfg::kAutoZeroMaxSpreadXPx);
   json += ",\"right_zero_x\":" + number(s.right_zero) + ",\"left_zero_x\":" + number(s.left_zero);
-  json += ",\"right_deg_per_px\":0.167779119,\"left_deg_per_px\":0.162645305,";
+  json += ",\"right_deg_per_px\":" + String(appcfg::kFootAngleADegPerPx, 9);
+  json += ",\"left_deg_per_px\":" + String(appcfg::kFootAngleBDegPerPx, 9) + ",";
   json += "\"right_support_x\":[" + number(appcfg::kFootAngleAMinCalXPx) + "," + number(appcfg::kFootAngleAMaxCalXPx) + "]";
   json += ",\"left_support_x\":[" + number(appcfg::kFootAngleBMinCalXPx) + "," + number(appcfg::kFootAngleBMaxCalXPx) + "]";
   json += ",\"range\":" + footRangeDiagnosticsJson() + "},\"foot_frames\":[";

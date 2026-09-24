@@ -54,29 +54,32 @@ static constexpr float kWhiteMaxTrackStepYPx = 32.0f;
 static constexpr uint32_t kWhiteTrackMemoryUs = 500000;
 static constexpr uint8_t kWhiteReacquireFrames = 3;
 
-// Foot-angle calibration v1, measured 2026-09-21.
+// Foot-angle calibration v2, measured 2026-09-24 (0.47.7).
 // Definition:
 //   foot_angle_deg = angle of the rigid foot/leg link relative to the body.
 //   Upright initial posture = 0 deg.
 //   Positive direction = the direction observed when marker X moves left.
 //
-// Baseline was the initial static interval (frames 57..97):
-//   A x0 = 169.615317 px
-//   B x0 = 174.843512 px
-//
-// Slopes were fitted through the upright-zero point using quasi-static
-// calibration samples:
-//   A: theta = 0.167779119 * (169.615317 - x)
-//   B: theta = 0.162645305 * (174.843512 - x)
+// Two noncontact held poses: body roll change -20.276416529 deg,
+// A X: 171.64306 -> 40.95084; B X: 169.55292 -> 39.15524 px.
+// Slopes = -delta_body_roll / (upright_x - tilted_x), each side separately.
+// Provisional MEKF-referenced scale; hand-supported poses were held out.
+// These older nominal zeros are only the neutral-image plausibility centers;
+// actual zero is still measured independently for each foot on every boot.
 static constexpr float kFootAngleAZeroXPx = 169.615317f;
 static constexpr float kFootAngleBZeroXPx = 174.843512f;
-static constexpr float kFootAngleADegPerPx = 0.167779119f;
-static constexpr float kFootAngleBDegPerPx = 0.162645305f;
+static constexpr float kFootAngleADegPerPx = 0.155146317f;
+static constexpr float kFootAngleBDegPerPx = 0.155496758f;
+static constexpr float kFootCalibrationBodySpanDeg = 20.276416529f;
+static constexpr float kFootCalibrationAUprightX = 171.64306f;
+static constexpr float kFootCalibrationATiltedX = 40.95084f;
+static constexpr float kFootCalibrationBUprightX = 169.55292f;
+static constexpr float kFootCalibrationBTiltedX = 39.15524f;
 
 // v1 support extended by the 0.47.4 hardware observations, sequences 694/781:
 // right X=41.7336, left X=40.3504. Floor the observed minimum minus 1 px.
-// This updates the accepted pixel range, not the fitted angle coefficients.
-// Keep the original support explicit; extension accuracy is not yet validated.
+// Accepted pixel bounds are distinct from the v2 fit anchors above.
+// Keep the original support explicit; extrapolation accuracy is not validated.
 static constexpr float kFootAngleAOriginalMinCalXPx = 42.0f;
 static constexpr float kFootAngleBOriginalMinCalXPx = 43.5f;
 static constexpr float kFootAngleAMinCalXPx = 40.0f;
