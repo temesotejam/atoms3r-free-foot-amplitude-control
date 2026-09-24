@@ -39,7 +39,9 @@ function controls() {
 const format = (n, digits = 2) => Number.isFinite(n) ? n.toFixed(digits) : '—';
 function drawMarkers(f) {
   const ctx = $('markers').getContext('2d'); ctx.clearRect(0, 0, 640, 120);
-  for (const [name, x, y, lo, hi] of [['A / 右', f.right_x, 35, 42, 173], ['B / 左', f.left_x, 90, 43.5, 177.5]]) {
+  for (const [name, x, y, range] of [['A / 右', f.right_x, 35, f.range?.right_support_x ?? [42, 173]],
+      ['B / 左', f.left_x, 90, f.range?.left_support_x ?? [43.5, 177.5]]]) {
+    const [lo, hi] = range;
     ctx.fillStyle = '#dce8e5'; ctx.fillRect(lo * 2, y - 13, (hi - lo) * 2, 26);
     ctx.strokeStyle = '#aab8c6'; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(640, y); ctx.stroke();
     ctx.fillStyle = '#304962'; ctx.font = '12px system-ui'; ctx.fillText(name, 5, y - 16);
@@ -57,7 +59,7 @@ function footIssues(f, stale, terminal) {
     track_jump: '検出位置が急変', reacquiring: '再捕捉中'};
   for (const [side, label] of [['right', '右'], ['left', '左']]) {
     if (f[side + '_valid']) {
-      if (f[side + '_in_range'] === false) issues.push(label + '：校正範囲外');
+      if (f[side + '_in_range'] === false) issues.push(label + '：設定範囲外');
     } else {
       const reason = f[side + '_reason'];
       if (reasons[reason]) issues.push(label + '：' + reasons[reason]);

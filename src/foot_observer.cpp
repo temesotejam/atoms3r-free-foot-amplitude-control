@@ -1,4 +1,5 @@
 #include "foot_observer.h"
+#include "foot_range_diagnostics.h"
 #include "runtime_diagnostics.h"
 #include "foot_angle_estimator.h"
 #include "esp_timer.h"
@@ -118,6 +119,7 @@ void FootObserver::loop() {
     f.processing_us = micros() - processing_start;
     FootPreviewInfo preview;
     preview.frame = f; preview.right = a; preview.left = b;
+    preview.mekf_attitude = run.mekf_attitude; preview.imu_ok = run.imu_ok;
     preview.right_zero = zero_.a_zero; preview.left_zero = zero_.b_zero; preview.zero_samples = zero_.count;
     publishPreview(f.frame_valid ? fb->buf : nullptr, preview);
     f.processing_us = micros() - processing_start;
@@ -163,7 +165,7 @@ void FootObserver::loop() {
 static String number(float v) { return isfinite(v) ? String(v, 5) : String("null"); }
 void FootObserver::appendMetadata(PsramString& json) const {
   const auto s = snapshot();
-  json += "\"foot_observation\":{\"revision\":\"freefoot_runtime_v2_0474\",\"observation_only\":true,";
+  json += "\"foot_observation\":{\"revision\":\"freefoot_runtime_v2_0475\",\"observation_only\":true,";
   json += "\"detector\":\"" + String(appcfg::kWhiteDetectorRevision) + "\",";
   json += "\"scan_y_semantics\":\"selected_row_template_center_not_marker_centroid\",";
   json += "\"vertical_recovery_angle_accuracy_validated\":false,";
@@ -182,7 +184,9 @@ void FootObserver::appendMetadata(PsramString& json) const {
   json += ",\"zero_max_spread_px\":" + number(appcfg::kAutoZeroMaxSpreadXPx);
   json += ",\"right_zero_x\":" + number(s.right_zero) + ",\"left_zero_x\":" + number(s.left_zero);
   json += ",\"right_deg_per_px\":0.167779119,\"left_deg_per_px\":0.162645305,";
-  json += "\"right_support_x\":[42,173],\"left_support_x\":[43.5,177.5]},\"foot_frames\":[";
+  json += "\"right_support_x\":[" + number(appcfg::kFootAngleAMinCalXPx) + "," + number(appcfg::kFootAngleAMaxCalXPx) + "]";
+  json += ",\"left_support_x\":[" + number(appcfg::kFootAngleBMinCalXPx) + "," + number(appcfg::kFootAngleBMaxCalXPx) + "]";
+  json += ",\"range\":" + footRangeDiagnosticsJson() + "},\"foot_frames\":[";
   for (uint32_t i = 0; i < s.count; ++i) {
     // Recording is sealed before export begins and clear/start are excluded.
     const auto& f = frames_[i];

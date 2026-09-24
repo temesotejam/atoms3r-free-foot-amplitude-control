@@ -35,7 +35,7 @@ vm.runInContext(code,context);
   valid.foot.right_in_range=false;
   await vm.runInContext('refresh()',context);
   assert.strictEqual(element('right').textContent,'8.00°');
-  assert.match(element('foot-status').textContent,/右：校正範囲外/);
+  assert.match(element('foot-status').textContent,/右：設定範囲外/);
   valid.ready=false;valid.foot.right_valid=false;valid.foot.right_reason='low_contrast';
   await vm.runInContext('refresh()',context);
   assert.strictEqual(element('connection').textContent,'接続中');
@@ -87,10 +87,15 @@ vm.runInContext(code,context);
   assert.match(element('guide').textContent,/基準位置から大きく外れ/);
   assert.strictEqual(element('start').disabled,true);
   valid.foot.zero_ready=true;valid.foot.zero_reason='ready';valid.foot.preview_available=true;valid.ready=true;
+  valid.mekf={valid:true,fresh:true,roll_deg:20,pitch_deg:0.2,yaw_deg:3};
+  valid.foot.range={right_support_x:[40,173],left_support_x:[39,177.5]};
   await vm.runInContext('refresh()',context);
+  assert.strictEqual(JSON.parse(element('diagnostic-view').textContent).mekf.roll_deg,20);
+  assert.strictEqual(JSON.parse(element('diagnostic-view').textContent).mekf.yaw_deg,3);
   const pixels=Uint8Array.from({length:19200},(_,i)=>i%256);context.pixels=pixels;
   const manifest={format:'gray8',width:160,height:120,source_width:320,source_height:240,bytes:19200,
     token:7,sequence:17,crc32:vm.runInContext('crc32(pixels)',context),age_ms:30,zero_reason:'ready',
+    mekf:{valid:true,roll_deg:18,pitch_deg:0.1,yaw_deg:2,sample_us:1700000},
     right:{valid:true,candidates:1,x:172,scan_y:66,width:19,reason:'detected'},
     left:{valid:true,candidates:1,x:175,scan_y:184,width:19,reason:'detected'}};
   context.manifest=manifest;
@@ -118,6 +123,8 @@ vm.runInContext(code,context);
   await vm.runInContext('capturePreview()',context);
   assert.strictEqual(chunks,5);assert.strictEqual(vm.runInContext('previewRunning',context),false);
   assert.strictEqual(vm.runInContext('previewEvidence.left.x',context),175);
+  assert.strictEqual(vm.runInContext('previewEvidence.mekf.roll_deg',context),18);
+  assert.strictEqual(vm.runInContext('previewEvidence.mekf.sample_us',context),1700000);
   assert.deepStrictEqual(Buffer.from(vm.runInContext('previewEvidence.pixels_gray8_base64',context),'base64'),Buffer.from(pixels));
   assert.strictEqual(element('preview-save').disabled,false);assert.strictEqual(element('start').disabled,false);
   badWholeCrc=true;await vm.runInContext('capturePreview()',context);

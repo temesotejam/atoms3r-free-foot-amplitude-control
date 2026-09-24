@@ -86,6 +86,7 @@ void ExperimentRunner::beginFilters() {
   mekf_.reset();
   mekf_.setConfig(makeMekfConfig());
   mekf_initialized_ = false;
+  status_.mekf_attitude = MekfAttitudeSnapshot{};
   filter_beta1_raw_.begin(madgwick_hz);
   filter_beta1_bias_.begin(madgwick_hz);
   filter_beta1_raw_.setBeta(Config::MADGWICK_BETA_ONE);
@@ -225,22 +226,26 @@ void ExperimentRunner::updateFilterSeries(const ImuReading& r) {
 
   const mekf6::Vec3 mekf_accel = mekfAccelFromRaw(r);
   const mekf6::Vec3 mekf_gyro = mekfGyroRadFromRaw(r);
+  bool posterior_updated = false;
   if (!mekf_initialized_) {
     mekf_initialized_ = mekf_.initializeFromAccel(mekf_accel);
+    posterior_updated = mekf_initialized_;
     if (mekf_initialized_ && bias_ready_) {
       mekf_.setGyroBiasRadS(mekfStartupBiasFromRaw(
           status_.gyro_bias_x_dps, status_.gyro_bias_y_dps, status_.gyro_bias_z_dps));
     }
   }
   if (mekf_initialized_ && mekf_.predict(mekf_gyro, dt_s)) {
+    posterior_updated = true;
     if (accel_is_new_for_filter) {
       mekf_.updateAccel(mekf_accel);
       last_mekf_accel_sequence_ = r.accel_sequence;
     }
   }
+  status_.mekf_attitude = captureMekfAttitude(mekf_, mekf_initialized_,
+      posterior_updated ? r.last_gyro_update_us : status_.mekf_attitude.sample_us);
   if (mekf_initialized_) {
-    const auto e = mekf_.eulerDeg();
-    raw_mekf_pitch_abs_deg_ = e.pitch;
+    raw_mekf_pitch_abs_deg_ = status_.mekf_attitude.pitch_deg;
     // V46ac autonomous diagnostic prediction begin
     // Avoid the quaternion forward-prediction cost in Autonomous. Legacy
     // non-Autonomous modes retain the previous prediction behavior.
@@ -259,7 +264,7 @@ void ExperimentRunner::updateFilterSeries(const ImuReading& r) {
       status_.pitch_mekf_predicted_abs_deg = raw_mekf_predicted_abs_deg_;
     }
     // V46ac autonomous diagnostic prediction end
-    const auto q = mekf_.quaternion();
+    const auto q = status_.mekf_attitude.quaternion;
     status_.mekf_q_w = q.w; status_.mekf_q_x = q.x;
     status_.mekf_q_y = q.y; status_.mekf_q_z = q.z;
     const auto b = mekf_.gyroBiasRadS();
@@ -424,10 +429,11 @@ void ExperimentRunner::updateStartupCalibration(const ImuReading& r) {
   mekf_.reset();
   mekf_.setConfig(makeMekfConfig());
   mekf_initialized_ = mekf_.initializeFromAccel(mekfAccelFromRaw(r));
+  status_.mekf_attitude = captureMekfAttitude(mekf_, mekf_initialized_, r.last_gyro_update_us);
   if (mekf_initialized_) {
     mekf_.setGyroBiasRadS(mekfStartupBiasFromRaw(
         status_.gyro_bias_x_dps, status_.gyro_bias_y_dps, status_.gyro_bias_z_dps));
-    raw_mekf_pitch_abs_deg_ = mekf_.eulerDeg().pitch;
+    raw_mekf_pitch_abs_deg_ = status_.mekf_attitude.pitch_deg;
     raw_mekf_predicted_abs_deg_ = raw_mekf_pitch_abs_deg_;
     status_.pitch_mekf_predicted_abs_deg = raw_mekf_predicted_abs_deg_;
   }
@@ -3361,6 +3367,7 @@ void ExperimentRunner::updateStartSync(uint32_t now_ms) {
       mekf_.reset();
       mekf_.setConfig(makeMekfConfig());
       mekf_initialized_ = mekf_.initializeFromAccel(mean_accel);
+      status_.mekf_attitude = MekfAttitudeSnapshot{};
       if (mekf_initialized_ && bias_ready_) {
         mekf_.setGyroBiasRadS(mekfStartupBiasFromRaw(
             status_.gyro_bias_x_dps, status_.gyro_bias_y_dps, status_.gyro_bias_z_dps));
@@ -3375,9 +3382,9 @@ void ExperimentRunner::updateStartSync(uint32_t now_ms) {
       // 5-ms IMU updates continue normal adaptive accel correction for the
       // remaining START sync time before any motor command is authorized.
       mekf_.updateAccel(mean_accel);
-      const auto e = mekf_.eulerDeg();
-      raw_mekf_pitch_abs_deg_ = e.pitch;
-      const auto q = mekf_.quaternion();
+      status_.mekf_attitude = captureMekfAttitude(mekf_, mekf_initialized_, r.last_gyro_update_us);
+      raw_mekf_pitch_abs_deg_ = status_.mekf_attitude.pitch_deg;
+      const auto q = status_.mekf_attitude.quaternion;
       status_.mekf_q_w = q.w;
       status_.mekf_q_x = q.x;
       status_.mekf_q_y = q.y;

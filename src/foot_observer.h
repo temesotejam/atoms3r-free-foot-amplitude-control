@@ -36,6 +36,8 @@ struct FootSnapshot {
 };
 struct FootPreviewInfo {
   FootFrame frame;
+  MekfAttitudeSnapshot mekf_attitude;
+  bool imu_ok = false;
   WhiteMarkerObservation right, left;
   float right_zero = 0, left_zero = 0;
   uint32_t zero_samples = 0;

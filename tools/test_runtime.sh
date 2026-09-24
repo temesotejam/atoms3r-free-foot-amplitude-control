@@ -20,6 +20,8 @@ g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_v46o_start
 /tmp/test_startup | tail -n 1
 g++ -std=c++17 -O2 tools/test_mekf_host.cpp src/mekf6.cpp -o /tmp/test_mekf
 /tmp/test_mekf
+g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_mekf_diagnostics.cpp src/mekf6.cpp -o /tmp/test_mekf_diagnostics
+/tmp/test_mekf_diagnostics /tmp/mekf-diagnostics-fixture.json
 g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wno-format -ffunction-sections -fdata-sections -Itools/host_v46o tools/test_runtime_logger.cpp src/psram_logger.cpp src/foot_observer.cpp src/foot_angle_estimator.cpp src/white_marker_tracker.cpp src/immutable_export.cpp -Wl,--gc-sections -o /tmp/test_logger
 /tmp/test_logger /tmp/runtime-fixture.rwlog
 python3 tools/test_runtime_fixture.py

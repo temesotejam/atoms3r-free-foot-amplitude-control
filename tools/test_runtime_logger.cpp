@@ -27,14 +27,18 @@ int main(int argc,char** argv){
   for(unsigned y=0;y<240;++y)for(unsigned x=0;x<320;++x)gray[y*320+x]=(x+3*y)%256;
   FootPreviewInfo first{};first.frame.sequence=17;first.frame.frame_valid=true;
   first.left.center_x_px=175;first.frame.zero_reason=FootZeroReason::Collecting;
+  first.mekf_attitude.valid=true;first.mekf_attitude.roll_deg=20;first.mekf_attitude.sample_us=1700000;
   feet.publishPreview(gray.data(),first);
   FootPreviewInfo copied{};assert(feet.copyPreview(frozen.data(),copied));
   for(unsigned y=0;y<120;++y)for(unsigned x=0;x<160;++x)assert(frozen[y*160+x]==gray[y*2*320+x*2]);
   auto next=first;next.frame.sequence=18;next.left.center_x_px=35;
+  next.mekf_attitude.roll_deg=30;next.mekf_attitude.sample_us=1800000;
   std::fill(gray.begin(),gray.end(),91);feet.publishPreview(gray.data(),next);
   assert(copied.frame.sequence==17 && copied.left.center_x_px==175 && frozen[0]==0);
+  assert(copied.mekf_attitude.roll_deg==20 && copied.mekf_attitude.sample_us==1700000);
   assert(feet.copyPreview(frozen.data(),copied));
   assert(copied.frame.sequence==18 && copied.left.center_x_px==35 && frozen[0]==91);
+  assert(copied.mekf_attitude.roll_deg==30 && copied.mekf_attitude.sample_us==1800000);
   next.frame.frame_valid=false;feet.publishPreview(nullptr,next);
   assert(!feet.copyPreview(frozen.data(),copied));
   PsramLogger logger;assert(logger.begin());

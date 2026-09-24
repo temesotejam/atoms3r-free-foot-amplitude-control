@@ -3,6 +3,24 @@
 from pathlib import Path
 import csv, json, struct, tempfile
 import convert_rwlog_to_csv as converter
+diagnostics=json.loads(Path('/tmp/mekf-diagnostics-fixture.json').read_text(),
+    parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
+assert diagnostics['invalid']['valid'] is False and diagnostics['invalid']['fresh'] is False
+assert diagnostics['invalid']['roll_deg'] is None and diagnostics['invalid']['quaternion']['w'] is None
+for axis, attitude in enumerate(diagnostics['axes']):
+    assert attitude['valid'] and attitude['fresh'] and attitude['age_us'] == 2500
+    assert attitude['sample_us'] == 1000000
+    for index, key in enumerate(('roll_deg','pitch_deg','yaw_deg')):
+        assert abs(attitude[key] - (20 if axis == index else 0)) < 0.001
+    assert attitude['estimate'] == 'posterior' and attitude['euler_order'] == 'ZYX'
+assert diagnostics['stale']['valid'] and not diagnostics['stale']['fresh']
+assert not diagnostics['sensor_failed']['fresh']
+assert diagnostics['wrapped']['age_us'] == 251 and diagnostics['wrapped']['fresh']
+assert diagnostics['range']['right_support_x'] == [40,173]
+assert diagnostics['range']['left_support_x'] == [39,177.5]
+assert diagnostics['range']['original_right_support_x'] == [42,173]
+assert diagnostics['range']['original_left_support_x'] == [43.5,177.5]
+assert diagnostics['range']['extension_angle_accuracy_validated'] is False
 source = Path('/tmp/runtime-fixture.rwlog')
 data = source.read_bytes()
 header = converter.parse_header(data)
@@ -17,6 +35,9 @@ assert metadata['foot_observation']['zero_reason'] == 'ready'
 assert metadata['foot_observation']['zero_max_nominal_offset_px'] == 35
 assert metadata['foot_observation']['zero_max_spread_px'] == 4
 assert metadata['foot_observation']['vertical_recovery_angle_accuracy_validated'] is False
+assert metadata['foot_observation']['range'] == diagnostics['range']
+assert metadata['foot_observation']['right_support_x'] == [40,173]
+assert metadata['foot_observation']['left_support_x'] == [39,177.5]
 assert metadata['foot_frames'][0]['right_scan_y'] == 42
 assert metadata['foot_frames'][0]['left_templates'] == 17
 assert metadata['foot_frames'][0]['left_candidates'] == 2

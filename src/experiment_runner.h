@@ -9,6 +9,7 @@
 #include "imu_manager.h"
 #include "log_types.h"
 #include "mekf6.hpp"
+#include "mekf_attitude_diagnostics.h"
 #include "psram_logger.h"
 #include "roller485_manager.h"
 
@@ -51,6 +52,7 @@ struct ExperimentStatus {
   float gyro_bias_z_dps = 0.0f;
   float gyro_bias_pitch_dps = 0.0f;
   // V46 adopted attitude and online comparison diagnostics.
+  MekfAttitudeSnapshot mekf_attitude;
   float pitch_mekf_deg = 0.0f;              // run-relative control/detector angle when applicable
   float pitch_mekf_abs_deg = 0.0f;          // posterior physical/video body-frame pitch
   float pitch_mekf_predicted_abs_deg = 0.0f; // one-step-ahead control-time pitch

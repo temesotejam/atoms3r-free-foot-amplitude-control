@@ -73,11 +73,15 @@ static constexpr float kFootAngleBZeroXPx = 174.843512f;
 static constexpr float kFootAngleADegPerPx = 0.167779119f;
 static constexpr float kFootAngleBDegPerPx = 0.162645305f;
 
-// Observed quasi-static calibration support, with a small guard margin.
-// The angle is still computed outside this range, but angle_in_range=false.
-static constexpr float kFootAngleAMinCalXPx = 42.0f;
+// v1 support extended by the 0.47.4 hardware observations, sequences 694/781:
+// right X=41.7336, left X=40.3504. Floor the observed minimum minus 1 px.
+// This updates the accepted pixel range, not the fitted angle coefficients.
+// Keep the original support explicit; extension accuracy is not yet validated.
+static constexpr float kFootAngleAOriginalMinCalXPx = 42.0f;
+static constexpr float kFootAngleBOriginalMinCalXPx = 43.5f;
+static constexpr float kFootAngleAMinCalXPx = 40.0f;
 static constexpr float kFootAngleAMaxCalXPx = 173.0f;
-static constexpr float kFootAngleBMinCalXPx = 43.5f;
+static constexpr float kFootAngleBMinCalXPx = 39.0f;
 static constexpr float kFootAngleBMaxCalXPx = 177.5f;
 
 // IMU diagnostics retained to validate body motion independently.

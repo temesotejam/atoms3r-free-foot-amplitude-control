@@ -1,7 +1,8 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.4 marker identity
+# Current integrated build: Free-foot Runtime V2 / 0.47.5 observed range and all-axis MEKF
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
 [USB diagnostic procedure](docs/USB_DIAGNOSTICS.md) ·
+[Observed range update and all-axis MEKF diagnostics](docs/RANGE_MEKF_DIAGNOSTICS_0475.md) ·
 [Marker identity, zero quality and image diagnosis](docs/MARKER_IDENTITY_0474.md) ·
 [Coordinate audit](docs/ROBOT_COORDINATE_AUDIT_20260924_JA.md) ·
 [Earlier marker-loss analysis](docs/MARKER_TRACKING_0473.md) ·
@@ -12,6 +13,21 @@ The current main branch integrates observation-only right/left foot angles with
 the V46al-R2 controller. It uses permanent control ownership, PSRAM event storage,
 and a resumable, CRC-verified RWLOG export. Integrated hardware validation is
 pending; build/host tests do not establish camera frame rate or control deadlines.
+Version 0.47.5 incorporates the new 0.47.4 hardware observations. Both feet remain
+detected through 781 captured frames, and the tilted status reports right 21.7630°
+and left 21.0887°. The observed X positions slightly exceed the old support, so
+the accepted ranges extend to right [40,173] and left [39,177.5] pixels, with a
+one-pixel minimum margin around the new low endpoints. Original support and the
+unvalidated extension are explicit in diagnostics; angle slopes are not refitted.
+The WebUI's shaded ranges are read from the same firmware metadata.
+
+Diagnostic JSON now includes MEKF roll, pitch, yaw and quaternion from a coherent
+posterior snapshot, with validity and sample age. These are available both in
+ordinary diagnostics and alongside an image's saved delivery-time control state.
+No filter update or sensor access is performed by HTTP. The main side-to-side
+control angle keeps its existing reference and 3 ms compensation. The MEKF frame
+is preserved; yaw is relative to filter initialization, not compass heading.
+
 Version 0.47.4 addresses a plausible source of the remaining left/right angle
 mismatch: a weaker nominal-row white region can be accepted as the left zero
 before a stronger displaced marker is examined. All 17 scan heights now compete,

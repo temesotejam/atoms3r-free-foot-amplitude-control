@@ -2,6 +2,7 @@
 #include "config.h"
 #include "runtime_web.h"
 #include "runtime_diagnostics.h"
+#include "foot_range_diagnostics.h"
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 #include <esp_timer.h>
@@ -89,7 +90,7 @@ void WebUi::status() {
   const auto camera = feet_->cameraSnapshot();
   const bool fresh = s.heartbeat_us && static_cast<uint32_t>(micros() - s.heartbeat_us) < 500000;
   RuntimeDiag::phase(RuntimeDiag::Lane::Http, RuntimeDiag::Phase::HttpJson);
-  String json; json.reserve(3400);
+  String json; json.reserve(4600);
   json = "{\"revision\":\"" RUNTIME_VERSION "\",\"state\":\"" + String(s.state_name) + "\"";
   json += ",\"running\":" + String(s.running ? "true" : "false");
   json += ",\"ready\":" + String(s.ready && fresh && export_->ready() && feet_->readyToStart() ? "true" : "false");
@@ -97,6 +98,7 @@ void WebUi::status() {
   json += ",\"run_id\":" + String(s.run_id) + ",\"samples\":" + String(s.sample_count);
   json += ",\"remaining_ms\":" + String(s.remaining_ms) + ",\"elapsed_ms\":" + String(s.measure_elapsed_ms);
   json += ",\"pitch_deg\":" + num(s.pitch_deg) + ",\"rate_dps\":" + num(s.rate_dps);
+  json += ",\"mekf\":" + mekfAttitudeJson(s.mekf_attitude, micros(), s.imu_ok);
   json += ",\"target_deg\":" + num(s.target_deg);
   json += ",\"motor_mA\":" + String(s.motor_cmd_mA) + ",\"actual_mA\":" + String(s.actual_current_mA);
   json += ",\"battery_mV\":" + String(s.battery_mV);
@@ -111,6 +113,7 @@ void WebUi::status() {
   json += ",\"export_phase\":\"" + String(phase(e.phase)) + "\"";
   json += ",\"foot\":{\"available\":" + String(f.available ? "true" : "false");
   json += ",\"detector\":\"" + String(appcfg::kWhiteDetectorRevision) + "\"";
+  json += ",\"range\":" + footRangeDiagnosticsJson();
   json += ",\"zero_ready\":" + String(f.zero_ready ? "true" : "false") + ",\"zero_samples\":" + String(f.zero_samples);
   json += ",\"zero_reason\":\"" + String(footZeroReasonName(f.zero_reason)) + "\"";
   json += ",\"preview_available\":" + String(f.preview_available && preview_buffer_ ? "true" : "false");
@@ -225,7 +228,7 @@ void WebUi::previewCapture() {
   // camera frames cannot change bytes or metadata during chunked transfer.
   if (++preview_token_ == 0) ++preview_token_;
   const uint32_t crc = export_protocol::crc32(0, preview_buffer_, FootObserver::kPreviewBytes);
-  String json; json.reserve(1500);
+  String json; json.reserve(2500);
   json = "{\"revision\":\"" RUNTIME_VERSION "\",\"format\":\"gray8\",\"width\":160,\"height\":120,";
   json += "\"source_width\":320,\"source_height\":240,\"bytes\":" + String(FootObserver::kPreviewBytes);
   json += ",\"token\":" + String(preview_token_) + ",\"crc32\":" + String(crc);
@@ -244,6 +247,9 @@ void WebUi::previewCapture() {
   json += ",\"right_deg\":" + num(p.frame.right_deg) + ",\"left_deg\":" + num(p.frame.left_deg);
   json += ",\"right_valid\":" + String(p.frame.right_valid ? "true" : "false");
   json += ",\"left_valid\":" + String(p.frame.left_valid ? "true" : "false");
+  json += ",\"range\":" + footRangeDiagnosticsJson();
+  json += ",\"mekf\":" + mekfAttitudeJson(p.mekf_attitude, micros(), p.imu_ok);
+  json += ",\"mekf_time_semantics\":\"control_snapshot_at_frame_delivery_not_exposure\"";
   json += ",\"right\":" + previewMarkerJson(p.right) + ",\"left\":" + previewMarkerJson(p.left) + "}";
   server_->sendHeader("Cache-Control", "no-store"); server_->send(200, "application/json", json);
 }

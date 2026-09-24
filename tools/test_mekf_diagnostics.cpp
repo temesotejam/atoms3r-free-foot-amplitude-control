@@ -1,0 +1,37 @@
+#include <cassert>
+#include <cmath>
+#include <fstream>
+#include <iostream>
+#include "../src/mekf_attitude_diagnostics.h"
+#include "../src/foot_range_diagnostics.h"
+int main(int argc,char** argv) {
+  assert(argc==2);
+  mekf6::Mekf6 filter;
+  std::ofstream out(argv[1]);
+  out<<"{\"invalid\":"<<mekfAttitudeJson(captureMekfAttitude(filter,false,0),1000,true).c_str();
+  out<<",\"axes\":[";
+  for(int axis=0;axis<3;++axis){
+    filter.reset();assert(filter.initializeFromAccel({0,0,1}));
+    const float rate=mekf6::degToRad(20);
+    mekf6::Vec3 gyro{axis==0?rate:0,axis==1?rate:0,axis==2?rate:0};
+    for(int i=0;i<200;++i)assert(filter.predict(gyro,.005f));
+    const auto before=filter.quaternion();
+    const auto s=captureMekfAttitude(filter,true,1000000);
+    const auto after=filter.quaternion();
+    assert(s.valid && s.sample_us==1000000);
+    assert(std::abs(s.roll_deg-(axis==0?20:0))<.001);
+    assert(std::abs(s.pitch_deg-(axis==1?20:0))<.001);
+    assert(std::abs(s.yaw_deg-(axis==2?20:0))<.001);
+    assert(before.w==after.w&&before.x==after.x&&before.y==after.y&&before.z==after.z);
+    assert(std::abs(s.quaternion.w-std::cos(mekf6::degToRad(10)))<.00001);
+    if(axis)out<<",";
+    out<<mekfAttitudeJson(s,1002500,true).c_str();
+  }
+  const auto snapshot=captureMekfAttitude(filter,true,1000000);
+  out<<"],\"stale\":"<<mekfAttitudeJson(snapshot,1500000,true).c_str();
+  out<<",\"sensor_failed\":"<<mekfAttitudeJson(snapshot,1002500,false).c_str();
+  const auto wrapped=captureMekfAttitude(filter,true,UINT32_MAX-100);
+  out<<",\"wrapped\":"<<mekfAttitudeJson(wrapped,150,true).c_str();
+  out<<",\"range\":"<<footRangeDiagnosticsJson().c_str()<<"}";
+  std::cout<<"MEKF all-axis posterior capture, quaternion consistency and non-mutating observation PASS\n";
+}

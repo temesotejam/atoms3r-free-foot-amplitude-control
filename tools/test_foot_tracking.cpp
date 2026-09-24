@@ -126,6 +126,24 @@ static void zeroGates(){
   missed.observe(2000,1,true,false,169,174);assert(missed.count==0);
   FootZero slow;for(uint32_t t=0;t<10000;t+=500)slow.observe(t,1,true,true,169,174);assert(!slow.ready);
 }
-int main(){verticalRecovery();wrongZeroReproduction();identityAndAmbiguity();zeroGates();
+static void hardwareRangeReplay(){
+  // Actual 0.47.4 status files (6)/(7), sequences 694/781, unchanged slopes.
+  const float rows[][4]={{171.7313f,170.7977f,-.0479f,-.1279f},
+                        {41.7336f,40.3504f,21.7630f,21.0887f}};
+  for(const auto& row:rows)for(int side=0;side<2;++side){
+    WhiteMarkerObservation m;m.id=side;m.valid=true;m.center_x_px=row[side];
+    const auto estimate=estimateFootAngle(m,side==0?171.4459f:170.0111f,true);
+    assert(estimate.valid&&estimate.in_calibration_range);
+    assert(std::abs(estimate.angle_deg-row[side+2])<.001);
+  }
+  for(int side=0;side<2;++side){
+    WhiteMarkerObservation m;m.id=side;m.valid=true;
+    const float lo=side==0?40:39,hi=side==0?173:177.5f;
+    for(float x:{lo,hi}){m.center_x_px=x;assert(estimateFootAngle(m,170,true).in_calibration_range);}
+    for(float x:{lo-.01f,hi+.01f,35.f}){m.center_x_px=x;assert(!estimateFootAngle(m,170,true).in_calibration_range);}
+  }
+  std::cout<<"hardware frames 694/781: both feet in updated range; angles unchanged; boundaries bounded PASS\n";
+}
+int main(){verticalRecovery();wrongZeroReproduction();identityAndAmbiguity();zeroGates();hardwareRangeReplay();
   std::cout<<"full-height candidates, separate peaks, identity gates, independent angles and neutral zero guards PASS\n";
 }
