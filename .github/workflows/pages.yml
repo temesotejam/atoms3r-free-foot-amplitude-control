@@ -31,6 +31,7 @@ jobs:
           python3 tools/verify_madgwick_dependency.py --library ".pio/libdeps/atoms3cam/Adafruit AHRS"
           pio run -e atoms3cam
           python3 tools/verify_camera_task_link.py .pio/build/atoms3cam/firmware.elf --objdump "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-objdump"
+          python3 tools/verify_log_encoder_link.py .pio/build/atoms3cam/firmware.elf --nm "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-nm"
           test -s bmi270-build-patch.json
           "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-nm" .pio/build/atoms3cam/firmware.elf | grep -q '__wrap_xTaskCreatePinnedToCore'
           "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-nm" .pio/build/atoms3cam/firmware.elf | grep -q ' cam_start$'
@@ -85,9 +86,9 @@ jobs:
                   if published != expected:
                       raise ValueError('Published build SHA differs: ' + published)
                   manifest = json.loads(get('manifest-freefoot-runtime-v2.json'))
-                  if manifest['version'] != '0.47.13-log-encoder-optimization':
+                  if manifest['version'] != '0.47.14-compact-log-encoder':
                       raise ValueError('Unexpected firmware version')
-                  if 'Free-foot Runtime V2 / 0.47.13' not in get('index.html').decode():
+                  if 'Free-foot Runtime V2 / 0.47.14' not in get('index.html').decode():
                       raise ValueError('Published page label differs')
                   provenance = json.loads(get('bmi270-build-patch.json'))
                   if provenance['upstream_git_blob'] != '41732382bbdfe413be758748bca24d9a15a3a1d8':

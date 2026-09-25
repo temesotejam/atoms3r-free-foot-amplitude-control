@@ -1,17 +1,20 @@
 #include "log_sample_encoder.h"
 #include "log_quantization.h"
 
-// Speed policy is limited to the packed-row encoder. No fast-math, reduced
-// precision, changed rounding, disabled diagnostics, or lower logging rate.
+// Keep the encoder compact. The 0.47.13 forced-inline O2 build duplicated the
+// conversion at each field and regressed on hardware during the start pulse.
+// No fast-math, reduced precision, changed rounding, or lower logging rate.
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC push_options
-#pragma GCC optimize ("O2", "no-fast-math")
+#pragma GCC optimize ("Os", "no-fast-math")
 #endif
 namespace {
-#if defined(__GNUC__)
-__attribute__((always_inline))
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((noinline, noclone))
+#elif defined(__clang__)
+__attribute__((noinline))
 #endif
-inline int16_t quantize(float value, float scale) {
+int16_t quantize(float value, float scale) {
   return log_quantization::scaledI16(value, scale);
 }
 }

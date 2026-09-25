@@ -1,6 +1,7 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.13 log encoder optimization
+# Current integrated build: Free-foot Runtime V2 / 0.47.14 compact log encoder
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
+[0.47.13 startup ESTOP and compact encoder correction](docs/LOG_ENCODER_REGRESSION_04714.md) ·
 [0.47.12 hardware result and log encoder follow-up](docs/LOG_ENCODER_TIMING_04713.md) ·
 [0.47.11 hardware result and filter timing follow-up](docs/FILTER_TIMING_04712.md) ·
 [0.47.10 hardware result and deferred attitude display](docs/DEFERRED_ATTITUDE_TIMING_04711.md) ·
@@ -51,12 +52,19 @@ no detected position was outside support. Deadline overruns fell to 806/12,145
 The pulse-active/fresh-accel group had 312/1,293 overruns (24.13%). Partial timing
 improvement is observed; the strict deadline and rare long delays remain unresolved.
 
-Version 0.47.13 extracts synchronous log encoding into a speed-optimized numerical
-function, inlining the unchanged exact int16 conversion with constant scales.
-The full 258-byte output matches the frozen previous row builder in 24,000 cases.
-Logging content/rate, snapshot/reference-clock ordering, stop/seal behavior and
-CRC exports remain the same. Nested encode/store timing separates numeric work
-from PSRAM writes. Hardware improvement still requires the next measured run.
+**Version 0.47.13 regressed: measurement stopped after 87,904 us with ESTOP.**
+The delivery age reached 10,682 us while sensor polling remained regular. The
+first pulse log took 935 us versus 108 us in the previous run; pulse-on log
+encoding averaged 836.552 us. All 47 foot frames belong to START_SYNC, so this
+run does not validate simultaneous foot observation during measurement.
+
+Version 0.47.14 removes forced per-field inlining and uses one shared quantizer
+with the size-oriented compiler policy. The exact numerical formula, all 258
+row bytes, logging rates and synchronous storage remain unchanged. A linked
+code-size gate prevents recurrence of the expanded encoder, but is not timing
+proof. The 10 ms stale-data stop and 2.5 ms completion deadline are unchanged.
+MEKF, Madgwick, camera, calibration and control are retained. The next hardware
+run must establish recovery and measure the remaining deadline overruns.
 
 Version 0.47.12 computes comparison Madgwick pitch directly from its public
 quaternion using the exact upstream 2.4.0 expression, avoiding unused roll/yaw

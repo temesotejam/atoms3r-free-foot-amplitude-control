@@ -1,6 +1,6 @@
 {
   "name": "AtomS3R Free-foot Runtime V2",
-  "version": "0.47.13-log-encoder-optimization",
+  "version": "0.47.14-compact-log-encoder",
   "builds": [
     {
       "chipFamily": "ESP32-S3",
