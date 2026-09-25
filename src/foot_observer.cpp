@@ -168,6 +168,12 @@ void FootObserver::appendMetadata(PsramString& json) const {
   const auto s = snapshot();
   json += "\"foot_observation\":{\"revision\":\"freefoot_runtime_v2_0477\",\"observation_only\":true,";
   json += "\"detector\":\"" + String(appcfg::kWhiteDetectorRevision) + "\",";
+  json += "\"weak_candidate_confirmation\":{\"frames\":" + String(appcfg::kWhiteReacquireFrames);
+  json += ",\"min_x_step_px\":" + String(appcfg::kWhiteWeakXStepPx, 1);
+  json += ",\"min_y_step_px\":" + String(appcfg::kWhiteWeakYStepPx, 1);
+  json += ",\"contrast_ratio_below\":" + String(appcfg::kWhiteWeakContrastRatio, 2);
+  json += ",\"weight_ratio_below\":" + String(appcfg::kWhiteWeakWeightRatio, 2);
+  json += ",\"condition\":\"recent_track_and_xy_steps_and_both_quality_drops\"},";
   json += "\"scan_y_semantics\":\"selected_row_template_center_not_marker_centroid\",";
   json += "\"vertical_recovery_angle_accuracy_validated\":false,";
   json += "\"search_radius_y_px\":" + String(appcfg::kWhiteSearchRadiusYPx);

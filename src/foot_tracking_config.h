@@ -28,7 +28,7 @@ static constexpr int kWhiteReferenceBRows[kWhiteReferenceRowCount] =
     {182, 186, 190};
 static constexpr int kWhiteMarkerBCenterY = 160;
 
-static constexpr char kWhiteDetectorRevision[] = "sparse_rows_identity_v2";
+static constexpr char kWhiteDetectorRevision[] = "sparse_rows_identity_v3";
 static constexpr int kWhiteSearchRadiusYPx = 32;
 static constexpr int kWhiteSearchStepYPx = 4;
 static constexpr int kWhiteMaxTemplates =
@@ -53,6 +53,13 @@ static constexpr float kWhiteMaxTrackStepXPx = 80.0f;
 static constexpr float kWhiteMaxTrackStepYPx = 32.0f;
 static constexpr uint32_t kWhiteTrackMemoryUs = 500000;
 static constexpr uint8_t kWhiteReacquireFrames = 3;
+// Confirm a displaced candidate if both independent quality measures collapse.
+// A brightness change at the same location, or a strong displaced marker, is
+// still accepted immediately. This does not impose an angle/support boundary.
+static constexpr float kWhiteWeakContrastRatio = 0.5f;
+static constexpr float kWhiteWeakWeightRatio = 0.1f;
+static constexpr float kWhiteWeakXStepPx = kWhiteMaxTrackStepXPx * 0.25f;
+static constexpr float kWhiteWeakYStepPx = kWhiteMaxTrackStepYPx * 0.5f;
 
 // Foot-angle calibration v2, measured 2026-09-24 (0.47.7).
 // Definition:

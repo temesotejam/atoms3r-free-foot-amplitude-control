@@ -14,7 +14,7 @@ __attribute__((noinline, noclone))
 #elif defined(__clang__)
 __attribute__((noinline))
 #endif
-int16_t quantize(float value, float scale) {
+int16_t RW_HOT_CODE quantize(float value, float scale) {
   return log_quantization::scaledI16(value, scale);
 }
 }

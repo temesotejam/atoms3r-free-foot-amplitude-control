@@ -1,6 +1,7 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.15 deferred stack diagnostics
+# Current integrated build: Free-foot Runtime V2 / 0.47.16 IRAM and marker confirmation
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
+[0.47.15 hardware result, targeted IRAM and weak candidate confirmation](docs/IRAM_AND_MARKER_GUARD_04716.md) ·
 [0.47.14 recovered run and deferred stack diagnostics](docs/RECOVERED_RUN_STACK_TIMING_04715.md) ·
 [0.47.13 startup ESTOP and compact encoder correction](docs/LOG_ENCODER_REGRESSION_04714.md) ·
 [0.47.12 hardware result and log encoder follow-up](docs/LOG_ENCODER_TIMING_04713.md) ·
@@ -83,8 +84,29 @@ memory walks from real-time owners. The previous profile does not isolate their
 contribution, so it does not establish them as the cause of all deadline overruns.
 The RTC journal layout, overflow protection, estimator/control math, foot
 calibration, logging rates and deadline definitions are unchanged. Callback
-exclusion, idle resumption, clock wrap and the existing runtime suite are checked;
-hardware timing improvement remains pending.
+exclusion, idle resumption, clock wrap and the existing runtime suite are checked.
+
+**Version 0.47.15 also finished 30 seconds.** Acquisition, delivery and completion
+audits all counted 12,144 samples, with no queue loss, sequence gaps or fault.
+Overruns improved to 942/12,144 (7.76%) and mean completion to 1,449.287 us,
+but the maximum increased to 7,720 us. The pulse-plus-acceleration group still
+averaged 2,628.506 us. Without USB stack-scan measurements or a controlled repeated
+comparison, the improvement cannot be attributed entirely to scan deferral.
+Right/left feet were valid in 294/295 and 295/295 measurement frames. One right
+observation at X=204.94246 was outside support; it also jumped in X/Y while
+contrast and weight collapsed, making feature misidentification a concern.
+
+Version 0.47.16 places selected MEKF routines and the compact log encoder in IRAM,
+with a real-ELF placement and 16 KiB function-code gate. Numerical formulas and
+compiler policies stay unchanged; external calls and constants can still use
+flash, so this is not cache-disabled safety or a deadline guarantee. The marker
+tracker now requires the existing three-frame confirmation if a recent candidate
+jumps at least 20 px in X and 16 px in Y while contrast drops below 50% and weight
+below 10% of its last accepted value. Strong motion and dimming at the same
+location remain immediate. The suspect single frame is not used to expand
+calibration; persistent confirmed observations can still be reported outside
+support. These criteria select only that suspect frame among the seven supplied
+run CSVs, but source images are absent and new hardware results are still needed.
 
 Version 0.47.12 computes comparison Madgwick pitch directly from its public
 quaternion using the exact upstream 2.4.0 expression, avoiding unused roll/yaw

@@ -8,6 +8,7 @@ assert work['pulse_on']['log_row']==dict(count=1,max_us=251,sum_us=251,mean_us=2
 assert work['pulse_on']['log_encode']['mean_us']==100
 assert work['pulse_on']['log_store']['mean_us']==151
 assert work['log_substages']=='encode_includes_beta_ceilings;store_is_synchronous_psram_addSample'
+assert work['target_code_placement']=='IRAM_MEKF_hot_routines_and_log_encoder;external_calls_and_data_may_use_flash'
 assert work['pulse_off']['filter']['mean_us']==700
 assert work['pulse_on']['filter']['count']==0
 diagnostics=json.loads(Path('/tmp/mekf-diagnostics-fixture.json').read_text(),
@@ -67,7 +68,7 @@ header = converter.parse_header(data)
 metadata = json.loads(data[110:110+header['metadata_json_size']], parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
 assert metadata['metadata_json_final_bytes'] == header['metadata_json_size']
 assert not metadata['metadata_event_detail_truncated']
-assert metadata['firmware_revision']=='0.47.15-deferred-stack-diagnostics'
+assert metadata['firmware_revision']=='0.47.16-iram-and-marker-guard'
 assert metadata['terminal_state']['state']=='ESTOP' and metadata['terminal_state']['motor_cmd_mA']==0
 assert metadata['terminal_state']['actual_current_mA']==-7 and metadata['terminal_state']['heartbeat_us']==123456
 assert metadata['terminal_state']['last_error']=='imu_acquisition_overflow_backlog_or_stale'
@@ -75,7 +76,9 @@ assert metadata['control_work_profile']['pulse_on']['log_row']['mean_us']==777
 assert len(metadata['energy_control_autonomous_peak_events']) == 256
 assert len(metadata['energy_control_autonomous_zero_cross_events']) == 256
 assert len(metadata['foot_frames']) == 768
-assert metadata['foot_observation']['detector'] == 'sparse_rows_identity_v2'
+assert metadata['foot_observation']['detector'] == 'sparse_rows_identity_v3'
+assert metadata['foot_observation']['weak_candidate_confirmation']==dict(frames=3,min_x_step_px=20,min_y_step_px=16,
+    contrast_ratio_below=.5,weight_ratio_below=.1,condition='recent_track_and_xy_steps_and_both_quality_drops')
 assert metadata['foot_observation']['zero_reason'] == 'ready'
 assert metadata['foot_observation']['zero_max_nominal_offset_px'] == 35
 assert metadata['foot_observation']['zero_max_spread_px'] == 4

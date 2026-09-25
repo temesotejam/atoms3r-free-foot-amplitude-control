@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <math.h>
 #include "foot_tracking_config.h"
+#include "marker_identity_policy.h"
 
 namespace {
 constexpr int kWidth = appcfg::kFrameWidth;
@@ -84,7 +85,10 @@ WhiteMarkerObservation WhiteMarker1DTracker::process(const uint8_t* gray) {
                 best < 0 ? MarkerDetectionReason::TrackJump :
                 out.ambiguity_ratio >= appcfg::kWhiteAmbiguousRatio ? MarkerDetectionReason::Ambiguous :
                 MarkerDetectionReason::Detected;
-            if (out.reason == MarkerDetectionReason::Detected && _tracked && !recent) {
+            const bool weak_displaced = recent && marker_identity::weakDisplaced(
+                _last_x, _last_y, _last_contrast, _last_weight,
+                chosen.x, chosen.y, chosen.contrast, chosen.weight);
+            if (out.reason == MarkerDetectionReason::Detected && _tracked && (!recent || weak_displaced)) {
                 if (!_pending_count || static_cast<uint32_t>(now - _pending_us) > 300000 ||
                     fabsf(chosen.x - _pending_x) > 40 || fabsf(chosen.y - _pending_y) > 24) _pending_count = 0;
                 _pending_x = chosen.x; _pending_y = chosen.y; _pending_us = now;
@@ -93,6 +97,7 @@ WhiteMarkerObservation WhiteMarker1DTracker::process(const uint8_t* gray) {
             out.valid = out.reason == MarkerDetectionReason::Detected;
             if (out.valid) {
                 _tracked = true; _last_x = chosen.x; _last_y = chosen.y; _last_us = now; _pending_count = 0;
+                _last_contrast = chosen.contrast; _last_weight = chosen.weight;
             }
         } else { _pending_count = 0; }
     } else { _pending_count = 0; }

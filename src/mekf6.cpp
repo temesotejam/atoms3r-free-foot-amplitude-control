@@ -18,7 +18,7 @@ namespace {
 // Fixed-size inner products avoid the innermost loop/index bookkeeping on
 // the size-optimized ESP32 build. Keep the original accumulation order and
 // initial zero; do not reassociate sums or enable fast-math.
-inline float dotRows3(const float* a, const float* b) {
+inline float RW_HOT_CODE dotRows3(const float* a, const float* b) {
   float sum = 0.0f;
   sum += a[0] * b[0];
   sum += a[1] * b[1];
@@ -26,7 +26,7 @@ inline float dotRows3(const float* a, const float* b) {
   return sum;
 }
 template <int Columns>
-inline float dotColumn3(const float* a, const float (*b)[Columns], int column) {
+inline float RW_HOT_CODE dotColumn3(const float* a, const float (*b)[Columns], int column) {
   float sum = 0.0f;
   sum += a[0] * b[0][column];
   sum += a[1] * b[1][column];

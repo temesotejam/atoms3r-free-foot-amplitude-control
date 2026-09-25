@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include "realtime_code.h"
 
 namespace mekf6 {
 
@@ -63,13 +64,13 @@ class Mekf6 {
   bool initializeFromAccel(const Vec3& accel_g);
   void setGyroBiasRadS(const Vec3& bias_rad_s);
   Vec3 gyroBiasRadS() const { return bias_; }
-  bool predict(const Vec3& gyro_rad_s, float dt_s);
-  bool updateAccel(const Vec3& accel_g);
+  bool RW_HOT_CODE predict(const Vec3& gyro_rad_s, float dt_s);
+  bool RW_HOT_CODE updateAccel(const Vec3& accel_g);
   Quaternion quaternion() const { return q_; }
   EulerDeg eulerDeg() const;
   // Pure conversions also work on a copied posterior. The control owner only
   // needs pitch; HTTP can derive all display axes without reading this filter.
-  static float pitchDegFromQuaternion(const Quaternion& quaternion);
+  static float RW_HOT_CODE pitchDegFromQuaternion(const Quaternion& quaternion);
   static EulerDeg eulerDegFromQuaternion(const Quaternion& quaternion);
   EulerDeg predictEulerDeg(const Vec3& gyro_rad_s, float dt_s) const;
   Diagnostics diagnostics() const { return diag_; }
@@ -81,22 +82,22 @@ class Mekf6 {
   float P_[6][6]{};
   Diagnostics diag_;
 
-  static float clampf(float v, float lo, float hi);
-  static float norm(const Vec3& v);
-  static Vec3 normalized(const Vec3& v);
-  static float dot(const Vec3& a, const Vec3& b);
-  static Quaternion quatMultiply(const Quaternion& a, const Quaternion& b);
-  static Quaternion quatNormalized(const Quaternion& q);
+  static float RW_HOT_CODE clampf(float v, float lo, float hi);
+  static float RW_HOT_CODE norm(const Vec3& v);
+  static Vec3 RW_HOT_CODE normalized(const Vec3& v);
+  static float RW_HOT_CODE dot(const Vec3& a, const Vec3& b);
+  static Quaternion RW_HOT_CODE quatMultiply(const Quaternion& a, const Quaternion& b);
+  static Quaternion RW_HOT_CODE quatNormalized(const Quaternion& q);
   static Quaternion quatFromEuler(float roll, float pitch, float yaw);
-  static Quaternion deltaQuat(const Vec3& dtheta);
-  static Vec3 predictedSpecificForceUpBody(const Quaternion& q);
-  static void skew(const Vec3& v, float S[3][3]);
-  static bool inverse3x3(const float A[3][3], float invA[3][3]);
-  static float smoothConfidence(float error, float full, float reject);
+  static Quaternion RW_HOT_CODE deltaQuat(const Vec3& dtheta);
+  static Vec3 RW_HOT_CODE predictedSpecificForceUpBody(const Quaternion& q);
+  static void RW_HOT_CODE skew(const Vec3& v, float S[3][3]);
+  static bool RW_HOT_CODE inverse3x3(const float A[3][3], float invA[3][3]);
+  static float RW_HOT_CODE smoothConfidence(float error, float full, float reject);
   void initializeCovariance();
-  void symmetrizeCovariance();
-  void injectErrorState(const float dx[6]);
-  void applyResetJacobian(const Vec3& dtheta);
+  void RW_HOT_CODE symmetrizeCovariance();
+  void RW_HOT_CODE injectErrorState(const float dx[6]);
+  void RW_HOT_CODE applyResetJacobian(const Vec3& dtheta);
 };
 
 }  // namespace mekf6

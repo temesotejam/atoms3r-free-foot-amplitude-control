@@ -7,6 +7,7 @@
 #include "../src/foot_zero.h"
 #include "../src/white_marker_tracker.h"
 #include "../src/foot_angle_estimator.h"
+#include "../src/marker_identity_policy.h"
 using Image = std::vector<uint8_t>;
 static Image blank(uint8_t level=30){return Image(320*240,level);}
 static void band(Image& image,int x,int y,int half_width=10,uint8_t level=230){
@@ -128,6 +129,40 @@ static void zeroGates(){
   missed.observe(2000,1,true,false,169,174);assert(missed.count==0);
   FootZero slow;for(uint32_t t=0;t<10000;t+=500)slow.observe(t,1,true,true,169,174);assert(!slow.ready);
 }
+static void weakDisplacedConfirmation(){
+  // Replay the *reported candidate metrics*, not unavailable source pixels.
+  // 0.47.15 run 55522052: selected Y 82 -> 50, contrast 215.2 -> 55.2,
+  // weight 5633.06689 -> 341.79999. This warrants confirmation, not a claim
+  // that the camera image proves which physical feature was seen.
+  assert(marker_identity::weakDisplaced(169.29527f,82,215.2f,5633.06689f,204.94246f,50,55.2f,341.79999f));
+  assert(!marker_identity::weakDisplaced(169,82,215.2f,5633.06689f,205,82,55.2f,341.79999f));
+  assert(!marker_identity::weakDisplaced(169,82,215.2f,5633.06689f,169,50,55.2f,341.79999f));
+  assert(!marker_identity::weakDisplaced(169,82,215.2f,5633.06689f,205,50,200,5000));
+  WhiteMarker1DTracker tracker(0);
+  auto strong=blank();band(strong,169,82,10,245);
+  assert(observe(tracker,strong).valid);
+  auto weak=blank();band(weak,205,50,4,90);
+  const auto first=observe(tracker,weak);
+  assert(!first.valid&&first.reason==MarkerDetectionReason::Reacquiring);
+  // A one-frame weak island cannot move the accepted track/zero.
+  auto returned=blank();band(returned,172,82,10,190);
+  assert(observe(tracker,returned).valid);
+  // A persistent dim displaced marker remains recoverable, with existing
+  // three-frame confirmation; no permanent contrast or support exclusion.
+  assert(!observe(tracker,weak).valid);
+  assert(!observe(tracker,weak).valid);
+  const auto confirmed=observe(tracker,weak);
+  assert(confirmed.valid&&std::abs(confirmed.center_x_px-205)<.01);
+  assert(estimateFootAngle(confirmed,171,true).valid);
+  assert(!estimateFootAngle(confirmed,171,true).in_calibration_range);
+  WhiteMarker1DTracker moving(0);assert(observe(moving,strong).valid);
+  auto displaced=blank();band(displaced,205,50,10,245);
+  assert(observe(moving,displaced).valid);
+  WhiteMarker1DTracker dimming(0);assert(observe(dimming,strong).valid);
+  auto same_location=blank();band(same_location,169,82,4,90);
+  assert(observe(dimming,same_location).valid);
+  std::cout<<"Weak displaced candidate confirmation, immediate true-track return, strong motion and dim tracking PASS\n";
+}
 static void hardwareRangeReplay(){
   // Original 0.47.4 pixel positions remain accepted with the new v2 slopes.
   const float rows[][4]={{171.7313f,170.7977f,-.04427876f,-.12231375f},
@@ -175,6 +210,6 @@ static void fixedPoseCalibrationReplay(){
   }
   std::cout<<"Fixed-pose scale fit and both held-out hand-supported pose residuals PASS\n";
 }
-int main(){verticalRecovery();wrongZeroReproduction();identityAndAmbiguity();zeroGates();hardwareRangeReplay();fixedPoseCalibrationReplay();
+int main(){verticalRecovery();wrongZeroReproduction();identityAndAmbiguity();zeroGates();weakDisplacedConfirmation();hardwareRangeReplay();fixedPoseCalibrationReplay();
   std::cout<<"full-height candidates, separate peaks, identity gates, independent angles and neutral zero guards PASS\n";
 }

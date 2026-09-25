@@ -49,6 +49,7 @@ private:
     uint32_t _fail_count = 0;
     bool _tracked = false;
     float _last_x = 0, _last_y = 0, _pending_x = 0, _pending_y = 0;
+    float _last_contrast = 0, _last_weight = 0;
     uint32_t _last_us = 0, _pending_us = 0;
     uint8_t _pending_count = 0;
 };

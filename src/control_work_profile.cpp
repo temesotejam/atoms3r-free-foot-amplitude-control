@@ -7,9 +7,10 @@ String Profile::json() const {
       "mekf_predict", "mekf_accel", "mekf_attitude", "madgwick", "log_encode", "log_store"};
   static_assert(sizeof(names) / sizeof(names[0]) == static_cast<uint8_t>(Stage::Count), "Stage names");
   String out; out.reserve(3200);
-  out = "{\"revision\":\"control_work_04714\",\"scope\":\"measurement_only;host_wall_time_includes_preemption;nested_stages_not_additive\"";
+  out = "{\"revision\":\"control_work_04716\",\"scope\":\"measurement_only;host_wall_time_includes_preemption;nested_stages_not_additive\"";
   out += ",\"mekf_attitude_scope\":\"posterior_copy_and_control_pitch;display_euler_from_snapshot_on_demand\"";
   out += ",\"mekf_math_compiler\":\"GCC_O2_no_fast_math\",\"madgwick_pitch\":\"upstream_2.4.0_pitch_only\"";
+  out += ",\"target_code_placement\":\"IRAM_MEKF_hot_routines_and_log_encoder;external_calls_and_data_may_use_flash\"";
   out += ",\"log_encoder\":\"GCC_Os_no_fast_math_shared_noinline_quantizer\",\"log_substages\":\"encode_includes_beta_ceilings;store_is_synchronous_psram_addSample\"";
   out += ",\"cohort\":\"pulse_active_at_stage_entry;owner_includes_terminal_iteration;start_sync_excluded\"";
   for (uint8_t group = 0; group < 2; ++group) {

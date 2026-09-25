@@ -1,6 +1,7 @@
 #pragma once
 #include <cmath>
 #include <cstdint>
+#include "realtime_code.h"
 
 namespace log_quantization {
 constexpr int16_t kMissing = -32768;
@@ -10,7 +11,7 @@ constexpr int16_t kMissing = -32768;
 // instead of a libm lroundf call for every logged field. Adding +/-0.5 first
 // is NOT equivalent immediately below a half-integer, so compare the exact
 // fractional remainder after truncation instead.
-inline int16_t scaledI16(float value, float scale) {
+inline int16_t RW_HOT_CODE scaledI16(float value, float scale) {
   if (!std::isfinite(value)) return kMissing;
   value *= scale;
   if (value > 32767.0f) return 32767;

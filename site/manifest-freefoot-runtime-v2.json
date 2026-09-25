@@ -1,6 +1,6 @@
 {
   "name": "AtomS3R Free-foot Runtime V2",
-  "version": "0.47.15-deferred-stack-diagnostics",
+  "version": "0.47.16-iram-and-marker-guard",
   "builds": [
     {
       "chipFamily": "ESP32-S3",
