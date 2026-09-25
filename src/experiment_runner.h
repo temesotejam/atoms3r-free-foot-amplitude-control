@@ -6,6 +6,7 @@
 #include "beta_phase_controller.h"
 #include "beta_turn_fast_controller.h"
 #include "config.h"
+#include "control_math_cache.h"
 #include "imu_manager.h"
 #include "log_types.h"
 #include "mekf6.hpp"
@@ -323,6 +324,7 @@ private:
   ImuManager* imu_ = nullptr;
   Roller485Manager* roller_ = nullptr;
   ExperimentStatus status_;
+  mutable control_math::CurrentModelCache current_model_cache_;
 
   uint32_t boot_start_ms_ = 0;
   uint32_t calib_start_ms_ = 0;

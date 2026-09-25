@@ -1,6 +1,7 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.16 IRAM and marker confirmation
+# Current integrated build: Free-foot Runtime V2 / 0.47.17 control cache and idle preview
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
+[0.47.16 hardware results and exact-input calculation reuse](docs/CONTROL_CACHE_PREVIEW_04717.md) ·
 [0.47.15 hardware result, targeted IRAM and weak candidate confirmation](docs/IRAM_AND_MARKER_GUARD_04716.md) ·
 [0.47.14 recovered run and deferred stack diagnostics](docs/RECOVERED_RUN_STACK_TIMING_04715.md) ·
 [0.47.13 startup ESTOP and compact encoder correction](docs/LOG_ENCODER_REGRESSION_04714.md) ·
@@ -95,6 +96,24 @@ comparison, the improvement cannot be attributed entirely to scan deferral.
 Right/left feet were valid in 294/295 and 295/295 measurement frames. One right
 observation at X=204.94246 was outside support; it also jumped in X/Y while
 contrast and weight collapsed, making feature misidentification a concern.
+
+**Version 0.47.16 finished three 30-second runs.** Across 36,423 measured
+completions, 311 exceeded 2.5 ms (0.854%, maximum 4,365 us), with no queue drops
+or delivery sequence gaps. During measurement, right/left feet were valid in
+872/879 and 877/879 frames, with no detected observation outside support.
+Normal pulse starts account for 112 of the 132 runner-only overruns.
+
+Version 0.47.17 reuses charge/energy predictions only within one zero-cross
+selection and caches current-model results only for exactly matching inputs.
+Both searches, target corrections, tie-breaking and the zero-output baseline
+are retained. All 208 recorded decisions and 20,000 additional cases match the
+frozen controller; candidate physics evaluations fall from 9,152 to 4,253 in
+that recorded replay. This is a work-count reduction, not a hardware timing
+claim. Camera foot tracking and recording continue while unused run-time
+thumbnail copies are suppressed. Idle preview images retain paired timestamps
+and attitude. The full 0.47.16 build's actual M5GFX dependency is pinned to
+0.2.30. Filter/control/log rates, calibration and timing guards are retained;
+changed command latency and real motion still require hardware verification.
 
 Version 0.47.16 places selected MEKF routines and the compact log encoder in IRAM,
 with a real-ELF placement and 16 KiB function-code gate. Numerical formulas and

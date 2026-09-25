@@ -365,7 +365,7 @@ static constexpr uint8_t E2_SHADOW_INVALID_NONALTERNATING_TURN = 7;
 static constexpr uint8_t E2_SHADOW_INVALID_INSUFFICIENT_TURNS = 8;
 static constexpr char V62_BASE_COMMIT[] = "748347f3985e053684d979955dd70c7ee8daadff";
 static constexpr char RESOLVED_M5UNIFIED_VERSION[] = "0.2.18";
-static constexpr char RESOLVED_M5GFX_VERSION[] = "0.2.25";
+static constexpr char RESOLVED_M5GFX_VERSION[] = "0.2.30";
 static constexpr char RESOLVED_ADAFRUIT_AHRS_VERSION[] = "2.4.0";
 
 static constexpr uint32_t BETA_SWEEP_TRIAL_DURATION_MS = 30000UL;

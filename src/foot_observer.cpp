@@ -25,7 +25,11 @@ bool FootObserver::copyPreview(uint8_t* out, FootPreviewInfo& info) const {
   xSemaphoreGive(preview_mutex_);
   return valid;
 }
-void FootObserver::publishPreview(const uint8_t* gray, const FootPreviewInfo& info) {
+void FootObserver::publishPreview(const uint8_t* gray, const FootPreviewInfo& info, bool run_active) {
+  // HTTP already excludes previews during a run. Keep tracking/recording every
+  // frame, but avoid the unused 19,200-byte thumbnail copy through both syncs
+  // and measurement. The last idle preview keeps its original time/metadata.
+  if (run_active) return;
   // Never hold an interrupt-disabling spinlock around PSRAM copies. The image
   // and its detection metadata share a mutex; a busy reader simply skips this
   // optional preview update. Network transmission never holds this mutex.
@@ -122,7 +126,8 @@ void FootObserver::loop() {
     preview.frame = f; preview.right = a; preview.left = b;
     preview.mekf_attitude = run.mekf_attitude; preview.imu_ok = run.imu_ok;
     preview.right_zero = zero_.a_zero; preview.left_zero = zero_.b_zero; preview.zero_samples = zero_.count;
-    publishPreview(f.frame_valid ? fb->buf : nullptr, preview);
+    publishPreview(f.frame_valid ? fb->buf : nullptr, preview,
+        run_before.running || run.running);
     f.processing_us = micros() - processing_start;
     RuntimeDiag::phase(RuntimeDiag::Lane::Camera, RuntimeDiag::Phase::CameraRelease);
     camera_->releaseContinuous(fb);
@@ -183,6 +188,7 @@ void FootObserver::appendMetadata(PsramString& json) const {
   json += "\"mapping\":\"right=A upper lane;left=B lower lane\",\"positive_direction\":\"marker_x_decreases\",";
   json += "\"frame_timestamp_semantics\":\"camera_driver_frame_timestamp_not_verified_exposure_time\",";
   json += "\"control_context_semantics\":\"latest_control_snapshot_at_frame_delivery_not_exposure\",";
+  json += "\"preview_generation\":\"idle_only_last_idle_frame_retained\",";
   json += "\"target_fps\":15,\"capacity\":" + String(kCapacity);
   json += ",\"count\":" + String(s.count) + ",\"overflow\":" + String(s.overflow ? "true" : "false");
   json += ",\"available\":" + String(s.available ? "true" : "false");

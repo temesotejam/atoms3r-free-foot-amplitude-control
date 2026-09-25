@@ -1,6 +1,6 @@
 {
   "name": "AtomS3R Free-foot Runtime V2",
-  "version": "0.47.16-iram-and-marker-guard",
+  "version": "0.47.17-control-cache-idle-preview",
   "builds": [
     {
       "chipFamily": "ESP32-S3",

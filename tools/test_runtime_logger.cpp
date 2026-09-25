@@ -36,18 +36,27 @@ int main(int argc,char** argv){
   FootPreviewInfo first{};first.frame.sequence=17;first.frame.frame_valid=true;
   first.left.center_x_px=175;first.frame.zero_reason=FootZeroReason::Collecting;
   first.mekf_attitude.valid=true;first.mekf_attitude.quaternion={.98480775f,.17364818f,0,0};first.mekf_attitude.sample_us=1700000;
-  feet.publishPreview(gray.data(),first);
+  feet.publishPreview(gray.data(),first,false);
   FootPreviewInfo copied{};assert(feet.copyPreview(frozen.data(),copied));
   for(unsigned y=0;y<120;++y)for(unsigned x=0;x<160;++x)assert(frozen[y*160+x]==gray[y*2*320+x*2]);
   auto next=first;next.frame.sequence=18;next.left.center_x_px=35;
   next.mekf_attitude.quaternion={.96592583f,.25881905f,0,0};next.mekf_attitude.sample_us=1800000;
-  std::fill(gray.begin(),gray.end(),91);feet.publishPreview(gray.data(),next);
+  // Run-time suppression preserves the frozen idle bytes AND their paired
+  // timestamp/attitude, and must not dereference an image while suppressed.
+  for(uint8_t state : {6,3,7}) {
+    auto running=next;running.frame.state_id=state;
+    feet.publishPreview(nullptr,running,true);
+    assert(feet.copyPreview(frozen.data(),copied));
+    assert(copied.frame.sequence==17 && frozen[0]==0);
+    assert(copied.mekf_attitude.sample_us==1700000);
+  }
+  std::fill(gray.begin(),gray.end(),91);feet.publishPreview(gray.data(),next,false);
   assert(copied.frame.sequence==17 && copied.left.center_x_px==175 && frozen[0]==0);
   assert(copied.mekf_attitude.quaternion.x==first.mekf_attitude.quaternion.x && copied.mekf_attitude.sample_us==1700000);
   assert(feet.copyPreview(frozen.data(),copied));
   assert(copied.frame.sequence==18 && copied.left.center_x_px==35 && frozen[0]==91);
   assert(copied.mekf_attitude.quaternion.x==next.mekf_attitude.quaternion.x && copied.mekf_attitude.sample_us==1800000);
-  next.frame.frame_valid=false;feet.publishPreview(nullptr,next);
+  next.frame.frame_valid=false;feet.publishPreview(nullptr,next,false);
   assert(!feet.copyPreview(frozen.data(),copied));
   PsramLogger logger;assert(logger.begin());
   assert(sizeof(PsramLogger)<4096);

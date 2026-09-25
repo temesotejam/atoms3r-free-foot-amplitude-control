@@ -13,7 +13,7 @@
     <header class="hero">
       <p class="eyebrow">ATOMS3R / FREE-FOOT AMPLITUDE CONTROL</p>
       <h1>Free-foot Runtime V2<br><span>左右足角度・制御・ログを統合</span></h1>
-      <p class="lead">Free-foot Runtime V2 / 0.47.16 処理遅延・足の誤認対策版。0.47.15も30秒を完走し、処理期限超過は8.60%から7.76%へ減りました。残る長い遅延と、右足の単発の誤認候補への対策を加えました。</p>
+      <p class="lead">Free-foot Runtime V2 / 0.47.17 制御計算・画像処理の軽量化版。0.47.16は3回とも30秒を完走しました。残る処理遅延に対して、同じ入力の重複計算と計測中の未使用プレビュー生成を減らします。</p>
       <div class="badges"><span>ESP32-S3</span><span>BMI270 400/200 Hz</span><span>RWLOG v51</span><span>MEKF</span><span>左右足角度</span></div>
     </header>
     <section class="panel important">
@@ -21,14 +21,14 @@
       <p>V46al-R2の制御計算、固定3ms補償、300mA・最大100msパルス、30秒測定、開始・終了のLED同期を維持。白マーカーの位置から左右足角度を取得・表示・保存します。足角度は観測用で、制御入力には使用しません。</p>
       <p>ログ用イベント配列と大きな説明データはPSRAMに配置します。測定後にログを確定し、CRCで検証できる4KB以下のチャンクで取得します。ブラウザの一時停止・再接続・再読み込み後も保存済みの部分を再利用できます。</p>
       <p><strong>今回の校正はMEKFを基準にした暫定値です。係数決定に使わなかった手持ち2姿勢では、再計算上の残差が左右とも約0.26〜0.32°です。</strong>ビルドとホスト検証の範囲、実機で確認する項目は<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/FOOT_CALIBRATION_0477.md">校正の根拠</a>を参照してください。カメラは15fpsを目標に設定し、画面に実測値を表示します。</p>
-      <p>0.47.15では右294/295・左295/295フレームを認識しました。右足の範囲外1件は検出位置と品質が急変しており、誤認の可能性があるため校正範囲の拡大は保留しています。0.47.16では弱く離れた候補を数フレーム確認してから採用します。処理期限2.5msは未達で、今回の修正効果も実機で確認します。<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/IRAM_AND_MARKER_GUARD_04716.md">今回の結果と修正内容</a></p>
+      <p>0.47.16の3回合計では、2.5msの処理期限超過は311/36,423回（0.85%）でした。足の校正範囲越えはありません。0.47.17は制御計算の結果を維持する軽量化を行い、MEKF・足の観測・ログの周期を保ちます。処理時間と振幅への効果は実機で確認します。<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/CONTROL_CACHE_PREVIEW_04717.md">今回の結果と修正内容</a></p>
       <p>公開ビルド：<code id="build-sha">取得中</code><br><a href="build-sha.txt">ビルドSHA</a> / <a href="firmware/SHA256SUMS.txt">ファームウェアSHA-256</a></p>
     </section>
     <section class="panel important">
       <h2>書き込みと測定</h2>
       <p>書き込み時はPCをインターネットにつながるWi-Fiまたは有線LANへ接続し、AtomS3RをUSBでつないでください。PC版ChromeまたはEdgeで下のボタンを押します。機体のWi-Fiへ切り替えるのは書き込み完了後です。</p>
       <esp-web-install-button manifest="manifest-freefoot-runtime-v2.json">
-        <button slot="activate" class="primary">0.47.16 処理遅延・足の誤認対策版を書き込む</button>
+        <button slot="activate" class="primary">0.47.17 制御計算・画像処理の軽量化版を書き込む</button>
         <span slot="unsupported" class="warning">PC版ChromeまたはEdgeを使用してください。</span>
       </esp-web-install-button>
       <ol>

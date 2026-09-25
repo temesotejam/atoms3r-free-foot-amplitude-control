@@ -2886,6 +2886,8 @@ void ExperimentRunner::updateEnergyControlAutonomousAtZeroCross(uint32_t t_test_
     float error_j = NAN;
   };
   uint16_t fast_eval_count = 0;
+  control_math::WidthPredictionCache<Config::ENERGY_CONTROL_AUTONOMOUS_MAX_PULSE_MS> width_cache;
+  static_assert(sizeof(width_cache) <= 1024, "Keep decision cache within control stack budget");
   const float fast_v = status_.beta_model_vbat_mV > 0
       ? static_cast<float>(status_.beta_model_vbat_mV) / 1000.0f
       : Config::MODEL_VBAT_REFERENCE_V;
@@ -2902,18 +2904,24 @@ void ExperimentRunner::updateEnergyControlAutonomousAtZeroCross(uint32_t t_test_
     FastCandidate c;
     c.width_ms = width_ms;
     ++fast_eval_count;
-    float q_mA_s = 0.0f;
-    if (width_ms > 0) {
-      const float t_s = static_cast<float>(width_ms) / 1000.0f;
-      const float signed_q_mA_s =
-          fast_signed_target_current_mA * t_s +
-          (event.i0_estimated_mA - fast_signed_target_current_mA) * fast_tau_s *
-              (1.0f - expf(-t_s / fast_tau_s));
-      q_mA_s = fabsf(signed_q_mA_s);
-    }
-    const float predicted_peak_deg = energyControlAutonomousCorrectedPrediction(
-        event.free_next_peak_amplitude_deg, event.physical_next_peak_side, q_mA_s, nullptr);
-    const float energy_j = energyControlPotentialJ(predicted_peak_deg);
+    // Each logical candidate still counts in the audit. Reuse only its charge
+    // and energy within this decision; both targets keep their original search.
+    const auto prediction = width_cache.get(width_ms, [&]() {
+      float q_mA_s = 0.0f;
+      if (width_ms > 0) {
+        const float t_s = static_cast<float>(width_ms) / 1000.0f;
+        const float signed_q_mA_s =
+            fast_signed_target_current_mA * t_s +
+            (event.i0_estimated_mA - fast_signed_target_current_mA) * fast_tau_s *
+                (1.0f - expf(-t_s / fast_tau_s));
+        q_mA_s = fabsf(signed_q_mA_s);
+      }
+      const float predicted_peak_deg = energyControlAutonomousCorrectedPrediction(
+          event.free_next_peak_amplitude_deg, event.physical_next_peak_side, q_mA_s, nullptr);
+      return control_math::WidthPrediction{q_mA_s, energyControlPotentialJ(predicted_peak_deg)};
+    });
+    const float q_mA_s = prediction.q_mA_s;
+    const float energy_j = prediction.energy_j;
     if (!isfinite(q_mA_s) || !isfinite(energy_j) || !isfinite(target_energy_j)) return c;
     c.valid = true;
     c.q_mA_s = q_mA_s;
@@ -5670,21 +5678,25 @@ void ExperimentRunner::updatePulseModelPrediction() {
 float ExperimentRunner::predictCurrentGoalMa(float command_mA, float model_vbat_v) const {
   const float u_mA = fabsf(command_mA);
   if (u_mA <= 0.0f) return 0.0f;
-  const float i_sat_mA = Config::MODEL_I_SAT_AT_REFERENCE_MA +
-                         Config::MODEL_I_SAT_SLOPE_MA_PER_V *
-                             (model_vbat_v - Config::MODEL_VBAT_REFERENCE_V);
-  const float ratio = u_mA / i_sat_mA;
-  return u_mA / powf(1.0f + powf(ratio, Config::MODEL_I_SAT_EXPONENT),
-                      1.0f / Config::MODEL_I_SAT_EXPONENT);
+  return current_model_cache_.goal(u_mA, model_vbat_v, [&]() {
+    const float i_sat_mA = Config::MODEL_I_SAT_AT_REFERENCE_MA +
+                           Config::MODEL_I_SAT_SLOPE_MA_PER_V *
+                               (model_vbat_v - Config::MODEL_VBAT_REFERENCE_V);
+    const float ratio = u_mA / i_sat_mA;
+    return u_mA / powf(1.0f + powf(ratio, Config::MODEL_I_SAT_EXPONENT),
+                        1.0f / Config::MODEL_I_SAT_EXPONENT);
+  });
 }
 
 float ExperimentRunner::predictRiseTauS(float command_mA) const {
   const float u_mA = fabsf(command_mA);
-  const float ratio = u_mA / Config::MODEL_TAU_RISE_U_MA;
-  const float tau_ms = Config::MODEL_TAU_RISE_MIN_MS +
-                       (Config::MODEL_TAU_RISE_MAX_MS - Config::MODEL_TAU_RISE_MIN_MS) /
-                           (1.0f + powf(ratio, Config::MODEL_TAU_RISE_EXPONENT));
-  return tau_ms / 1000.0f;
+  return current_model_cache_.riseTime(u_mA, [&]() {
+    const float ratio = u_mA / Config::MODEL_TAU_RISE_U_MA;
+    const float tau_ms = Config::MODEL_TAU_RISE_MIN_MS +
+                         (Config::MODEL_TAU_RISE_MAX_MS - Config::MODEL_TAU_RISE_MIN_MS) /
+                             (1.0f + powf(ratio, Config::MODEL_TAU_RISE_EXPONENT));
+    return tau_ms / 1000.0f;
+  });
 }
 
 float ExperimentRunner::predictBetaMin(float peak_current_mA) const {

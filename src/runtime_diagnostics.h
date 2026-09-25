@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-#define RUNTIME_VERSION "0.47.16-iram-and-marker-guard"
+#define RUNTIME_VERSION "0.47.17-control-cache-idle-preview"
 
 namespace RuntimeDiag {
 enum class Lane : uint32_t { Control, Imu, Camera, Http, Roller, Export, Count };

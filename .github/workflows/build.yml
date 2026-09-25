@@ -43,7 +43,7 @@ jobs:
           cp bmi270-build-patch.json dist/
           python "$HOME/.platformio/packages/tool-esptoolpy/esptool.py" --chip esp32s3 merge_bin -o dist/merged-firmware.bin 0x0000 dist/bootloader.bin 0x8000 dist/partitions.bin 0xe000 dist/boot_app0.bin 0x10000 dist/firmware.bin
           printf '%s\n' "$GITHUB_SHA" > dist/build-sha.txt
-          printf '%s\n' 'Free-foot Runtime V2 0.47.16 targeted IRAM placement for MEKF hot routines and compact log encoder; external calls and data may still use flash; linked placement and 16KiB function-code gate; unchanged numerical expressions and 258-byte RWLOG rows; three-frame confirmation for weak displaced foot candidates; retained independent calibration and support R39-182/L37-177.5; 0.47.15 completed 30s with 942/12144 deadline overruns and one suspect right-foot out-of-support detection; full-run stack scan deferral retained; same control, 3ms compensation, 300mA/100ms limits, acquisition/logging rates and 10ms ESTOP; hardware improvement pending' > dist/FLASH_LAYOUT.txt
+          printf '%s\n' 'Free-foot Runtime V2 0.47.17 exact-input current/tau cache and per-decision width prediction cache; unchanged search targets, tie-breaks, zero-output baseline and control guards; idle-only preview copies with continuous full foot tracking; M5GFX pinned to the 0.47.16 build dependency 0.2.30; IRAM/marker safeguards and R39-182/L37-177.5 calibration retained; same 3ms compensation, 300mA/100ms limits, acquisition/logging rates and 10ms ESTOP; 2.5ms hardware deadline improvement pending' > dist/FLASH_LAYOUT.txt
           (cd dist && sha256sum *.bin > SHA256SUMS.txt)
           git diff --exit-code
       - uses: actions/upload-artifact@v4

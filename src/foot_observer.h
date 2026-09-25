@@ -59,7 +59,7 @@ class FootObserver {
  private:
   static void entry(void* ptr) { static_cast<FootObserver*>(ptr)->loop(); }
   void loop();
-  void publishPreview(const uint8_t* gray, const FootPreviewInfo& info);
+  void publishPreview(const uint8_t* gray, const FootPreviewInfo& info, bool run_active);
   OneShotCamera* camera_ = nullptr;
   RunControlWorker* control_ = nullptr;
   TaskHandle_t task_ = nullptr;
