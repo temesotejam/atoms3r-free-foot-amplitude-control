@@ -5,6 +5,8 @@
 #include <cstring>
 #include <initializer_list>
 #include "fixtures/adafruit_ahrs_2_4_0/Adafruit_AHRS_Madgwick.h"
+// Arduino exposes this function-like macro even for namespaced functions.
+#define degrees(rad) ((rad) * 57.29577951308232)
 #include "../src/madgwick_pitch.h"
 
 static uint32_t cases=0;
@@ -19,7 +21,7 @@ static void check(float w,float x,float y,float z) {
   reference.setQuaternion(w,x,y,z);candidate.setQuaternion(w,x,y,z);
   float before[4],after[4];
   candidate.getQuaternion(before,before+1,before+2,before+3);
-  const float pitch=madgwick_pitch::degrees(candidate);
+  const float pitch=madgwick_pitch::readPitchDeg(candidate);
   assert(same(pitch,reference.getPitch()));
   candidate.getQuaternion(after,after+1,after+2,after+3);
   assert(std::memcmp(before,after,sizeof(before))==0);

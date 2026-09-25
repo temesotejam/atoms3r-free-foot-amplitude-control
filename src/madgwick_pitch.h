@@ -8,7 +8,7 @@
 // The pinned upstream source is checked by tools/verify_madgwick_dependency.py.
 namespace madgwick_pitch {
 template <class Filter>
-inline float degrees(Filter& filter) {
+inline float readPitchDeg(Filter& filter) {
   float w, x, y, z;
   filter.getQuaternion(&w, &x, &y, &z);
   return asinf(-2.0f * (x * z - w * y)) * 57.29578f;
