@@ -272,7 +272,7 @@ class RunControlWorker {
     snapshot_ = next;
     active_ = next.running;
     portEXIT_CRITICAL(&mux_);
-    RuntimeDiag::beat(RuntimeDiag::Lane::Control, next.state_id);
+    RuntimeDiag::beat(RuntimeDiag::Lane::Control, next.state_id, !next.running);
     RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::Wait);
   }
   void loop() {

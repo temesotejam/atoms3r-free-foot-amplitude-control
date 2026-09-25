@@ -1,6 +1,7 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.14 compact log encoder
+# Current integrated build: Free-foot Runtime V2 / 0.47.15 deferred stack diagnostics
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
+[0.47.14 recovered run and deferred stack diagnostics](docs/RECOVERED_RUN_STACK_TIMING_04715.md) ·
 [0.47.13 startup ESTOP and compact encoder correction](docs/LOG_ENCODER_REGRESSION_04714.md) ·
 [0.47.12 hardware result and log encoder follow-up](docs/LOG_ENCODER_TIMING_04713.md) ·
 [0.47.11 hardware result and filter timing follow-up](docs/FILTER_TIMING_04712.md) ·
@@ -58,13 +59,32 @@ first pulse log took 935 us versus 108 us in the previous run; pulse-on log
 encoding averaged 836.552 us. All 47 foot frames belong to START_SYNC, so this
 run does not validate simultaneous foot observation during measurement.
 
-Version 0.47.14 removes forced per-field inlining and uses one shared quantizer
+Version 0.47.14 removed forced per-field inlining and uses one shared quantizer
 with the size-oriented compiler policy. The exact numerical formula, all 258
 row bytes, logging rates and synchronous storage remain unchanged. A linked
 code-size gate prevents recurrence of the expanded encoder, but is not timing
 proof. The 10 ms stale-data stop and 2.5 ms completion deadline are unchanged.
-MEKF, Madgwick, camera, calibration and control are retained. The next hardware
-run must establish recovery and measure the remaining deadline overruns.
+MEKF, Madgwick, camera, calibration and control are retained.
+
+**Version 0.47.14 recovered: the new hardware run finished 30 seconds.** All
+12,144 acquired samples were delivered, with no queue drops, sequence gaps or
+fault. MEKF was adopted throughout measurement, with right/left foot detections
+in 283/288 and 287/288 frames and no valid observation outside support. The
+2.5 ms deadline remains unmet in 1,045/12,145 completions (8.60%, mean 1,513.601 us,
+maximum 6,905 us). The overrun rate is worse than 0.47.12 (6.64%); recovery from
+the startup ESTOP is not a timing-goal success. Acquisition and completion
+audits use different transition boundaries, explaining the one-count difference.
+
+Version 0.47.15 defers the control and IMU tasks' periodic stack-watermark scans
+through START_SYNC, RUNNING and END_SYNC. Each task resumes its own due scan when
+idle; heartbeats continue and USB diagnostics expose the cache age, scan count,
+allowed flag and last/maximum scan wall time. This removes known diagnostic
+memory walks from real-time owners. The previous profile does not isolate their
+contribution, so it does not establish them as the cause of all deadline overruns.
+The RTC journal layout, overflow protection, estimator/control math, foot
+calibration, logging rates and deadline definitions are unchanged. Callback
+exclusion, idle resumption, clock wrap and the existing runtime suite are checked;
+hardware timing improvement remains pending.
 
 Version 0.47.12 computes comparison Madgwick pitch directly from its public
 quaternion using the exact upstream 2.4.0 expression, avoiding unused roll/yaw

@@ -199,10 +199,11 @@ void ImuManager::acquisitionLoop() {
     previous_poll_total_us_ = elapsed;
     portENTER_CRITICAL(&mux_);
     audit_.poll(elapsed, wakes);
+    const bool allow_stack_scan = !sequential_;
     portEXIT_CRITICAL(&mux_);
     RuntimeDiag::phase(RuntimeDiag::Lane::Imu, RuntimeDiag::Phase::ImuAudit);
     recordPollProfile(poll_observation_);
-    RuntimeDiag::beat(RuntimeDiag::Lane::Imu, elapsed);
+    RuntimeDiag::beat(RuntimeDiag::Lane::Imu, elapsed, allow_stack_scan);
     previous_yield_us_ = 0;
     // Keep the established overrun wait. Removing it could starve control/STOP.
     const uint32_t yield_start = micros();

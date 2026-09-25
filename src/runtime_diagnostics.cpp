@@ -1,6 +1,7 @@
 #include "runtime_diagnostics.h"
 #if defined(ARDUINO_ARCH_ESP32)
 #include "diagnostic_journal.h"
+#include "stack_scan_policy.h"
 #include <Arduino.h>
 #include <esp_attr.h>
 #include <esp_system.h>
@@ -26,6 +27,11 @@ static_assert(__atomic_always_lock_free(sizeof(uint32_t), nullptr), "Diagnostic 
 RTC_NOINIT_ATTR volatile diagnostic_journal::Journal<Boot, 0x55444231> boot_journal;
 RTC_NOINIT_ATTR volatile diagnostic_journal::Journal<Sample, 0x55445332> sample_journal;
 Probe probes[kLanes]{};
+// Keep the RTC journal layout unchanged. These live counters explicitly show
+// when the displayed stack watermark was sampled and when scanning is paused.
+struct StackScan { uint32_t allowed, count, at_ms, last_us, max_us; };
+StackScan stack_scans[kLanes]{};
+stack_scan::Schedule stack_schedules[kLanes];  // one owner per lane; never exported directly
 Memory memory{};
 CameraDriver camera_driver{};
 uint32_t event_id = 0, event_count = 0, clients = 0, ap_active = 0;
@@ -138,6 +144,15 @@ void tick() {
       if (have_previous_sample) appendSample("previous", previous_sample);
     } else append("USBDBG,previous_boot,unavailable=1\n");
     appendSample("live", capture());
+    constexpr Lane realtime_lanes[] = {Lane::Control, Lane::Imu};
+    for (const auto lane : realtime_lanes) {
+      const auto& s = stack_scans[static_cast<uint32_t>(lane)];
+      const uint32_t at_ms = get(s.at_ms), count = get(s.count);
+      append("USBDBG,stack_scan,%s,allowed=%u,count=%u,at_ms=%u,age_ms=%u,last_us=%u,max_us=%u\n",
+          lane == Lane::Control ? "control" : "imu", get(s.allowed), count,
+          at_ms, count ? static_cast<uint32_t>(millis() - at_ms) : 0,
+          get(s.last_us), get(s.max_us));
+    }
   }
   // Native HWCDC has a bounded ring. Never flush or wait for a PC to connect.
   // Timeout 0 is unsafe in this core's unsigned retry loop; use 1 ms plus a
@@ -179,15 +194,23 @@ void begin() {
 }
 void phase(Lane lane, Phase p) { put(probes[static_cast<uint32_t>(lane)].phase, static_cast<uint32_t>(p)); }
 Phase currentPhase(Lane lane) { return static_cast<Phase>(get(probes[static_cast<uint32_t>(lane)].phase)); }
-void beat(Lane lane, uint32_t detail) {
-  auto& p = probes[static_cast<uint32_t>(lane)];
+void beat(Lane lane, uint32_t detail, bool allow_stack_scan) {
+  const uint32_t index = static_cast<uint32_t>(lane);
+  auto& p = probes[index];
+  auto& scan = stack_scans[index];
   const uint32_t now = millis();
-  // Stack scans happen in their owner once a second, never from another task.
-  static uint32_t stack_ms[kLanes]{};
-  auto& last = stack_ms[static_cast<uint32_t>(lane)];
-  if (now - last >= 1000 || !get(p.beats)) {
-    put(p.stack_free, uxTaskGetStackHighWaterMark(nullptr)); put(p.core, xPortGetCoreID()); last = now;
-  }
+  put(scan.allowed, allow_stack_scan);
+  // Preserve owner-only scans and the one-second idle cadence. START_SYNC,
+  // RUNNING and END_SYNC all defer this memory walk in the control/IMU tasks.
+  stack_schedules[index].sampleIfDue(now, allow_stack_scan, [&]() {
+    const uint32_t begin_us = micros();
+    const uint32_t free_bytes = uxTaskGetStackHighWaterMark(nullptr);
+    const uint32_t elapsed_us = static_cast<uint32_t>(micros() - begin_us);
+    put(p.stack_free, free_bytes); put(p.core, xPortGetCoreID());
+    put(scan.at_ms, now); put(scan.last_us, elapsed_us);
+    if (elapsed_us > get(scan.max_us)) put(scan.max_us, elapsed_us);
+    put(scan.count, get(scan.count) + 1);
+  });
   put(p.detail, detail); put(p.last_ms, now); put(p.beats, get(p.beats) + 1);
 }
 void sampleMemory() {

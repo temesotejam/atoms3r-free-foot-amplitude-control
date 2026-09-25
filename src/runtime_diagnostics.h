@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-#define RUNTIME_VERSION "0.47.14-compact-log-encoder"
+#define RUNTIME_VERSION "0.47.15-deferred-stack-diagnostics"
 
 namespace RuntimeDiag {
 enum class Lane : uint32_t { Control, Imu, Camera, Http, Roller, Export, Count };
@@ -23,7 +23,9 @@ void result(bool ok);
 // Single task owns each lane. These probes never log or acquire application locks.
 void phase(Lane lane, Phase phase);
 Phase currentPhase(Lane lane);
-void beat(Lane lane, uint32_t detail = 0);
+// Real-time owners defer the periodic stack scan during a run. Heartbeat and
+// phase publication continue; the first due idle beat refreshes the watermark.
+void beat(Lane lane, uint32_t detail = 0, bool allow_stack_scan = true);
 void sampleMemory(); // HTTP owner only; deliberately excluded from the USB observer.
 void cameraDriverTask(uint32_t requested, uint32_t allocated, bool created);
 void cameraDriverStack(uint32_t free_bytes);
@@ -33,7 +35,7 @@ void pollFallback(); // Only used if the independent observer task could not be 
 #else
 inline void phase(Lane, Phase) {}
 inline Phase currentPhase(Lane) { return Phase::Unseen; }
-inline void beat(Lane, uint32_t = 0) {}
+inline void beat(Lane, uint32_t = 0, bool = true) {}
 inline void cameraDriverTask(uint32_t, uint32_t, bool) {}
 inline void cameraDriverStack(uint32_t) {}
 inline void cameraDriverStopped() {}

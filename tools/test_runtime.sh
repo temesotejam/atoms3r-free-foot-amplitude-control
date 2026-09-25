@@ -7,6 +7,8 @@ node tools/test_pose_comparison.js
 node --check site/serial-monitor.js
 node tools/test_serial_monitor.js
 node tools/test_runtime_web.js
+g++ -std=c++17 -O2 -Wall -Wextra -Werror tools/test_stack_scan_policy.cpp -o /tmp/test_stack_scan_policy
+/tmp/test_stack_scan_policy
 python3 tools/test_rwlog_v46_converter.py
 for name in runtime_control export_protocol previous_peak_math diagnostic_journal; do
   g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o -Isrc tools/test_${name}.cpp src/control_work_profile.cpp -o /tmp/test_${name}
