@@ -1,9 +1,12 @@
-#include "mekf6.hpp"
+// Frozen differential-test reference from 18a8f580b66e6bb432126bc5586f06435095c5e1.
+// Original src/mekf6.cpp SHA256: 150c05691e3d2b385c6a700fd0b227251da3cfdba42ad7fd1eaab22444cf9d07
+// Only the namespace and local include name are changed; never linked into firmware.
+#include "mekf6_dense_reference_0478.hpp"
 
 #include <algorithm>
 #include <cstring>
 
-namespace mekf6 {
+namespace mekf6_dense_reference {
 
 Mekf6::Mekf6(const Config& cfg) : cfg_(cfg) { reset(); }
 
@@ -138,23 +141,12 @@ bool Mekf6::predict(const Vec3& gyro_rad_s, float dt_s) {
   }
 
   float temp[6][6]{}, Pnew[6][6]{};
-  // Phi = [ I-W*dt, -dt*I ; 0, I ]. Preserve the nonzero summation
-  // order of Phi*P*Phi^T without multiplying its structural zero entries.
-  for (int r = 0; r < 3; ++r) {
-    for (int c = 0; c < 6; ++c) {
-      for (int k = 0; k < 3; ++k) temp[r][c] += Phi[r][k] * P_[k][c];
-      temp[r][c] += Phi[r][r + 3] * P_[r + 3][c];
-    }
-  }
-  for (int r = 3; r < 6; ++r)
-    for (int c = 0; c < 6; ++c) temp[r][c] = P_[r][c];
-  for (int r = 0; r < 6; ++r) {
-    for (int c = 0; c < 3; ++c) {
-      for (int k = 0; k < 3; ++k) Pnew[r][c] += temp[r][k] * Phi[c][k];
-      Pnew[r][c] += temp[r][c + 3] * Phi[c][c + 3];
-    }
-    for (int c = 3; c < 6; ++c) Pnew[r][c] = temp[r][c];
-  }
+  for (int r = 0; r < 6; ++r)
+    for (int c = 0; c < 6; ++c)
+      for (int k = 0; k < 6; ++k) temp[r][c] += Phi[r][k] * P_[k][c];
+  for (int r = 0; r < 6; ++r)
+    for (int c = 0; c < 6; ++c)
+      for (int k = 0; k < 6; ++k) Pnew[r][c] += temp[r][k] * Phi[c][k];
 
   // Discrete process noise. The attitude term follows integrated gyro white noise;
   // the bias term follows the configured random-walk density.
@@ -195,10 +187,9 @@ bool Mekf6::updateAccel(const Vec3& accel_g) {
   const float y[3] = {z.x - h.x, z.y - h.y, z.z - h.z};
 
   float PHt[6][3]{};
-  // H = [ skew(h), 0 ]; bias columns are identically zero.
   for (int r = 0; r < 6; ++r)
     for (int c = 0; c < 3; ++c)
-      for (int k = 0; k < 3; ++k) PHt[r][c] += P_[r][k] * H[c][k];
+      for (int k = 0; k < 6; ++k) PHt[r][c] += P_[r][k] * H[c][k];
 
   const float base_r = cfg_.accel_direction_noise_std * cfg_.accel_direction_noise_std;
   const float safe_conf = std::max(confidence, cfg_.accel_min_confidence);
@@ -206,7 +197,7 @@ bool Mekf6::updateAccel(const Vec3& accel_g) {
   float S[3][3]{};
   for (int r = 0; r < 3; ++r) {
     for (int c = 0; c < 3; ++c) {
-      for (int k = 0; k < 3; ++k) S[r][c] += H[r][k] * PHt[k][c];
+      for (int k = 0; k < 6; ++k) S[r][c] += H[r][k] * PHt[k][c];
       if (r == c) S[r][c] += r_eff;
     }
   }
@@ -226,21 +217,15 @@ bool Mekf6::updateAccel(const Vec3& accel_g) {
   float A[6][6]{};
   for (int i = 0; i < 6; ++i) A[i][i] = 1.0f;
   for (int r = 0; r < 6; ++r)
-    for (int c = 0; c < 3; ++c)
+    for (int c = 0; c < 6; ++c)
       for (int k = 0; k < 3; ++k) A[r][c] -= K[r][k] * H[k][c];
   float AP[6][6]{}, Pj[6][6]{};
-  // A = [ A00, 0 ; A10, I ]. Keep Joseph form, all cross covariance,
-  // and the same addition order; only omit known zeros and identity products.
+  for (int r = 0; r < 6; ++r)
+    for (int c = 0; c < 6; ++c)
+      for (int k = 0; k < 6; ++k) AP[r][c] += A[r][k] * P_[k][c];
   for (int r = 0; r < 6; ++r) {
     for (int c = 0; c < 6; ++c) {
-      for (int k = 0; k < 3; ++k) AP[r][c] += A[r][k] * P_[k][c];
-      if (r >= 3) AP[r][c] += P_[r][c];
-    }
-  }
-  for (int r = 0; r < 6; ++r) {
-    for (int c = 0; c < 6; ++c) {
-      for (int k = 0; k < 3; ++k) Pj[r][c] += AP[r][k] * A[c][k];
-      if (c >= 3) Pj[r][c] += AP[r][c];
+      for (int k = 0; k < 6; ++k) Pj[r][c] += AP[r][k] * A[c][k];
       for (int k = 0; k < 3; ++k) Pj[r][c] += r_eff * K[r][k] * K[c][k];
     }
   }
@@ -265,17 +250,12 @@ void Mekf6::applyResetJacobian(const Vec3& dtheta) {
   for (int r = 0; r < 3; ++r)
     for (int c = 0; c < 3; ++c) G[r][c] -= 0.5f * S[r][c];
   float GP[6][6]{}, out[6][6]{};
-  // G = [ I-0.5*skew(dtheta), 0 ; 0, I ].
-  for (int r = 0; r < 3; ++r)
+  for (int r = 0; r < 6; ++r)
     for (int c = 0; c < 6; ++c)
-      for (int k = 0; k < 3; ++k) GP[r][c] += G[r][k] * P_[k][c];
-  for (int r = 3; r < 6; ++r)
-    for (int c = 0; c < 6; ++c) GP[r][c] = P_[r][c];
-  for (int r = 0; r < 6; ++r) {
-    for (int c = 0; c < 3; ++c)
-      for (int k = 0; k < 3; ++k) out[r][c] += GP[r][k] * G[c][k];
-    for (int c = 3; c < 6; ++c) out[r][c] = GP[r][c];
-  }
+      for (int k = 0; k < 6; ++k) GP[r][c] += G[r][k] * P_[k][c];
+  for (int r = 0; r < 6; ++r)
+    for (int c = 0; c < 6; ++c)
+      for (int k = 0; k < 6; ++k) out[r][c] += GP[r][k] * G[c][k];
   std::memcpy(P_, out, sizeof(P_));
 }
 
@@ -317,4 +297,4 @@ EulerDeg Mekf6::eulerDeg() const {
   return {radToDeg(roll), radToDeg(pitch), radToDeg(yaw)};
 }
 
-}  // namespace mekf6
+}  // namespace mekf6_dense_reference

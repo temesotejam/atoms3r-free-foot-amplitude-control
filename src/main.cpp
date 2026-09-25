@@ -56,8 +56,8 @@ static void captureRunState(void*, RunControlSnapshot& out) {
   out.log_epoch_us = log_epoch_us; out.measurement_epoch_us = measurement_epoch_us;
   out.upright_error_deg = pose_metrics.direction_error_deg;
   out.accel_norm_g = pose_metrics.accel_norm_g; out.gyro_norm_dps = pose_metrics.gyro_norm_dps;
-  snprintf(out.state_name, sizeof(out.state_name), "%s", runner.stateName());
-  snprintf(out.last_error, sizeof(out.last_error), "%s", st.last_error ? st.last_error : "");
+  strlcpy(out.state_name, runner.stateName(), sizeof(out.state_name));
+  strlcpy(out.last_error, st.last_error ? st.last_error : "", sizeof(out.last_error));
 }
 static bool controlStep(void*) {
   RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::ControlService);

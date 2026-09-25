@@ -1,6 +1,7 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.8 control work profiling
+# Current integrated build: Free-foot Runtime V2 / 0.47.9 control work reduction
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
+[Follow-up ESTOP and MEKF work reduction](docs/ESTOP_WORK_REDUCTION_0479.md) ·
 [ESTOP analysis and control work profiling](docs/ESTOP_BACKLOG_0478.md) ·
 [USB diagnostic procedure](docs/USB_DIAGNOSTICS.md) ·
 [Fixed-pose foot calibration](docs/FOOT_CALIBRATION_0477.md) ·
@@ -16,6 +17,15 @@ The current main branch integrates observation-only right/left foot angles with
 the V46al-R2 controller. It uses permanent control ownership, PSRAM event storage,
 and a resumable, CRC-verified RWLOG export. Integrated hardware validation is
 pending; build/host tests do not establish camera frame rate or control deadlines.
+Version 0.47.9 follows another delivery-backlog ESTOP on 0.47.8 at 0.521 seconds.
+The added profile shows pulse-on filter updates averaging 1,007 us and control
+iterations averaging 2,615 us. The MEKF now omits known-zero and identity products
+while retaining all covariance terms, Joseph update and summation order. Snapshot
+strings use bounded copies. A frozen 0.47.8 differential reference verifies the
+posterior, diagnostics and all 36 covariance entries; real-time hardware success
+still requires another run. Foot observation, filter rates and control limits
+are retained.
+
 Version 0.47.8 follows a hardware ESTOP about 0.77 seconds into measurement:
 IMU delivery age reached 10,284 us and exceeded the unchanged 10,000 us guard.
 It reuses duplicate pose geometry calculations and records per-stage wall times
