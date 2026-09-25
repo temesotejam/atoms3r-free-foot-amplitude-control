@@ -13,7 +13,7 @@ HOT_METHODS = ('predict', 'updateAccel', 'pitchDegFromQuaternion', 'clampf',
                'applyResetJacobian')
 REQUIRED = ('mekf6::Mekf6::predict(', 'mekf6::Mekf6::updateAccel(',
             'mekf6::Mekf6::pitchDegFromQuaternion(', 'encodeLogSample(',
-            '(anonymous namespace)::quantize(')
+            'log_quantization::scaledI16(')
 
 
 def audit(symbol_table):

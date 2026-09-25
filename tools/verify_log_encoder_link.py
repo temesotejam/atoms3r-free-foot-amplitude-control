@@ -22,12 +22,12 @@ def audit(nm_output):
                 name.startswith("log_quantization::scaledI16(")):
             symbols[name] = size
     encoders = [s for s in symbols if s.startswith("encodeLogSample(")]
-    shared = [s for s in symbols if s.startswith("(anonymous namespace)::quantize(")]
-    if len(encoders) != 1 or len(shared) != 1:
-        raise ValueError("Expected one encoder and one shared quantize routine")
+    shared = [s for s in symbols if s.startswith("log_quantization::scaledI16(")]
+    if len(encoders) != 1 or len(shared) != 1 or len(symbols) != 2:
+        raise ValueError("Expected one encoder and one canonical out-of-line quantizer")
     if any(size <= 0 for size in symbols.values()) or sum(symbols.values()) > 4096:
         raise ValueError("Log encoder code footprint exceeds 4096 bytes: " + str(symbols))
-    return {"revision": "compact_log_encoder_04714", "symbols_bytes": symbols,
+    return {"revision": "compact_log_encoder_04716", "symbols_bytes": symbols,
             "total_code_bytes": sum(symbols.values()), "limit_bytes": 4096,
             "hardware_timing_verified": False}
 
