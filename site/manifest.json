@@ -1,6 +1,6 @@
 {
   "name": "AtomS3R Free-foot Runtime V2",
-  "version": "0.47.9-control-work-reduction",
+  "version": "0.47.10-range-timing-optimization",
   "builds": [
     {
       "chipFamily": "ESP32-S3",

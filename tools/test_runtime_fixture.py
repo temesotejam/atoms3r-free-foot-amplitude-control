@@ -29,11 +29,20 @@ assert inputs['accel_g']==[.01,.02,1]
 for actual,expected in zip(inputs['gyro_dps'],[1,2,3]): assert abs(actual-expected)<.00001
 for actual,expected in zip(inputs['gyro_bias_dps'],[.1,-.2,.3]): assert abs(actual-expected)<.00001
 assert inputs['last_accel_update']['used'] and inputs['last_accel_update']['confidence']>.99
-assert diagnostics['range']['right_support_x'] == [40,173]
-assert diagnostics['range']['left_support_x'] == [39,177.5]
+assert diagnostics['range']['right_support_x'] == [39,182]
+assert diagnostics['range']['left_support_x'] == [37,177.5]
 assert diagnostics['range']['original_right_support_x'] == [42,173]
 assert diagnostics['range']['original_left_support_x'] == [43.5,177.5]
 assert diagnostics['range']['extension_angle_accuracy_validated'] is False
+range_evidence=json.loads(Path('tools/fixtures/foot_range_20260925.json').read_text())
+for side in ('right','left'):
+    lo,hi=diagnostics['range'][side+'_support_x']
+    assert [lo,hi]==range_evidence['accepted_support_x'][side]
+    all_lo,all_hi=range_evidence['observed_x'][side]
+    assert lo<=all_lo-1 and hi>=all_hi+1
+    for source in range_evidence['sources']:
+        observed=source['observations'][side]
+        assert lo<=observed['min_x']<=observed['max_x']<=hi
 calibration=diagnostics['calibration']
 assert calibration['revision']=='fixed_two_poses_20260924' and calibration['provisional']
 assert abs(calibration['right_deg_per_px']-.155146317)<1e-8
@@ -55,7 +64,7 @@ header = converter.parse_header(data)
 metadata = json.loads(data[110:110+header['metadata_json_size']], parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
 assert metadata['metadata_json_final_bytes'] == header['metadata_json_size']
 assert not metadata['metadata_event_detail_truncated']
-assert metadata['firmware_revision']=='0.47.9-control-work-reduction'
+assert metadata['firmware_revision']=='0.47.10-range-timing-optimization'
 assert metadata['terminal_state']['state']=='ESTOP' and metadata['terminal_state']['motor_cmd_mA']==0
 assert metadata['terminal_state']['actual_current_mA']==-7 and metadata['terminal_state']['heartbeat_us']==123456
 assert metadata['terminal_state']['last_error']=='imu_acquisition_overflow_backlog_or_stale'
@@ -73,8 +82,8 @@ assert metadata['foot_observation']['calibration']==calibration
 assert metadata['foot_observation']['calibration_source_commit'] is None
 for side in ('right','left'):
     assert metadata['foot_observation'][side+'_deg_per_px']==calibration[side+'_deg_per_px']
-assert metadata['foot_observation']['right_support_x'] == [40,173]
-assert metadata['foot_observation']['left_support_x'] == [39,177.5]
+assert metadata['foot_observation']['right_support_x'] == [39,182]
+assert metadata['foot_observation']['left_support_x'] == [37,177.5]
 assert metadata['foot_frames'][0]['right_scan_y'] == 42
 assert metadata['foot_frames'][0]['left_templates'] == 17
 assert metadata['foot_frames'][0]['left_candidates'] == 2

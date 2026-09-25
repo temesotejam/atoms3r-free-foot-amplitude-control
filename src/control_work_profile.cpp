@@ -3,10 +3,11 @@ namespace control_work {
 Profile profile;
 String Profile::json() const {
   static const char* const names[] = {"owner_iteration", "service", "imu_delivery", "pose_guide",
-      "filter", "angle_display", "current_roll", "motion", "log_row", "snapshot", "publish"};
+      "filter", "angle_display", "current_roll", "motion", "log_row", "snapshot", "publish",
+      "mekf_predict", "mekf_accel", "mekf_attitude", "madgwick"};
   static_assert(sizeof(names) / sizeof(names[0]) == static_cast<uint8_t>(Stage::Count), "Stage names");
-  String out; out.reserve(2400);
-  out = "{\"revision\":\"control_work_0478\",\"scope\":\"measurement_only;host_wall_time_includes_preemption;nested_stages_not_additive\"";
+  String out; out.reserve(3200);
+  out = "{\"revision\":\"control_work_04710\",\"scope\":\"measurement_only;host_wall_time_includes_preemption;nested_stages_not_additive\"";
   out += ",\"cohort\":\"pulse_active_at_stage_entry;owner_includes_terminal_iteration;start_sync_excluded\"";
   for (uint8_t group = 0; group < 2; ++group) {
     out += group ? ",\"pulse_on\":{" : ",\"pulse_off\":{";

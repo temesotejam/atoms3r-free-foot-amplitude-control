@@ -1,6 +1,7 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.9 control work reduction
+# Current integrated build: Free-foot Runtime V2 / 0.47.10 range and timing optimization
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
+[Successful free-foot run and timing follow-up](docs/FREEFOOT_SUCCESS_TIMING_04710.md) ·
 [Follow-up ESTOP and MEKF work reduction](docs/ESTOP_WORK_REDUCTION_0479.md) ·
 [ESTOP analysis and control work profiling](docs/ESTOP_BACKLOG_0478.md) ·
 [USB diagnostic procedure](docs/USB_DIAGNOSTICS.md) ·
@@ -15,16 +16,32 @@
 
 The current main branch integrates observation-only right/left foot angles with
 the V46al-R2 controller. It uses permanent control ownership, PSRAM event storage,
-and a resumable, CRC-verified RWLOG export. Integrated hardware validation is
-pending; build/host tests do not establish camera frame rate or control deadlines.
-Version 0.47.9 follows another delivery-backlog ESTOP on 0.47.8 at 0.521 seconds.
+and a resumable, CRC-verified RWLOG export. **Version 0.47.9 completed a 30-second
+free-foot hardware run with MEKF, camera foot observation and actuation together.**
+All 12,143 acquired IMU samples were delivered, with no queue drops or sequence
+gaps. Both feet were observed during the same run (288/292 right, 291/292 left).
+The user reports fore/aft movement with unfixed feet and increased foot-switching
+loss; the observed amplitude asymmetry is an improvement topic, not a failure of
+this integration milestone. Strict 2.5 ms processing deadlines remain unmet in
+947/12,144 completions (maximum 6,884 us).
+
+Version 0.47.10 extends accepted marker support to right [39,182] and left
+[37,177.5] pixels, covering all supplied identity-v2 observations with at least
+one pixel of margin. Scale coefficients and independent per-boot zeroing remain
+in use. MEKF fixed-size inner products are unrolled and identical Joseph factors
+are reused; bounded log quantization preserves the previous encoded integers.
+MEKF prediction, correction, attitude extraction and Madgwick comparison times
+are now separately recorded inside the filter profile. Real-time improvement
+of this new build needs the next hardware log; host tests are not deadline proof.
+
+Version 0.47.9 followed another delivery-backlog ESTOP on 0.47.8 at 0.521 seconds.
 The added profile shows pulse-on filter updates averaging 1,007 us and control
 iterations averaging 2,615 us. The MEKF now omits known-zero and identity products
 while retaining all covariance terms, Joseph update and summation order. Snapshot
 strings use bounded copies. A frozen 0.47.8 differential reference verifies the
-posterior, diagnostics and all 36 covariance entries; real-time hardware success
-still requires another run. Foot observation, filter rates and control limits
-are retained.
+posterior, diagnostics and all 36 covariance entries. The subsequent hardware
+success and remaining timing work are described above. Foot observation, filter
+rates and control limits are retained.
 
 Version 0.47.8 follows a hardware ESTOP about 0.77 seconds into measurement:
 IMU delivery age reached 10,284 us and exceeded the unchanged 10,000 us guard.

@@ -5,6 +5,27 @@
 
 namespace mekf6 {
 
+namespace {
+// Fixed-size inner products avoid the innermost loop/index bookkeeping on
+// the size-optimized ESP32 build. Keep the original accumulation order and
+// initial zero; do not reassociate sums or enable fast-math.
+inline float dotRows3(const float* a, const float* b) {
+  float sum = 0.0f;
+  sum += a[0] * b[0];
+  sum += a[1] * b[1];
+  sum += a[2] * b[2];
+  return sum;
+}
+template <int Columns>
+inline float dotColumn3(const float* a, const float (*b)[Columns], int column) {
+  float sum = 0.0f;
+  sum += a[0] * b[0][column];
+  sum += a[1] * b[1][column];
+  sum += a[2] * b[2][column];
+  return sum;
+}
+}  // namespace
+
 Mekf6::Mekf6(const Config& cfg) : cfg_(cfg) { reset(); }
 
 void Mekf6::reset() {
@@ -142,7 +163,7 @@ bool Mekf6::predict(const Vec3& gyro_rad_s, float dt_s) {
   // order of Phi*P*Phi^T without multiplying its structural zero entries.
   for (int r = 0; r < 3; ++r) {
     for (int c = 0; c < 6; ++c) {
-      for (int k = 0; k < 3; ++k) temp[r][c] += Phi[r][k] * P_[k][c];
+      temp[r][c] = dotColumn3(Phi[r], P_, c);
       temp[r][c] += Phi[r][r + 3] * P_[r + 3][c];
     }
   }
@@ -150,7 +171,7 @@ bool Mekf6::predict(const Vec3& gyro_rad_s, float dt_s) {
     for (int c = 0; c < 6; ++c) temp[r][c] = P_[r][c];
   for (int r = 0; r < 6; ++r) {
     for (int c = 0; c < 3; ++c) {
-      for (int k = 0; k < 3; ++k) Pnew[r][c] += temp[r][k] * Phi[c][k];
+      Pnew[r][c] = dotRows3(temp[r], Phi[c]);
       Pnew[r][c] += temp[r][c + 3] * Phi[c][c + 3];
     }
     for (int c = 3; c < 6; ++c) Pnew[r][c] = temp[r][c];
@@ -173,7 +194,8 @@ bool Mekf6::updateAccel(const Vec3& accel_g) {
   diag_.accel_norm_g = a_norm;
   if (!std::isfinite(a_norm) || a_norm < 0.2f) return false;
 
-  const Vec3 z = normalized(accel_g);
+  // Reuse the norm already checked above, retaining component-wise division.
+  const Vec3 z{accel_g.x / a_norm, accel_g.y / a_norm, accel_g.z / a_norm};
   const Vec3 h = normalized(predictedSpecificForceUpBody(q_));
   const float mag_err = std::fabs(a_norm - 1.0f);
   const float cos_angle = clampf(dot(z, h), -1.0f, 1.0f);
@@ -187,18 +209,15 @@ bool Mekf6::updateAccel(const Vec3& accel_g) {
   diag_.accel_confidence = confidence;
   if (confidence < cfg_.accel_min_confidence) return false;
 
-  float H[3][6]{};
-  float Htheta[3][3];
-  skew(h, Htheta);
-  for (int r = 0; r < 3; ++r)
-    for (int c = 0; c < 3; ++c) H[r][c] = Htheta[r][c];
+  float H[3][3];
+  skew(h, H);
   const float y[3] = {z.x - h.x, z.y - h.y, z.z - h.z};
 
   float PHt[6][3]{};
   // H = [ skew(h), 0 ]; bias columns are identically zero.
   for (int r = 0; r < 6; ++r)
     for (int c = 0; c < 3; ++c)
-      for (int k = 0; k < 3; ++k) PHt[r][c] += P_[r][k] * H[c][k];
+      PHt[r][c] = dotRows3(P_[r], H[c]);
 
   const float base_r = cfg_.accel_direction_noise_std * cfg_.accel_direction_noise_std;
   const float safe_conf = std::max(confidence, cfg_.accel_min_confidence);
@@ -206,7 +225,7 @@ bool Mekf6::updateAccel(const Vec3& accel_g) {
   float S[3][3]{};
   for (int r = 0; r < 3; ++r) {
     for (int c = 0; c < 3; ++c) {
-      for (int k = 0; k < 3; ++k) S[r][c] += H[r][k] * PHt[k][c];
+      S[r][c] = dotColumn3(H[r], PHt, c);
       if (r == c) S[r][c] += r_eff;
     }
   }
@@ -216,32 +235,43 @@ bool Mekf6::updateAccel(const Vec3& accel_g) {
   float K[6][3]{};
   for (int r = 0; r < 6; ++r)
     for (int c = 0; c < 3; ++c)
-      for (int k = 0; k < 3; ++k) K[r][c] += PHt[r][k] * Sinv[k][c];
+      K[r][c] = dotColumn3(PHt[r], Sinv, c);
 
   float dx[6]{};
   for (int r = 0; r < 6; ++r)
-    for (int k = 0; k < 3; ++k) dx[r] += K[r][k] * y[k];
+    dx[r] = dotRows3(K[r], y);
 
   // Joseph-form covariance update.
   float A[6][6]{};
   for (int i = 0; i < 6; ++i) A[i][i] = 1.0f;
-  for (int r = 0; r < 6; ++r)
-    for (int c = 0; c < 3; ++c)
-      for (int k = 0; k < 3; ++k) A[r][c] -= K[r][k] * H[k][c];
+  for (int r = 0; r < 6; ++r) {
+    for (int c = 0; c < 3; ++c) {
+      A[r][c] -= K[r][0] * H[0][c];
+      A[r][c] -= K[r][1] * H[1][c];
+      A[r][c] -= K[r][2] * H[2][c];
+    }
+  }
   float AP[6][6]{}, Pj[6][6]{};
   // A = [ A00, 0 ; A10, I ]. Keep Joseph form, all cross covariance,
   // and the same addition order; only omit known zeros and identity products.
   for (int r = 0; r < 6; ++r) {
     for (int c = 0; c < 6; ++c) {
-      for (int k = 0; k < 3; ++k) AP[r][c] += A[r][k] * P_[k][c];
+      AP[r][c] = dotColumn3(A[r], P_, c);
       if (r >= 3) AP[r][c] += P_[r][c];
     }
   }
+  // Each r_eff*K[r][k] is identical across the six output columns. Hoist
+  // these 18 products, saving 90 multiplies without changing Joseph form.
+  float KR[6][3];
+  for (int r = 0; r < 6; ++r)
+    for (int k = 0; k < 3; ++k) KR[r][k] = r_eff * K[r][k];
   for (int r = 0; r < 6; ++r) {
     for (int c = 0; c < 6; ++c) {
-      for (int k = 0; k < 3; ++k) Pj[r][c] += AP[r][k] * A[c][k];
+      Pj[r][c] = dotRows3(AP[r], A[c]);
       if (c >= 3) Pj[r][c] += AP[r][c];
-      for (int k = 0; k < 3; ++k) Pj[r][c] += r_eff * K[r][k] * K[c][k];
+      Pj[r][c] += KR[r][0] * K[c][0];
+      Pj[r][c] += KR[r][1] * K[c][1];
+      Pj[r][c] += KR[r][2] * K[c][2];
     }
   }
   std::memcpy(P_, Pj, sizeof(P_));
@@ -268,12 +298,12 @@ void Mekf6::applyResetJacobian(const Vec3& dtheta) {
   // G = [ I-0.5*skew(dtheta), 0 ; 0, I ].
   for (int r = 0; r < 3; ++r)
     for (int c = 0; c < 6; ++c)
-      for (int k = 0; k < 3; ++k) GP[r][c] += G[r][k] * P_[k][c];
+      GP[r][c] = dotColumn3(G[r], P_, c);
   for (int r = 3; r < 6; ++r)
     for (int c = 0; c < 6; ++c) GP[r][c] = P_[r][c];
   for (int r = 0; r < 6; ++r) {
     for (int c = 0; c < 3; ++c)
-      for (int k = 0; k < 3; ++k) out[r][c] += GP[r][k] * G[c][k];
+      out[r][c] = dotRows3(GP[r], G[c]);
     for (int c = 3; c < 6; ++c) out[r][c] = GP[r][c];
   }
   std::memcpy(P_, out, sizeof(P_));

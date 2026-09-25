@@ -1,4 +1,5 @@
 #include "experiment_runner.h"
+#include "log_quantization.h"
 #include "control_work_profile.h"
 #include "rate_baseline_correction.h"
 #include "previous_peak_control_correction.h"
@@ -239,14 +240,24 @@ void ExperimentRunner::updateFilterSeries(const ImuReading& r) {
           status_.gyro_bias_x_dps, status_.gyro_bias_y_dps, status_.gyro_bias_z_dps));
     }
   }
-  if (mekf_initialized_ && mekf_.predict(mekf_gyro, dt_s)) {
+  bool predicted = false;
+  if (mekf_initialized_) {
+    control_work::Scope predict_work(control_work::Stage::MekfPredict,
+        status_.state == ExperimentState::RUNNING_BATCH_SWEEP, status_.pulse_active);
+    predicted = mekf_.predict(mekf_gyro, dt_s);
+  }
+  if (predicted) {
     posterior_updated = true;
     if (accel_is_new_for_filter) {
+      control_work::Scope accel_work(control_work::Stage::MekfAccel,
+          status_.state == ExperimentState::RUNNING_BATCH_SWEEP, status_.pulse_active);
       mekf_.updateAccel(mekf_accel);
       last_mekf_accel_sequence_ = r.accel_sequence;
     }
   }
   if (posterior_updated) {
+    control_work::Scope attitude_work(control_work::Stage::MekfAttitude,
+        status_.state == ExperimentState::RUNNING_BATCH_SWEEP, status_.pulse_active);
     status_.mekf_attitude = captureMekfAttitude(mekf_, mekf_initialized_,
         r.last_gyro_update_us, mekf_accel, mekf_gyro, r.last_accel_update_us);
   }
@@ -359,6 +370,8 @@ void ExperimentRunner::updateFilterSeries(const ImuReading& r) {
       beta_smooth_[i] = beta_target;
     }
     if (accel_is_new_for_filter) {
+      control_work::Scope madgwick_work(control_work::Stage::Madgwick,
+          status_.state == ExperimentState::RUNNING_BATCH_SWEEP, status_.pulse_active);
       if (!v46_mekf_dynamic_compare) {
         filter_dynamic_raw_[i].setBeta(beta_smooth_[i]);
         filter_dynamic_raw_[i].updateIMU(r.gx_dps, r.gy_dps, r.gz_dps, r.ax_g, r.ay_g, r.az_g);
@@ -5921,27 +5934,16 @@ float ExperimentRunner::pitchBiasFromGyroBias() const {
 }
 
 int16_t ExperimentRunner::centi(float value) const {
-  if (!isfinite(value)) return LOG_NAN_I16;
-  value *= 100.0f;
-  if (value > 32767.0f) return 32767;
-  if (value < -32767.0f) return -32767;
-  return static_cast<int16_t>(lroundf(value));
+  static_assert(LOG_NAN_I16 == log_quantization::kMissing, "RWLOG missing value");
+  return log_quantization::scaledI16(value, 100.0f);
 }
 
 int16_t ExperimentRunner::milli(float value) const {
-  if (!isfinite(value)) return LOG_NAN_I16;
-  value *= 1000.0f;
-  if (value > 32767.0f) return 32767;
-  if (value < -32767.0f) return -32767;
-  return static_cast<int16_t>(lroundf(value));
+  return log_quantization::scaledI16(value, 1000.0f);
 }
 
 int16_t ExperimentRunner::betaScaled(float value) const {
-  if (!isfinite(value)) return LOG_NAN_I16;
-  value *= 10000.0f;
-  if (value > 32767.0f) return 32767;
-  if (value < -32767.0f) return -32767;
-  return static_cast<int16_t>(lroundf(value));
+  return log_quantization::scaledI16(value, 10000.0f);
 }
 
 const char* ExperimentRunner::stateName() const {
@@ -5958,8 +5960,6 @@ const char* ExperimentRunner::stateName() const {
   }
   return "UNKNOWN";
 }
-
-
 
 
 

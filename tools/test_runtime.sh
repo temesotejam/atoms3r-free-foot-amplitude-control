@@ -24,6 +24,8 @@ g++ -std=c++17 -O2 tools/test_mekf_host.cpp src/mekf6.cpp -o /tmp/test_mekf
 /tmp/test_mekf
 g++ -std=c++17 -O2 -Wall -Wextra -Werror tools/test_mekf_sparse_equivalence.cpp src/mekf6.cpp tools/fixtures/mekf6_dense_reference_0478.cpp -o /tmp/test_mekf_sparse
 /tmp/test_mekf_sparse
+g++ -std=c++17 -Os -Wall -Wextra -Werror tools/test_log_quantization.cpp -o /tmp/test_log_quantization
+/tmp/test_log_quantization
 g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_mekf_diagnostics.cpp src/mekf6.cpp -o /tmp/test_mekf_diagnostics
 /tmp/test_mekf_diagnostics /tmp/mekf-diagnostics-fixture.json
 g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_control_work_profile.cpp src/control_work_profile.cpp -o /tmp/test_control_work

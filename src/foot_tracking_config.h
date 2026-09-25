@@ -76,15 +76,24 @@ static constexpr float kFootCalibrationATiltedX = 40.95084f;
 static constexpr float kFootCalibrationBUprightX = 169.55292f;
 static constexpr float kFootCalibrationBTiltedX = 39.15524f;
 
-// v1 support extended by the 0.47.4 hardware observations, sequences 694/781:
-// right X=41.7336, left X=40.3504. Floor the observed minimum minus 1 px.
-// Accepted pixel bounds are distinct from the v2 fit anchors above.
-// Keep the original support explicit; extrapolation accuracy is not validated.
+// Accepted support from identity-v2 observations through the successful 0.47.9
+// free-foot run, including the fixed-pose comparison's individual trace frames.
+// Union the previous support with floor(min-1 px) / ceil(max+1 px).
+// See tools/fixtures/foot_range_20260925.json for source hashes and envelopes.
+// These bounds describe observed pixels, not new independent angle references;
+// retain the fitted scales and per-boot zeros above without clipping the angle.
 static constexpr float kFootAngleAOriginalMinCalXPx = 42.0f;
+static constexpr float kFootAngleAOriginalMaxCalXPx = 173.0f;
 static constexpr float kFootAngleBOriginalMinCalXPx = 43.5f;
-static constexpr float kFootAngleAMinCalXPx = 40.0f;
-static constexpr float kFootAngleAMaxCalXPx = 173.0f;
-static constexpr float kFootAngleBMinCalXPx = 39.0f;
+static constexpr float kFootAngleBOriginalMaxCalXPx = 177.5f;
+static constexpr float kFootObservedAMinXPx = 40.7181f;
+static constexpr float kFootObservedAMaxXPx = 180.6437f;
+static constexpr float kFootObservedBMinXPx = 38.7209f;
+static constexpr float kFootObservedBMaxXPx = 173.52403f;
+static constexpr float kFootObservedMarginPx = 1.0f;
+static constexpr float kFootAngleAMinCalXPx = 39.0f;
+static constexpr float kFootAngleAMaxCalXPx = 182.0f;
+static constexpr float kFootAngleBMinCalXPx = 37.0f;
 static constexpr float kFootAngleBMaxCalXPx = 177.5f;
 
 // IMU diagnostics retained to validate body motion independently.

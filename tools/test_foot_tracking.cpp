@@ -140,11 +140,22 @@ static void hardwareRangeReplay(){
   }
   for(int side=0;side<2;++side){
     WhiteMarkerObservation m;m.id=side;m.valid=true;
-    const float lo=side==0?40:39,hi=side==0?173:177.5f;
+    const float lo=side==0?39:37,hi=side==0?182:177.5f;
     for(float x:{lo,hi}){m.center_x_px=x;assert(estimateFootAngle(m,170,true).in_calibration_range);}
     for(float x:{lo-.01f,hi+.01f,35.f}){m.center_x_px=x;assert(!estimateFootAngle(m,170,true).in_calibration_range);}
   }
-  std::cout<<"hardware frames 694/781: accepted pixel range preserved with v2 angle calibration PASS\n";
+  // Include extrema from the pose trace, the hour-long observation and the
+  // free-foot run. Endpoints enclose every valid source observation.
+  const float observed[][2]={{40.7181f,38.7209f},{180.6437f,173.52403f},
+                            {174.1771f,172.9752f},{173.67436f,173.48143f}};
+  for(const auto& row:observed)for(int side=0;side<2;++side){
+    WhiteMarkerObservation m;m.id=side;m.valid=true;m.center_x_px=row[side];
+    const auto estimate=estimateFootAngle(m,side==0?172.40312f:171.65009f,true);
+    assert(estimate.valid&&estimate.in_calibration_range);
+    assert(estimate.angle_deg==estimate.deg_per_px*(estimate.zero_x_px-row[side]));
+    m.valid=false;assert(!estimateFootAngle(m,170,true).valid);
+  }
+  std::cout<<"All supplied identity-v2 observation envelopes accepted without changing slopes, zero or invalid-frame behavior PASS\n";
 }
 static void fixedPoseCalibrationReplay(){
   // Means from the supplied 0.47.6 file; first two rows fit, last two held out.
