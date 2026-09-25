@@ -1,6 +1,7 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.12 filter path optimization
+# Current integrated build: Free-foot Runtime V2 / 0.47.13 log encoder optimization
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
+[0.47.12 hardware result and log encoder follow-up](docs/LOG_ENCODER_TIMING_04713.md) ·
 [0.47.11 hardware result and filter timing follow-up](docs/FILTER_TIMING_04712.md) ·
 [0.47.10 hardware result and deferred attitude display](docs/DEFERRED_ATTITUDE_TIMING_04711.md) ·
 [Successful free-foot run and timing follow-up](docs/FREEFOOT_SUCCESS_TIMING_04710.md) ·
@@ -42,6 +43,21 @@ and attitude extraction from 156.681 to 105.037 us. However, total 2.5 ms overru
 increased to 1,127/12,145 (9.28%), despite the maximum falling to 6,235 us.
 This is partial work reduction, not completion of the real-time target.
 
+**Version 0.47.12 again completed the 30-second integrated run.** Acquisition and
+delivery audits both counted 12,145 samples, with no queue drops, sequence gaps,
+or fault. Right/left feet were valid in 287/293 and 293/293 measurement frames;
+no detected position was outside support. Deadline overruns fell to 806/12,145
+(6.64%), and the completion mean to 1,417.280 us, but the maximum rose to 7,170 us.
+The pulse-active/fresh-accel group had 312/1,293 overruns (24.13%). Partial timing
+improvement is observed; the strict deadline and rare long delays remain unresolved.
+
+Version 0.47.13 extracts synchronous log encoding into a speed-optimized numerical
+function, inlining the unchanged exact int16 conversion with constant scales.
+The full 258-byte output matches the frozen previous row builder in 24,000 cases.
+Logging content/rate, snapshot/reference-clock ordering, stop/seal behavior and
+CRC exports remain the same. Nested encode/store timing separates numeric work
+from PSRAM writes. Hardware improvement still requires the next measured run.
+
 Version 0.47.12 computes comparison Madgwick pitch directly from its public
 quaternion using the exact upstream 2.4.0 expression, avoiding unused roll/yaw
 and gravity calculations. The MEKF numerical file uses GCC O2 without fast-math;
@@ -50,7 +66,7 @@ the existing completion counters by pulse state and fresh acceleration, since
 workload composition also changed between runs. Pinned upstream getter comparisons,
 full MEKF differential tests under both host optimization levels, and the existing
 runtime regression suite pass. Installed Madgwick sources are checked during the
-target build. Timing improvement on ESP32 still needs the next hardware run.
+target build. The subsequent hardware result and remaining work are described above.
 
 Version 0.47.11 retained the full posterior quaternion on every filter update,
 extracts only control pitch in the control path, and derives all three display

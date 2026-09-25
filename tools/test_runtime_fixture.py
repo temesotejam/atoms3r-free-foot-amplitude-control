@@ -5,6 +5,9 @@ import csv, json, struct, tempfile
 import convert_rwlog_to_csv as converter
 work=json.loads(Path('/tmp/control-work-fixture.json').read_text())
 assert work['pulse_on']['log_row']==dict(count=1,max_us=251,sum_us=251,mean_us=251)
+assert work['pulse_on']['log_encode']['mean_us']==100
+assert work['pulse_on']['log_store']['mean_us']==151
+assert work['log_substages']=='encode_includes_beta_ceilings;store_is_synchronous_psram_addSample'
 assert work['pulse_off']['filter']['mean_us']==700
 assert work['pulse_on']['filter']['count']==0
 diagnostics=json.loads(Path('/tmp/mekf-diagnostics-fixture.json').read_text(),
@@ -64,7 +67,7 @@ header = converter.parse_header(data)
 metadata = json.loads(data[110:110+header['metadata_json_size']], parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
 assert metadata['metadata_json_final_bytes'] == header['metadata_json_size']
 assert not metadata['metadata_event_detail_truncated']
-assert metadata['firmware_revision']=='0.47.12-filter-path-optimization'
+assert metadata['firmware_revision']=='0.47.13-log-encoder-optimization'
 assert metadata['terminal_state']['state']=='ESTOP' and metadata['terminal_state']['motor_cmd_mA']==0
 assert metadata['terminal_state']['actual_current_mA']==-7 and metadata['terminal_state']['heartbeat_us']==123456
 assert metadata['terminal_state']['last_error']=='imu_acquisition_overflow_backlog_or_stale'

@@ -11,10 +11,16 @@ int main(int argc, char** argv) {
   using namespace control_work;
   profile.reset();
   host_us = UINT32_MAX - 100;
-  { Scope work(Stage::LogRow, true, true); host_us = 150; }
+  {
+    Scope work(Stage::LogRow, true, true);
+    { Scope encode(Stage::LogEncode, true, true); host_us += 100; }
+    { Scope store(Stage::LogStore, true, true); host_us = 150; }
+  }
   { Scope work(Stage::Filter, true, false); host_us += 700; }
   { Scope idle(Stage::Filter, false, true); host_us += 900; }
   assert(profile.stages[1][static_cast<uint8_t>(Stage::LogRow)].sum_us == 251);
+  assert(profile.stages[1][static_cast<uint8_t>(Stage::LogEncode)].sum_us == 100);
+  assert(profile.stages[1][static_cast<uint8_t>(Stage::LogStore)].sum_us == 151);
   assert(profile.stages[0][static_cast<uint8_t>(Stage::Filter)].max_us == 700);
   assert(profile.stages[1][static_cast<uint8_t>(Stage::Filter)].count == 0);
   std::ofstream(argv[1]) << profile.json().c_str();

@@ -8,7 +8,7 @@ namespace control_work {
 enum class Stage : uint8_t {
   Owner, Service, ImuDelivery, PoseGuide, Filter, AngleDisplay, CurrentRoll,
   Motion, LogRow, Snapshot, Publish, MekfPredict, MekfAccel, MekfAttitude,
-  Madgwick, Count
+  Madgwick, LogEncode, LogStore, Count
 };
 struct Stat {
   uint32_t count = 0, max_us = 0;
