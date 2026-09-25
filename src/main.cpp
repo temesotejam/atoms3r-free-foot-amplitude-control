@@ -121,6 +121,8 @@ static bool controlStep(void*) {
   }
   const bool measurement = runner.status().state == ExperimentState::RUNNING_BATCH_SWEEP;
   const bool fresh = r.gyro_fresh;
+  const bool pulse_at_runner_entry = runner.status().pulse_active;
+  const bool accel_fresh = r.accel_fresh;
   const uint32_t sample_us = r.last_gyro_update_us;
   RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::ControlRunner);
   const uint32_t runner_start = micros(); runner.update();
@@ -128,7 +130,8 @@ static bool controlStep(void*) {
   if (!measurement_epoch_us && runner.status().state == ExperimentState::RUNNING_BATCH_SWEEP)
     measurement_epoch_us = esp_timer_get_time() - static_cast<uint64_t>(runner.status().measure_elapsed_ms) * 1000;
   if (was_running || runner.running()) {
-    run_control.recordSampleCompletion(measurement, fresh, sample_us, done, runner_us);
+    run_control.recordSampleCompletion(measurement, fresh, sample_us, done, runner_us,
+        pulse_at_runner_entry, accel_fresh);
     runner.recordTimingProbeLoop(imu_us, runner_us, done - start);
     run_control.recordStep(start, imu_us, runner_us, done - start);
   }

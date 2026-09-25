@@ -1,6 +1,7 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.11 deferred attitude display
+# Current integrated build: Free-foot Runtime V2 / 0.47.12 filter path optimization
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
+[0.47.11 hardware result and filter timing follow-up](docs/FILTER_TIMING_04712.md) ·
 [0.47.10 hardware result and deferred attitude display](docs/DEFERRED_ATTITUDE_TIMING_04711.md) ·
 [Successful free-foot run and timing follow-up](docs/FREEFOOT_SUCCESS_TIMING_04710.md) ·
 [Follow-up ESTOP and MEKF work reduction](docs/ESTOP_WORK_REDUCTION_0479.md) ·
@@ -33,7 +34,25 @@ left 285/286 valid during measurement). However, the 2.5 ms overruns were
 improvement. No queue drops or delivery sequence gaps were recorded; acquired
 and delivered audit counts differ by one at the measurement boundary.
 
-Version 0.47.11 retains the full posterior quaternion on every filter update,
+**Version 0.47.11 again finished the 30-second integrated run.** During measurement,
+right/left detections were 291/293 and 293/293, with no detected observation outside
+support. The expanded right support accepted 107 valid positions above the former
+173-pixel upper bound. The weighted filter mean fell from 779.529 to 730.169 us,
+and attitude extraction from 156.681 to 105.037 us. However, total 2.5 ms overruns
+increased to 1,127/12,145 (9.28%), despite the maximum falling to 6,235 us.
+This is partial work reduction, not completion of the real-time target.
+
+Version 0.47.12 computes comparison Madgwick pitch directly from its public
+quaternion using the exact upstream 2.4.0 expression, avoiding unused roll/yaw
+and gravity calculations. The MEKF numerical file uses GCC O2 without fast-math;
+the full estimator and filter rates remain unchanged. Input cohorts now partition
+the existing completion counters by pulse state and fresh acceleration, since
+workload composition also changed between runs. Pinned upstream getter comparisons,
+full MEKF differential tests under both host optimization levels, and the existing
+runtime regression suite pass. Installed Madgwick sources are checked during the
+target build. Timing improvement on ESP32 still needs the next hardware run.
+
+Version 0.47.11 retained the full posterior quaternion on every filter update,
 extracts only control pitch in the control path, and derives all three display
 angles from the copied quaternion when serializing diagnostics. Two `atan2`
 calls per control update are removed without lowering the MEKF update rate or
@@ -41,7 +60,7 @@ dropping roll/yaw diagnostics. Frozen camera snapshots keep their own attitude
 and timestamp. Control pitch and display axes match the frozen reference,
 including normalization and pitch near +/-90 degrees. The full covariance,
 other filter work, control limits, logging and deadline endpoints are unchanged.
-Hardware timing improvement still requires a new run.
+The subsequent hardware result and remaining work are described above.
 
 Version 0.47.10 extended accepted marker support to right [39,182] and left
 [37,177.5] pixels, covering all supplied identity-v2 observations with at least

@@ -3,6 +3,15 @@
 #include <algorithm>
 #include <cstring>
 
+// This small numerical kernel is deadline-sensitive. Favor execution speed
+// over the platform's default -Os without enabling algebraic reassociation,
+// approximate math, or finite-only assumptions. Keep the rest of the build's
+// optimization policy unchanged; native differential tests also run with -Os.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC push_options
+#pragma GCC optimize ("O2", "no-fast-math")
+#endif
+
 namespace mekf6 {
 
 namespace {
@@ -358,3 +367,7 @@ EulerDeg Mekf6::eulerDegFromQuaternion(const Quaternion& quaternion) {
 }
 
 }  // namespace mekf6
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC pop_options
+#endif

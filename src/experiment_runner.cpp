@@ -1,5 +1,6 @@
 #include "experiment_runner.h"
 #include "log_quantization.h"
+#include "madgwick_pitch.h"
 #include "control_work_profile.h"
 #include "rate_baseline_correction.h"
 #include "previous_peak_control_correction.h"
@@ -298,8 +299,8 @@ void ExperimentRunner::updateFilterSeries(const ImuReading& r) {
   if (!v46_mekf_dynamic_compare && accel_is_new_for_filter) {
     filter_beta1_raw_.updateIMU(r.gx_dps, r.gy_dps, r.gz_dps, r.ax_g, r.ay_g, r.az_g);
     filter_beta1_bias_.updateIMU(r.gx_dps - gx_bias, r.gy_dps - gy_bias, r.gz_dps - gz_bias, r.ax_g, r.ay_g, r.az_g);
-    raw_beta1_raw_pitch_deg_ = Config::PITCH_SIGN * filter_beta1_raw_.getPitch();
-    raw_beta1_bias_pitch_deg_ = Config::PITCH_SIGN * filter_beta1_bias_.getPitch();
+    raw_beta1_raw_pitch_deg_ = Config::PITCH_SIGN * madgwick_pitch::degrees(filter_beta1_raw_);
+    raw_beta1_bias_pitch_deg_ = Config::PITCH_SIGN * madgwick_pitch::degrees(filter_beta1_bias_);
   } else if (v46_mekf_dynamic_compare) {
     raw_beta1_raw_pitch_deg_ = NAN;
     raw_beta1_bias_pitch_deg_ = NAN;
@@ -375,14 +376,14 @@ void ExperimentRunner::updateFilterSeries(const ImuReading& r) {
       if (!v46_mekf_dynamic_compare) {
         filter_dynamic_raw_[i].setBeta(beta_smooth_[i]);
         filter_dynamic_raw_[i].updateIMU(r.gx_dps, r.gy_dps, r.gz_dps, r.ax_g, r.ay_g, r.az_g);
-        raw_dynamic_raw_pitch_deg_[i] = Config::PITCH_SIGN * filter_dynamic_raw_[i].getPitch();
+        raw_dynamic_raw_pitch_deg_[i] = Config::PITCH_SIGN * madgwick_pitch::degrees(filter_dynamic_raw_[i]);
       } else {
         raw_dynamic_raw_pitch_deg_[i] = NAN;
       }
       filter_dynamic_bias_[i].setBeta(beta_smooth_[i]);
       filter_dynamic_bias_[i].updateIMU(r.gx_dps - gx_bias, r.gy_dps - gy_bias, r.gz_dps - gz_bias,
                                         r.ax_g, r.ay_g, r.az_g);
-      raw_dynamic_bias_pitch_deg_[i] = Config::PITCH_SIGN * filter_dynamic_bias_[i].getPitch();
+      raw_dynamic_bias_pitch_deg_[i] = Config::PITCH_SIGN * madgwick_pitch::degrees(filter_dynamic_bias_[i]);
     } else if (v46_mekf_dynamic_compare) {
       raw_dynamic_raw_pitch_deg_[i] = NAN;
     }

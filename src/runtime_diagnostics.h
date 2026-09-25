@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-#define RUNTIME_VERSION "0.47.11-deferred-attitude-display"
+#define RUNTIME_VERSION "0.47.12-filter-path-optimization"
 
 namespace RuntimeDiag {
 enum class Lane : uint32_t { Control, Imu, Camera, Http, Roller, Export, Count };

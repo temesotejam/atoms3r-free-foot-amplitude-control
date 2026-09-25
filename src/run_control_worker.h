@@ -57,6 +57,9 @@ class RunControlWorker {
     int32_t observed_core = -1;
     uint32_t observed_priority = 0;
     timing_deadline::Counter sample_completion, runner_work;
+    // Same completion endpoint and budget as the total, partitioned by inputs
+    // captured before runner.update(). Exactly one cohort per fresh gyro.
+    timing_deadline::Counter input_cohorts[2][2]; // pulse, fresh accel
     Timing recent[16] = {};
   };
   // Small lock-bounded view used by Phase 1N. It intentionally exposes only
@@ -184,11 +187,14 @@ class RunControlWorker {
     portEXIT_CRITICAL(&mux_);
   }
   void recordSampleCompletion(bool measurement, bool fresh, uint32_t sample_us,
-                              uint32_t done_us, uint32_t runner_us) {
+                              uint32_t done_us, uint32_t runner_us,
+                              bool pulse_at_entry, bool accel_fresh) {
     if (!measurement || !fresh) return;
     portENTER_CRITICAL(&mux_);
     audit_.sample_completion.add(static_cast<uint32_t>(done_us - sample_us), 2500);
     audit_.runner_work.add(runner_us, 2500);
+    audit_.input_cohorts[pulse_at_entry ? 1 : 0][accel_fresh ? 1 : 0].add(
+        static_cast<uint32_t>(done_us - sample_us), 2500);
     portEXIT_CRITICAL(&mux_);
   }
   String diagnosticsJson() const {
@@ -215,8 +221,24 @@ class RunControlWorker {
         static_cast<double>(a.sample_completion.sum) / a.sample_completion.count : 0.0, 3);
     json += ",\"runner_over_budget\":" + String(a.runner_work.over);
     json += ",\"runner_max_us\":" + String(a.runner_work.maximum);
+    json += ",\"runner_mean_us\":" + String(a.runner_work.count ?
+        static_cast<double>(a.runner_work.sum) / a.runner_work.count : 0.0, 3);
     json += ",\"all_observed_within_budget\":" + String(a.sample_completion.passed() ? "true" : "false");
     json += ",\"scope\":\"RUNNING_fresh_gyro_only;host_acquisition_to_runner_return;not_sensor_capture_to_motor_apply\"}";
+    json += ",\"deadline_input_cohorts\":{\"revision\":\"input_partition_04712\"";
+    json += ",\"classification\":\"pulse_active_before_runner;accel_fresh_at_delivery\",\"budget_us\":2500,\"groups\":[";
+    for (uint8_t pulse = 0; pulse < 2; ++pulse) {
+      for (uint8_t accel = 0; accel < 2; ++accel) {
+        const auto& c = a.input_cohorts[pulse][accel];
+        if (pulse || accel) json += ",";
+        json += "{\"pulse_active\":" + String(pulse ? "true" : "false");
+        json += ",\"accel_fresh\":" + String(accel ? "true" : "false");
+        json += ",\"count\":" + String(c.count) + ",\"over_budget\":" + String(c.over);
+        json += ",\"max_us\":" + String(c.maximum);
+        json += ",\"mean_us\":" + String(c.count ? static_cast<double>(c.sum) / c.count : 0.0, 3) + "}";
+      }
+    }
+    json += "]}";
     json += ",\"recent_steps\":[";
     const uint32_t count = a.steps < 16 ? a.steps : 16;
     for (uint32_t i = 0; i < count; ++i) {

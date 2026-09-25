@@ -1,6 +1,6 @@
 {
   "name": "AtomS3R Free-foot Runtime V2",
-  "version": "0.47.11-deferred-attitude-display",
+  "version": "0.47.12-filter-path-optimization",
   "builds": [
     {
       "chipFamily": "ESP32-S3",

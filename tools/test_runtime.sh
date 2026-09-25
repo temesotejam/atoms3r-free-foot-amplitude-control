@@ -24,6 +24,11 @@ g++ -std=c++17 -O2 tools/test_mekf_host.cpp src/mekf6.cpp -o /tmp/test_mekf
 /tmp/test_mekf
 g++ -std=c++17 -O2 -Wall -Wextra -Werror tools/test_mekf_sparse_equivalence.cpp src/mekf6.cpp tools/fixtures/mekf6_dense_reference_0478.cpp -o /tmp/test_mekf_sparse
 /tmp/test_mekf_sparse
+g++ -std=c++17 -Os -Wall -Wextra -Werror tools/test_mekf_sparse_equivalence.cpp src/mekf6.cpp tools/fixtures/mekf6_dense_reference_0478.cpp -o /tmp/test_mekf_speed_policy
+/tmp/test_mekf_speed_policy
+python3 tools/verify_madgwick_dependency.py
+g++ -std=c++17 -Os -Wall -Wextra -Werror tools/test_madgwick_pitch.cpp tools/fixtures/adafruit_ahrs_2_4_0/Adafruit_AHRS_Madgwick.cpp -o /tmp/test_madgwick_pitch
+/tmp/test_madgwick_pitch
 g++ -std=c++17 -Os -Wall -Wextra -Werror tools/test_log_quantization.cpp -o /tmp/test_log_quantization
 /tmp/test_log_quantization
 g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_mekf_diagnostics.cpp src/mekf6.cpp -o /tmp/test_mekf_diagnostics
