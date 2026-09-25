@@ -1,6 +1,6 @@
 {
   "name": "AtomS3R Free-foot Runtime V2",
-  "version": "0.47.10-range-timing-optimization",
+  "version": "0.47.11-deferred-attitude-display",
   "builds": [
     {
       "chipFamily": "ESP32-S3",

@@ -335,7 +335,17 @@ EulerDeg Mekf6::predictEulerDeg(const Vec3& gyro_rad_s, float dt_s) const {
 }
 
 EulerDeg Mekf6::eulerDeg() const {
-  const Quaternion q = quatNormalized(q_);
+  return eulerDegFromQuaternion(q_);
+}
+
+float Mekf6::pitchDegFromQuaternion(const Quaternion& quaternion) {
+  const Quaternion q = quatNormalized(quaternion);
+  const float sinp = clampf(2.0f * (q.w * q.y - q.z * q.x), -1.0f, 1.0f);
+  return radToDeg(std::asin(sinp));
+}
+
+EulerDeg Mekf6::eulerDegFromQuaternion(const Quaternion& quaternion) {
+  const Quaternion q = quatNormalized(quaternion);
   const float sinr_cosp = 2.0f * (q.w * q.x + q.y * q.z);
   const float cosr_cosp = 1.0f - 2.0f * (q.x * q.x + q.y * q.y);
   const float roll = std::atan2(sinr_cosp, cosr_cosp);

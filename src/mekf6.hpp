@@ -67,6 +67,10 @@ class Mekf6 {
   bool updateAccel(const Vec3& accel_g);
   Quaternion quaternion() const { return q_; }
   EulerDeg eulerDeg() const;
+  // Pure conversions also work on a copied posterior. The control owner only
+  // needs pitch; HTTP can derive all display axes without reading this filter.
+  static float pitchDegFromQuaternion(const Quaternion& quaternion);
+  static EulerDeg eulerDegFromQuaternion(const Quaternion& quaternion);
   EulerDeg predictEulerDeg(const Vec3& gyro_rad_s, float dt_s) const;
   Diagnostics diagnostics() const { return diag_; }
 

@@ -1,6 +1,7 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.10 range and timing optimization
+# Current integrated build: Free-foot Runtime V2 / 0.47.11 deferred attitude display
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
+[0.47.10 hardware result and deferred attitude display](docs/DEFERRED_ATTITUDE_TIMING_04711.md) ·
 [Successful free-foot run and timing follow-up](docs/FREEFOOT_SUCCESS_TIMING_04710.md) ·
 [Follow-up ESTOP and MEKF work reduction](docs/ESTOP_WORK_REDUCTION_0479.md) ·
 [ESTOP analysis and control work profiling](docs/ESTOP_BACKLOG_0478.md) ·
@@ -25,14 +26,31 @@ loss; the observed amplitude asymmetry is an improvement topic, not a failure of
 this integration milestone. Strict 2.5 ms processing deadlines remain unmet in
 947/12,144 completions (maximum 6,884 us).
 
-Version 0.47.10 extends accepted marker support to right [39,182] and left
+**Version 0.47.10 also finished 30 seconds with MEKF, camera and actuation.**
+All detected feet were within the configured support (right 282/286 valid,
+left 285/286 valid during measurement). However, the 2.5 ms overruns were
+1,007/12,145 (8.29%, maximum 7,589 us), so this hardware run did not show timing
+improvement. No queue drops or delivery sequence gaps were recorded; acquired
+and delivered audit counts differ by one at the measurement boundary.
+
+Version 0.47.11 retains the full posterior quaternion on every filter update,
+extracts only control pitch in the control path, and derives all three display
+angles from the copied quaternion when serializing diagnostics. Two `atan2`
+calls per control update are removed without lowering the MEKF update rate or
+dropping roll/yaw diagnostics. Frozen camera snapshots keep their own attitude
+and timestamp. Control pitch and display axes match the frozen reference,
+including normalization and pitch near +/-90 degrees. The full covariance,
+other filter work, control limits, logging and deadline endpoints are unchanged.
+Hardware timing improvement still requires a new run.
+
+Version 0.47.10 extended accepted marker support to right [39,182] and left
 [37,177.5] pixels, covering all supplied identity-v2 observations with at least
 one pixel of margin. Scale coefficients and independent per-boot zeroing remain
 in use. MEKF fixed-size inner products are unrolled and identical Joseph factors
 are reused; bounded log quantization preserves the previous encoded integers.
 MEKF prediction, correction, attitude extraction and Madgwick comparison times
-are now separately recorded inside the filter profile. Real-time improvement
-of this new build needs the next hardware log; host tests are not deadline proof.
+are separately recorded inside the filter profile. The subsequent hardware
+result and next timing change are described above; host tests are not deadline proof.
 
 Version 0.47.9 followed another delivery-backlog ESTOP on 0.47.8 at 0.521 seconds.
 The added profile shows pulse-on filter updates averaging 1,007 us and control

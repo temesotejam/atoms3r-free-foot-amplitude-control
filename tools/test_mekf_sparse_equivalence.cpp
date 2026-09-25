@@ -36,12 +36,38 @@ static void same(const mekf6::Mekf6& a, const mekf6_dense_reference::Mekf6& b) {
   assert(da.accel_used==db.accel_used);
   auto ea=a.eulerDeg(); auto eb=b.eulerDeg();
   same(ea.roll,eb.roll); same(ea.pitch,eb.pitch); same(ea.yaw,eb.yaw);
+  same(mekf6::Mekf6::pitchDegFromQuaternion(qa),eb.pitch);
 }
 struct Input { float gx,gy,gz,ax,ay,az,dt; bool accel; };
 static uint32_t seed=45028066;
 static float noise() {
   seed=1664525U*seed+1013904223U;
   return static_cast<float>(seed>>8)/8388608.0f-1.0f;
+}
+
+static void copiedQuaternionConversions() {
+  mekf6_dense_reference::Mekf6 reference;
+  uint32_t cases = 0;
+  const auto check = [&](const mekf6::Quaternion& q) {
+    reference.q_ = {q.w, q.x, q.y, q.z};
+    const auto expected = reference.eulerDeg();
+    const auto display = mekf6::Mekf6::eulerDegFromQuaternion(q);
+    same(display.roll, expected.roll);
+    same(display.pitch, expected.pitch);
+    same(display.yaw, expected.yaw);
+    same(mekf6::Mekf6::pitchDegFromQuaternion(q), expected.pitch);
+    ++cases;
+  };
+  // Non-unit and sign-reversed snapshots must keep the previous normalization
+  // and clamp behavior, including zero/tiny norm and pitch near +/-90 degrees.
+  for(float pitch : {-90.0f,-89.999f,-30.0f,0.0f,30.0f,89.999f,90.0f}) {
+    for(float scale : {0.0f,1.0e-9f,0.5f,1.0f,1.01f,5.0f,-1.0f}) {
+      const float half=mekf6::degToRad(pitch)*0.5f;
+      check({scale*std::cos(half),0,scale*std::sin(half),0});
+    }
+  }
+  for(unsigned i=0;i<4096;++i) check({noise(),noise(),noise(),noise()});
+  std::printf("Copied-quaternion control pitch and all-axis display: %u normalization/pole/random cases exactly match frozen reference PASS\n",cases);
 }
 
 template<class Filter>
@@ -114,6 +140,7 @@ int main() {
     assert(a.predict({gx,gy,gz},0.0025f)==b.predict({gx,gy,gz},0.0025f)); same(a,b);
     assert(a.updateAccel({0.02f,-0.03f,0.999f})==b.updateAccel({0.02f,-0.03f,0.999f})); same(a,b);
   }
+  copiedQuaternionConversions();
   std::printf("MEKF dense/sparse exact finite-state equality: %u predictions, %u accel attempts (%u rejected), 128 full covariance cases, %llu scalar comparisons PASS\n",
       predictions,corrections,rejected,static_cast<unsigned long long>(checked));
   const double dense=benchmark<mekf6_dense_reference::Mekf6>(benchmark_inputs);

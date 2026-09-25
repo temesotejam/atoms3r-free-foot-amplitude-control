@@ -3,12 +3,13 @@
 #include "mekf6.hpp"
 
 // Copied by the exclusive control owner. HTTP never reads a live filter.
-// Euler angles and quaternion describe the same unprojected posterior in the
-// MEKF coordinate frame; none of the run/display pitch zeros are subtracted.
+// Preserve the complete unprojected posterior on every update. Only control
+// pitch is extracted here; HTTP derives roll/yaw from this copied quaternion.
+// None of the run/display pitch zeros are subtracted.
 struct MekfAttitudeSnapshot {
   bool valid = false;
   uint32_t sample_us = 0;
-  float roll_deg = NAN, pitch_deg = NAN, yaw_deg = NAN;
+  float pitch_deg = NAN;
   mekf6::Quaternion quaternion{NAN, NAN, NAN, NAN};
   uint32_t accel_sample_us = 0;
   mekf6::Vec3 accel_g{NAN, NAN, NAN}, gyro_rad_s{NAN, NAN, NAN};
@@ -23,21 +24,24 @@ inline MekfAttitudeSnapshot captureMekfAttitude(const mekf6::Mekf6& filter,
                                               uint32_t accel_sample_us = 0) {
   MekfAttitudeSnapshot out;
   if (!initialized) return out;
-  const auto e = filter.eulerDeg();
   out.quaternion = filter.quaternion();
-  out.roll_deg = e.roll; out.pitch_deg = e.pitch; out.yaw_deg = e.yaw;
+  out.pitch_deg = mekf6::Mekf6::pitchDegFromQuaternion(out.quaternion);
   out.sample_us = sample_us;
   out.accel_g = accel_g; out.gyro_rad_s = gyro_rad_s;
   out.accel_sample_us = accel_sample_us;
   out.bias_rad_s = filter.gyroBiasRadS();
   out.accel_update = filter.diagnostics();
   const auto& q = out.quaternion;
-  out.valid = isfinite(e.roll) && isfinite(e.pitch) && isfinite(e.yaw) &&
+  out.valid = isfinite(out.pitch_deg) &&
       isfinite(q.w) && isfinite(q.x) && isfinite(q.y) && isfinite(q.z);
   return out;
 }
 
 inline String mekfAttitudeJson(const MekfAttitudeSnapshot& s, uint32_t now_us, bool imu_ok) {
+  // This runs in the diagnostic consumer, never the 400 Hz capture path.
+  // All axes belong to s.sample_us, even if the live filter has since advanced.
+  const auto e = s.valid ? mekf6::Mekf6::eulerDegFromQuaternion(s.quaternion)
+                        : mekf6::EulerDeg{NAN, NAN, NAN};
   const auto num = [](float x) { return isfinite(x) ? String(x, 6) : String("null"); };
   const uint32_t age_us = now_us - s.sample_us; // wrap-safe host microsecond clock
   const auto vector = [&num](const mekf6::Vec3& v, float scale) {
@@ -51,8 +55,8 @@ inline String mekfAttitudeJson(const MekfAttitudeSnapshot& s, uint32_t now_us, b
   json += ",\"sample_us\":" + String(s.sample_us);
   json += ",\"age_us\":" + (s.valid ? String(age_us) : String("null"));
   json += ",\"estimate\":\"posterior\",\"frame\":\"mekf\",\"euler_order\":\"ZYX\"";
-  json += ",\"roll_deg\":" + num(s.roll_deg) + ",\"pitch_deg\":" + num(s.pitch_deg);
-  json += ",\"yaw_deg\":" + num(s.yaw_deg);
+  json += ",\"roll_deg\":" + num(e.roll) + ",\"pitch_deg\":" + num(e.pitch);
+  json += ",\"yaw_deg\":" + num(e.yaw);
   json += ",\"quaternion\":{\"w\":" + num(s.quaternion.w) + ",\"x\":" + num(s.quaternion.x);
   json += ",\"y\":" + num(s.quaternion.y) + ",\"z\":" + num(s.quaternion.z) + "}";
   json += ",\"yaw_reference\":\"gyro_integrated_since_filter_initialization\"";

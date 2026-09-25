@@ -7,7 +7,8 @@ String Profile::json() const {
       "mekf_predict", "mekf_accel", "mekf_attitude", "madgwick"};
   static_assert(sizeof(names) / sizeof(names[0]) == static_cast<uint8_t>(Stage::Count), "Stage names");
   String out; out.reserve(3200);
-  out = "{\"revision\":\"control_work_04710\",\"scope\":\"measurement_only;host_wall_time_includes_preemption;nested_stages_not_additive\"";
+  out = "{\"revision\":\"control_work_04711\",\"scope\":\"measurement_only;host_wall_time_includes_preemption;nested_stages_not_additive\"";
+  out += ",\"mekf_attitude_scope\":\"posterior_copy_and_control_pitch;display_euler_from_snapshot_on_demand\"";
   out += ",\"cohort\":\"pulse_active_at_stage_entry;owner_includes_terminal_iteration;start_sync_excluded\"";
   for (uint8_t group = 0; group < 2; ++group) {
     out += group ? ",\"pulse_on\":{" : ",\"pulse_off\":{";

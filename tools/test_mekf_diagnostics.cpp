@@ -43,11 +43,21 @@ int main(int argc,char** argv) {
     const auto s=captureMekfAttitude(filter,true,1000000);
     const auto after=filter.quaternion();
     assert(s.valid && s.sample_us==1000000);
-    assert(std::abs(s.roll_deg-(axis==0?20:0))<.001);
+    const auto display=mekf6::Mekf6::eulerDegFromQuaternion(s.quaternion);
+    assert(std::abs(display.roll-(axis==0?20:0))<.001);
     assert(std::abs(s.pitch_deg-(axis==1?20:0))<.001);
-    assert(std::abs(s.yaw_deg-(axis==2?20:0))<.001);
+    assert(display.pitch==s.pitch_deg);
+    assert(std::abs(display.yaw-(axis==2?20:0))<.001);
     assert(before.w==after.w&&before.x==after.x&&before.y==after.y&&before.z==after.z);
     assert(std::abs(s.quaternion.w-std::cos(mekf6::degToRad(10)))<.00001);
+    const std::string frozen_json=mekfAttitudeJson(s,1002500,true).c_str();
+    // Changing the live filter must not change deferred all-axis output from
+    // this snapshot, including when it is attached to a frozen camera image.
+    for(int i=0;i<100;++i)assert(filter.predict(gyro,.005f));
+    assert(frozen_json==mekfAttitudeJson(s,1002500,true).c_str());
+    assert(std::abs(filter.eulerDeg().roll-display.roll)+
+           std::abs(filter.eulerDeg().pitch-display.pitch)+
+           std::abs(filter.eulerDeg().yaw-display.yaw)>9.9f);
     if(axis)out<<",";
     out<<mekfAttitudeJson(s,1002500,true).c_str();
   }
@@ -66,5 +76,5 @@ int main(int argc,char** argv) {
   out<<",\"inputs\":"<<mekfAttitudeJson(inputs,1002500,true).c_str();
   out<<",\"range\":"<<footRangeDiagnosticsJson().c_str();
   out<<",\"calibration\":"<<footCalibrationDiagnosticsJson().c_str()<<"}";
-  std::cout<<"MEKF all-axis posterior capture, quaternion consistency and non-mutating observation PASS\n";
+  std::cout<<"MEKF pitch-only capture, immutable deferred all-axis JSON and quaternion consistency PASS\n";
 }
