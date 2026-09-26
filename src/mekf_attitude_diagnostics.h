@@ -17,25 +17,11 @@ struct MekfAttitudeSnapshot {
   mekf6::Diagnostics accel_update;
 };
 
-inline MekfAttitudeSnapshot RW_SPEED_CODE captureMekfAttitude(const mekf6::Mekf6& filter,
+MekfAttitudeSnapshot RW_SPEED_CODE captureMekfAttitude(const mekf6::Mekf6& filter,
                                               bool initialized, uint32_t sample_us,
                                               const mekf6::Vec3& accel_g = {NAN, NAN, NAN},
                                               const mekf6::Vec3& gyro_rad_s = {NAN, NAN, NAN},
-                                              uint32_t accel_sample_us = 0) {
-  MekfAttitudeSnapshot out;
-  if (!initialized) return out;
-  out.quaternion = filter.quaternion();
-  out.pitch_deg = mekf6::Mekf6::pitchDegFromQuaternion(out.quaternion);
-  out.sample_us = sample_us;
-  out.accel_g = accel_g; out.gyro_rad_s = gyro_rad_s;
-  out.accel_sample_us = accel_sample_us;
-  out.bias_rad_s = filter.gyroBiasRadS();
-  out.accel_update = filter.diagnostics();
-  const auto& q = out.quaternion;
-  out.valid = isfinite(out.pitch_deg) &&
-      isfinite(q.w) && isfinite(q.x) && isfinite(q.y) && isfinite(q.z);
-  return out;
-}
+                                              uint32_t accel_sample_us = 0);
 
 inline String mekfAttitudeJson(const MekfAttitudeSnapshot& s, uint32_t now_us, bool imu_ok) {
   // This runs in the diagnostic consumer, never the 400 Hz capture path.

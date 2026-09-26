@@ -93,6 +93,6 @@ int main() {
 with tempfile.TemporaryDirectory() as directory:
     p=Path(directory); (p/'test.cpp').write_text(cpp)
     subprocess.run(['g++','-std=c++17','-Os','-ffp-contract=off','-Itools/host_v46o','-Isrc',str(p/'test.cpp'),
-                    'src/mekf6.cpp','src/control_work_profile.cpp','src/control_latency.cpp',
+                    'src/mekf6.cpp','src/mekf_attitude_diagnostics.cpp','src/control_work_profile.cpp','src/control_latency.cpp',
                     'tools/fixtures/adafruit_ahrs_2_4_0/Adafruit_AHRS_Madgwick.cpp','-o',str(p/'test')],cwd=root,check=True)
     subprocess.run([str(p/'test')],check=True)

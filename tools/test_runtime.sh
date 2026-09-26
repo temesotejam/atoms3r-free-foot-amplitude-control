@@ -41,7 +41,7 @@ g++ -std=c++17 -Os -Wall -Wextra -Werror tools/test_log_quantization.cpp src/log
 /tmp/test_log_quantization
 g++ -std=c++17 -Os -Wall -Wextra -Werror -Itools/host_v46o tools/test_log_sample_encoder.cpp src/log_sample_encoder.cpp src/log_quantization.cpp tools/fixtures/log_sample_reference_04712.cpp -o /tmp/test_log_sample_encoder
 /tmp/test_log_sample_encoder
-g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_mekf_diagnostics.cpp src/mekf6.cpp -o /tmp/test_mekf_diagnostics
+g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_mekf_diagnostics.cpp src/mekf6.cpp src/mekf_attitude_diagnostics.cpp -o /tmp/test_mekf_diagnostics
 /tmp/test_mekf_diagnostics /tmp/mekf-diagnostics-fixture.json
 g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_control_work_profile.cpp src/control_work_profile.cpp src/control_latency.cpp -o /tmp/test_control_work
 /tmp/test_control_work /tmp/control-work-fixture.json
