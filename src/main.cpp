@@ -9,6 +9,7 @@
 #include "psram_logger.h"
 #include "roller485_manager.h"
 #include "upright_pose_guide.h"
+#include "control_latency.h"
 #include "web_ui.h"
 #include "run_control_worker.h"
 #include "foot_observer.h"
@@ -120,13 +121,18 @@ static bool controlStep(void*) {
     run_control.completeCommand(true, "cleared");
   }
   const bool measurement = runner.status().state == ExperimentState::RUNNING_BATCH_SWEEP;
+  control_latency::setActive(measurement);
   const bool fresh = r.gyro_fresh;
   const bool pulse_at_runner_entry = runner.status().pulse_active;
   const bool accel_fresh = r.accel_fresh;
   const uint32_t sample_us = r.last_gyro_update_us;
   RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::ControlRunner);
   const uint32_t runner_start = micros(); runner.update();
-  const uint32_t runner_us = micros() - runner_start, done = micros();
+  uint32_t done;
+  const auto done_activity = control_latency::activity(&done);
+  const uint32_t runner_us = done - runner_start;
+  control_latency::profile.finish(done, done_activity);
+  control_latency::setActive(runner.status().state == ExperimentState::RUNNING_BATCH_SWEEP);
   if (!measurement_epoch_us && runner.status().state == ExperimentState::RUNNING_BATCH_SWEEP)
     measurement_epoch_us = esp_timer_get_time() - static_cast<uint64_t>(runner.status().measure_elapsed_ms) * 1000;
   if (was_running || runner.running()) {

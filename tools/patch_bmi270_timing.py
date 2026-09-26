@@ -17,7 +17,8 @@ DELEGATE = '''  IMU_Base::imu_spec_t BMI270_Class::getImuRawData(imu_raw_data_t*
   {
     return static_cast<imu_spec_t>(bmi270_timing::readRaw(data,
       [this](uint8_t reg, uint8_t* dst, size_t n) {
-        return readRegister(reg, dst, n);
+        const auto transport = bmi270_timing::transport();
+        return transport ? transport(reg, dst, n) : readRegister(reg, dst, n);
       }, []() { return static_cast<uint32_t>(esp_timer_get_time()); }));
   }
 
@@ -40,7 +41,8 @@ def patch(root, library):
     start = text.index(BEGIN); end = text.index(END, start)
     expected = (text[:start]+DELEGATE+text[end:]).replace(
         '#include "BMI270_Class.hpp"\n', '#include "BMI270_Class.hpp"\n'+INCLUDE, 1).encode()
-    if raw not in (original, expected):
+    previous_verified = hashlib.sha256(raw).hexdigest() == '54bf8f7c9016033cee6015331ed65a35b56e74375040ba4994fbb06cee0b430b'
+    if raw not in (original, expected) and not previous_verified:
         raise RuntimeError('BMI270 source has an unexpected local edit; refusing to overwrite')
     header = (root/'src/bmi270_timing_reader.h').read_bytes()
     if not backup.exists(): backup.write_bytes(original)
@@ -49,7 +51,7 @@ def patch(root, library):
     manifest = {'upstream_git_blob': UPSTREAM_BLOB,
                 'patched_sha256': hashlib.sha256(expected).hexdigest(),
                 'header_sha256': hashlib.sha256(header).hexdigest(),
-                'policy': 'STATUS_0x03_selective_DATA_reads;unchanged_conversion_ODR_filters'}
+                'policy': 'STATUS_0x03_selective_DATA_reads;boot_M5GFX_then_exclusive_IDF_interrupt_I2C1;unchanged_conversion_ODR_filters'}
     (root/'bmi270-build-patch.json').write_text(json.dumps(manifest,indent=2)+'\n')
     print('V46u BMI270 transport patch verified:', manifest['patched_sha256'])
     return manifest

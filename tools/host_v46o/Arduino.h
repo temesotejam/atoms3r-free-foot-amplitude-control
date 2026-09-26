@@ -12,6 +12,7 @@
 #include <vector>
 using std::min;
 using std::max;
+template<class T> inline T constrain(T v,T lo,T hi) { return v<lo?lo:(v>hi?hi:v); }
 inline uint32_t host_us = 1000;
 inline uint32_t micros() { return host_us; }
 inline uint32_t millis() { return host_us / 1000U; }

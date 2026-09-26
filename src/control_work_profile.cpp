@@ -7,7 +7,8 @@ String Profile::json() const {
       "mekf_predict", "mekf_accel", "mekf_attitude", "madgwick", "log_encode", "log_store"};
   static_assert(sizeof(names) / sizeof(names[0]) == static_cast<uint8_t>(Stage::Count), "Stage names");
   String out; out.reserve(3200);
-  out = "{\"revision\":\"control_work_04716\",\"scope\":\"measurement_only;host_wall_time_includes_preemption;nested_stages_not_additive\"";
+  out = "{\"revision\":\"control_work_04719\",\"scope\":\"measurement_only;host_wall_time_includes_preemption;nested_stages_not_additive\"";
+  out += ",\"filter_scope\":\"MEKF_and_comparison_preparation;autonomous_measurement_Madgwick_after_motion_before_log;Madgwick_cohort_from_input_capture\"";
   out += ",\"mekf_attitude_scope\":\"posterior_copy_and_control_pitch;display_euler_from_snapshot_on_demand\"";
   out += ",\"mekf_math_compiler\":\"GCC_O2_no_fast_math\",\"madgwick_pitch\":\"upstream_2.4.0_pitch_only\"";
   out += ",\"target_code_placement\":\"IRAM_MEKF_hot_routines_and_log_encoder;external_calls_and_data_may_use_flash\"";

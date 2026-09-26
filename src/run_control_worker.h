@@ -8,6 +8,7 @@
 #include "runtime_diagnostics.h"
 #include "mekf_attitude_diagnostics.h"
 #include "control_work_profile.h"
+#include "control_latency.h"
 
 // One permanent controller owner, including idle and calibration. HTTP sends
 // commands and consumes POD snapshots; it never calls the live runner/IMU.
@@ -120,6 +121,8 @@ class RunControlWorker {
   void beginRunAudit(uint32_t epoch_us = 0) {
     // Owner only. The previous run has already been released by HTTP.
     control_work::profile.reset();
+    control_latency::setActive(false);
+    control_latency::profile.reset();
     portENTER_CRITICAL(&mux_);
     audit_ = Audit{}; audit_.epoch_us = epoch_us ? epoch_us : micros();
     last_step_start_us_ = audit_.epoch_us;

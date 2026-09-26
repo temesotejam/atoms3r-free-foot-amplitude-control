@@ -13,7 +13,7 @@
     <header class="hero">
       <p class="eyebrow">ATOMS3R / FREE-FOOT AMPLITUDE CONTROL</p>
       <h1>Free-foot Runtime V2<br><span>左右足角度・制御・ログを統合</span></h1>
-      <p class="lead">Free-foot Runtime V2 / 0.47.18 必要Qの直接逆算版。目標振幅から必要な電流の積分量を求め、電流の立ち上がりと残留電流を考慮して通電時間を決めます。</p>
+      <p class="lead">Free-foot Runtime V2 / 0.47.19 制御遅延改善版。IMU通信待ちの間にも制御を進め、比較用の姿勢計算は制御判断後に行います。</p>
       <div class="badges"><span>ESP32-S3</span><span>BMI270 400/200 Hz</span><span>RWLOG v51</span><span>MEKF</span><span>左右足角度</span></div>
     </header>
     <section class="panel important">
@@ -21,14 +21,14 @@
       <p>V46al-R2の制御計算、固定3ms補償、300mA・最大100msパルス、30秒測定、開始・終了のLED同期を維持。白マーカーの位置から左右足角度を取得・表示・保存します。足角度は観測用で、制御入力には使用しません。</p>
       <p>ログ用イベント配列と大きな説明データはPSRAMに配置します。測定後にログを確定し、CRCで検証できる4KB以下のチャンクで取得します。ブラウザの一時停止・再接続・再読み込み後も保存済みの部分を再利用できます。</p>
       <p><strong>今回の校正はMEKFを基準にした暫定値です。係数決定に使わなかった手持ち2姿勢では、再計算上の残差が左右とも約0.26〜0.32°です。</strong>ビルドとホスト検証の範囲、実機で確認する項目は<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/FOOT_CALIBRATION_0477.md">校正の根拠</a>を参照してください。カメラは15fpsを目標に設定し、画面に実測値を表示します。</p>
-      <p>比較基準の0.47.17は新たな5回すべてで30秒を完走し、2.5ms超過は512/60,706回（0.84%）、足の校正範囲超過は0件でした。0.47.18の同じ入力での再計算では346回中272回が同じ幅、74回が±1msの違いでした。実機の処理時間と振幅はこれから比較します。<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/DIRECT_Q_INVERSE_04718.md">比較基準と変更内容</a></p>
+      <p>0.47.18の5回を比較基準に、同じ目標8°・30秒で測定します。初めに1回で起動・測定・ログ保存を確認し、問題なければ計5回のRWLOGと足CSVを保存してください。遅延の内訳も自動記録します。実機での改善量は測定後に確認します。<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/CONTROL_LATENCY_04719.md">変更内容と比較方法</a></p>
       <p>公開ビルド：<code id="build-sha">取得中</code><br><a href="build-sha.txt">ビルドSHA</a> / <a href="firmware/SHA256SUMS.txt">ファームウェアSHA-256</a></p>
     </section>
     <section class="panel important">
       <h2>書き込みと測定</h2>
       <p>書き込み時はPCをインターネットにつながるWi-Fiまたは有線LANへ接続し、AtomS3RをUSBでつないでください。PC版ChromeまたはEdgeで下のボタンを押します。機体のWi-Fiへ切り替えるのは書き込み完了後です。</p>
       <esp-web-install-button manifest="manifest-freefoot-runtime-v2.json">
-        <button slot="activate" class="primary">0.47.18 必要Qの直接逆算版を書き込む</button>
+        <button slot="activate" class="primary">0.47.19 制御遅延改善版を書き込む</button>
         <span slot="unsupported" class="warning">PC版ChromeまたはEdgeを使用してください。</span>
       </esp-web-install-button>
       <ol>

@@ -4,8 +4,9 @@ namespace m5 {
 constexpr int imu_bmi270=1;
 struct IMU_Class {enum {sensor_mask_accel=1,sensor_mask_gyro=2};};
 }
-struct HostBus {int getPort()const{return 1;} int getSDA()const{return 45;}int getSCL()const{return 0;}};
+struct HostBus { bool release_ok=true; bool release() const { return release_ok; } int getPort()const{return 1;} int getSDA()const{return 45;}int getSCL()const{return 0;}};
 struct HostDevice {
+  uint8_t getAddress() const { return 0x68; }
   uint8_t acc=0xa8,gyr=0xe9,status=1,power=0x0e;
   uint8_t readRegister8(uint8_t a){switch(a){case 0x21:return status;case 0x7d:return power;case 0x40:return acc;case 0x42:return gyr;default:return 0;}}
   bool writeRegister8(uint8_t a,uint8_t v){if(a==0x40)acc=v;if(a==0x42)gyr=v;return true;}

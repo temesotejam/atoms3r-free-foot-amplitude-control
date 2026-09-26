@@ -87,6 +87,12 @@ public:
 private:
   void beginFilters();
   void updateFilterSeries(const ImuReading& r);
+  void finishDeferredComparison();
+  void updateComparisonDisplayAngles();
+  struct DeferredComparison {
+    bool pending = false, pulse_at_entry = false;
+    float gx = 0, gy = 0, gz = 0, ax = 0, ay = 0, az = 0, beta = 0;
+  } deferred_comparison_;
   void updateStartupCalibration(const ImuReading& r);
   void beginStartSync(uint32_t now_ms);
   void updateStartSync(uint32_t now_ms);

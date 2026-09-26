@@ -33,6 +33,7 @@ jobs:
           python3 tools/verify_camera_task_link.py .pio/build/atoms3cam/firmware.elf --objdump "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-objdump"
           python3 tools/verify_log_encoder_link.py .pio/build/atoms3cam/firmware.elf --nm "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-nm"
           python3 tools/verify_realtime_code_link.py .pio/build/atoms3cam/firmware.elf --objdump "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-objdump"
+          python3 tools/verify_imu_transport_link.py .pio/build/atoms3cam/firmware.elf --nm "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-nm"
           test -s bmi270-build-patch.json
           "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-nm" .pio/build/atoms3cam/firmware.elf | grep -q '__wrap_xTaskCreatePinnedToCore'
           "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-nm" .pio/build/atoms3cam/firmware.elf | grep -q ' cam_start$'
@@ -87,16 +88,16 @@ jobs:
                   if published != expected:
                       raise ValueError('Published build SHA differs: ' + published)
                   manifest = json.loads(get('manifest-freefoot-runtime-v2.json'))
-                  if manifest['version'] != '0.47.18-direct-q-inverse':
+                  if manifest['version'] != '0.47.19-interrupt-imu':
                       raise ValueError('Unexpected firmware version')
-                  if 'Free-foot Runtime V2 / 0.47.18' not in get('index.html').decode():
+                  if 'Free-foot Runtime V2 / 0.47.19' not in get('index.html').decode():
                       raise ValueError('Published page label differs')
                   provenance = json.loads(get('bmi270-build-patch.json'))
                   if provenance['upstream_git_blob'] != '41732382bbdfe413be758748bca24d9a15a3a1d8':
                       raise ValueError('Unexpected upstream BMI270 source')
-                  if provenance['patched_sha256'] != '54bf8f7c9016033cee6015331ed65a35b56e74375040ba4994fbb06cee0b430b':
+                  if provenance['patched_sha256'] != 'e0ac6c1bdb281647df25c57e7ebd5d848bd076f1664464a9c37191cb40bc9177':
                       raise ValueError('Unexpected BMI270 transport patch')
-                  if provenance['header_sha256'] != 'bfdb1485c7fbfe3ecc0953a4b0d617863b3649b766581bd7ac8ab668be10a633':
+                  if provenance['header_sha256'] != 'c21d55b70e6d6ea95323780fda4e07a479d13602695099fd152e5f293adc2620':
                       raise ValueError('Unexpected selective reader')
                   builds = manifest['builds']
                   if len(builds) != 1 or builds[0]['chipFamily'] != 'ESP32-S3':

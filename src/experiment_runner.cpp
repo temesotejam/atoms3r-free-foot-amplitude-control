@@ -3,6 +3,7 @@
 #include "log_sample_encoder.h"
 #include "madgwick_pitch.h"
 #include "control_work_profile.h"
+#include "control_latency.h"
 #include "rate_baseline_correction.h"
 #include "previous_peak_control_correction.h"
 
@@ -151,11 +152,15 @@ void ExperimentRunner::update() {
     updateDisplayedAngles(r);
     if (status_.state == ExperimentState::STARTUP_GYRO_CALIB) updateStartupCalibration(r);
     updateCurrentRollState(r, now_ms);
+    control_latency::mark(control_latency::Ready);
     if ((passive_capture_mode_ || q_ident_mode_ || energy_control_v0_mode_ || energy_control_autonomous_mode_) && status_.state == ExperimentState::RUNNING_BATCH_SWEEP) {
       control_work::Scope work(control_work::Stage::Motion, true, status_.pulse_active);
       updateQ1ShadowAtZeroCross(now_ms);
       if (energy_control_autonomous_mode_) updateEnergyControlAutonomousMotion(now_ms);
     }
+    // Same sample and pre-decision beta; completed before state transitions,
+    // logging and snapshot publication. Control cannot read this comparator.
+    finishDeferredComparison();
     last_imu_update_us_ = r.gyro_sequence;
   }
 
@@ -218,6 +223,7 @@ void ExperimentRunner::update() {
 void ExperimentRunner::updateFilterSeries(const ImuReading& r) {
   control_work::Scope work(control_work::Stage::Filter,
       status_.state == ExperimentState::RUNNING_BATCH_SWEEP, status_.pulse_active);
+  deferred_comparison_.pending = false;
   const float dt_s = r.gyro_update_dt_us > 0 ? static_cast<float>(r.gyro_update_dt_us) / 1000000.0f
                                              : static_cast<float>(Config::IMU_POLL_PERIOD_US) / 1000000.0f;
   const bool accel_is_new_for_filter = r.accel_sequence != 0 && r.accel_sequence != last_mekf_accel_sequence_;
@@ -298,6 +304,7 @@ void ExperimentRunner::updateFilterSeries(const ImuReading& r) {
     status_.mekf_accel_mag_error_g = d.accel_magnitude_error_g;
     status_.mekf_accel_used = accel_is_new_for_filter && d.accel_used;
   }
+  control_latency::mark(control_latency::Mekf);
   if (!v46_mekf_dynamic_compare && accel_is_new_for_filter) {
     filter_beta1_raw_.updateIMU(r.gx_dps, r.gy_dps, r.gz_dps, r.ax_g, r.ay_g, r.az_g);
     filter_beta1_bias_.updateIMU(r.gx_dps - gx_bias, r.gy_dps - gy_bias, r.gz_dps - gz_bias, r.ax_g, r.ay_g, r.az_g);
@@ -373,8 +380,10 @@ void ExperimentRunner::updateFilterSeries(const ImuReading& r) {
       beta_smooth_[i] = beta_target;
     }
     if (accel_is_new_for_filter) {
+      const bool defer = v46_mekf_dynamic_compare &&
+          status_.state == ExperimentState::RUNNING_BATCH_SWEEP;
       control_work::Scope madgwick_work(control_work::Stage::Madgwick,
-          status_.state == ExperimentState::RUNNING_BATCH_SWEEP, status_.pulse_active);
+          !defer && status_.state == ExperimentState::RUNNING_BATCH_SWEEP, status_.pulse_active);
       if (!v46_mekf_dynamic_compare) {
         filter_dynamic_raw_[i].setBeta(beta_smooth_[i]);
         filter_dynamic_raw_[i].updateIMU(r.gx_dps, r.gy_dps, r.gz_dps, r.ax_g, r.ay_g, r.az_g);
@@ -382,10 +391,17 @@ void ExperimentRunner::updateFilterSeries(const ImuReading& r) {
       } else {
         raw_dynamic_raw_pitch_deg_[i] = NAN;
       }
-      filter_dynamic_bias_[i].setBeta(beta_smooth_[i]);
-      filter_dynamic_bias_[i].updateIMU(r.gx_dps - gx_bias, r.gy_dps - gy_bias, r.gz_dps - gz_bias,
-                                        r.ax_g, r.ay_g, r.az_g);
-      raw_dynamic_bias_pitch_deg_[i] = Config::PITCH_SIGN * madgwick_pitch::readPitchDeg(filter_dynamic_bias_[i]);
+      if (defer) {
+        auto& input = deferred_comparison_;
+        input.pending = true; input.pulse_at_entry = status_.pulse_active;
+        input.gx = r.gx_dps - gx_bias; input.gy = r.gy_dps - gy_bias; input.gz = r.gz_dps - gz_bias;
+        input.ax = r.ax_g; input.ay = r.ay_g; input.az = r.az_g; input.beta = beta_smooth_[i];
+      } else {
+        filter_dynamic_bias_[i].setBeta(beta_smooth_[i]);
+        filter_dynamic_bias_[i].updateIMU(r.gx_dps - gx_bias, r.gy_dps - gy_bias, r.gz_dps - gz_bias,
+                                          r.ax_g, r.ay_g, r.az_g);
+        raw_dynamic_bias_pitch_deg_[i] = Config::PITCH_SIGN * madgwick_pitch::readPitchDeg(filter_dynamic_bias_[i]);
+      }
     } else if (v46_mekf_dynamic_compare) {
       raw_dynamic_raw_pitch_deg_[i] = NAN;
     }
@@ -466,14 +482,23 @@ void ExperimentRunner::updateStartupCalibration(const ImuReading& r) {
   status_.state = ExperimentState::MADGWICK_SETTLING;
 }
 
-void ExperimentRunner::updateDisplayedAngles(const ImuReading& r) {
-  control_work::Scope work(control_work::Stage::AngleDisplay,
-      status_.state == ExperimentState::RUNNING_BATCH_SWEEP, status_.pulse_active);
-  status_.pitch_mekf_abs_deg = raw_mekf_pitch_abs_deg_;
-  status_.pitch_mekf_predicted_abs_deg = raw_mekf_predicted_abs_deg_;
+void ExperimentRunner::finishDeferredComparison() {
+  if (!deferred_comparison_.pending) return;
+  const auto input = deferred_comparison_;
+  deferred_comparison_.pending = false;
+  {
+    control_work::Scope work(control_work::Stage::Madgwick, true, input.pulse_at_entry);
+    constexpr uint8_t i = Config::FILTER_ADOPTED_INDEX;
+    filter_dynamic_bias_[i].setBeta(input.beta);
+    filter_dynamic_bias_[i].updateIMU(input.gx, input.gy, input.gz, input.ax, input.ay, input.az);
+    raw_dynamic_bias_pitch_deg_[i] = Config::PITCH_SIGN * madgwick_pitch::readPitchDeg(filter_dynamic_bias_[i]);
+  }
+  updateComparisonDisplayAngles();
+}
+
+void ExperimentRunner::updateComparisonDisplayAngles() {
   status_.pitch_madgwick_dynamic_abs_deg = raw_dynamic_bias_pitch_deg_[Config::FILTER_ADOPTED_INDEX];
   if (passive_capture_mode_) {
-    status_.pitch_mekf_deg = raw_mekf_pitch_abs_deg_;
     // Preserve the continuous IMU gravity frame: no start-of-run subtraction.
     status_.pitch_madgwick_beta1_raw_deg = raw_beta1_raw_pitch_deg_;
     status_.pitch_madgwick_beta1_bias_deg = raw_beta1_bias_pitch_deg_;
@@ -484,7 +509,6 @@ void ExperimentRunner::updateDisplayedAngles(const ImuReading& r) {
     status_.pitch_madgwick_dynamic_bias_deg = raw_dynamic_bias_pitch_deg_[Config::FILTER_ADOPTED_INDEX];
     status_.pitch_accel_only_deg = raw_accel_pitch_deg_;
   } else {
-    status_.pitch_mekf_deg = raw_mekf_predicted_abs_deg_ - offset_mekf_pitch_deg_;
     status_.pitch_madgwick_beta1_raw_deg = raw_beta1_raw_pitch_deg_ - offset_beta1_raw_deg_;
     status_.pitch_madgwick_beta1_bias_deg = raw_beta1_bias_pitch_deg_ - offset_beta1_bias_deg_;
     for (uint8_t i = 0; i < Config::DYNAMIC_BETA_COUNT; ++i) {
@@ -496,6 +520,16 @@ void ExperimentRunner::updateDisplayedAngles(const ImuReading& r) {
     status_.pitch_madgwick_dynamic_bias_deg = status_.pitch_dynamic_beta_deg[Config::FILTER_ADOPTED_INDEX];
     status_.pitch_accel_only_deg = raw_accel_pitch_deg_ - offset_accel_deg_;
   }
+}
+
+void ExperimentRunner::updateDisplayedAngles(const ImuReading& r) {
+  control_work::Scope work(control_work::Stage::AngleDisplay,
+      status_.state == ExperimentState::RUNNING_BATCH_SWEEP, status_.pulse_active);
+  status_.pitch_mekf_abs_deg = raw_mekf_pitch_abs_deg_;
+  status_.pitch_mekf_predicted_abs_deg = raw_mekf_predicted_abs_deg_;
+  status_.pitch_mekf_deg = passive_capture_mode_ ? raw_mekf_pitch_abs_deg_ :
+      raw_mekf_predicted_abs_deg_ - offset_mekf_pitch_deg_;
+  if (!deferred_comparison_.pending) updateComparisonDisplayAngles();
   status_.pitch_gyro_raw_deg = gyro_raw_deg_;
   status_.pitch_gyro_bias_corrected_deg = gyro_bias_corrected_deg_;
   // V46z comparison-zero begin
@@ -2728,6 +2762,7 @@ void ExperimentRunner::updateEnergyControlAutonomousAtZeroCross(uint32_t t_test_
     resetEnergyControlAutonomousPeakTracker(true);
   };
   const uint32_t v46l_decision_t0_us = micros();
+  control_latency::mark(control_latency::Decision);
   PsramLogger::EnergyControlAutonomousZeroCrossEvent event;
   // V46s audit begin
   solver_audit::Record audit;

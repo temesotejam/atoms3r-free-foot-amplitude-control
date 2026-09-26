@@ -8,9 +8,10 @@
 #define private public
 #include "../src/imu_manager.h"
 #undef private
+#include "host_v46o/imu_transport_stub.h"
 #include "../src/imu_manager.cpp"
 
-static void resetHost(){host_us=1000;host_tasks_created=0;M5=HostM5{};}
+static void resetHost(){host_us=1000;host_tasks_created=0;M5=HostM5{};imu_i2c::begin_ok=true;bmi270_timing::transport()=nullptr;}
 static void initialized(ImuManager& imu){resetHost();assert(imu.begin());assert(imu.ok());assert(host_tasks_created==1);}
 static void put(ImuManager& imu,uint32_t seq,uint32_t stamp){
   ImuReading r=imu.reading_;r.gyro_sequence=seq;r.last_gyro_update_us=stamp;r.gyro_update_dt_us=2500;r.last_update_ms=stamp/1000;
@@ -19,6 +20,9 @@ static void put(ImuManager& imu,uint32_t seq,uint32_t stamp){
 }
 int main(){
   unsigned checks=0;
+  {resetHost();M5.In_I2C.release_ok=false;ImuManager imu;assert(!imu.begin() && imu.fault_ && !host_tasks_created);++checks;}
+  {resetHost();imu_i2c::begin_ok=false;ImuManager imu;assert(!imu.begin() && imu.fault_ && !host_tasks_created);assert(!bmi270_timing::transport());++checks;}
+
   {ImuManager imu;initialized(imu);assert(imu.init_valid_accel_>=8&&imu.init_valid_gyro_>=16);assert(UprightPoseGuide::isUprightStableSample(imu.reading()));++checks;}
   // Cold-init failure followed by success. No duplicate acquisition task.
   {resetHost();M5.Imu.fail_begins=2;ImuManager imu;assert(imu.begin());assert(imu.init_attempts_==3);assert(host_tasks_created==1);++checks;}

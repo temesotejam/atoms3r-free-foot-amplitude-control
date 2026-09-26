@@ -1,6 +1,7 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.18 direct Q inverse
+# Current integrated build: Free-foot Runtime V2 / 0.47.19 interrupt-driven IMU
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
+[0.47.19 IMU waiting and control latency](docs/CONTROL_LATENCY_04719.md) ·
 [0.47.17 five-run baseline and direct-Q inverse](docs/DIRECT_Q_INVERSE_04718.md) ·
 [0.47.16 hardware results and exact-input calculation reuse](docs/CONTROL_CACHE_PREVIEW_04717.md) ·
 [0.47.15 hardware result, targeted IRAM and weak candidate confirmation](docs/IRAM_AND_MARKER_GUARD_04716.md) ·
@@ -108,6 +109,18 @@ Normal pulse starts account for 112 of the 132 runner-only overruns.
 512/60,706 deadline overruns (0.843%, maximum 5,742 us), with no IMU queue drops
 or delivery sequence gaps. Foot support exceedances were zero on both sides.
 Right/left measurement detections were 1,444/1,462 and 1,462/1,462.
+
+Version 0.47.19 gives the exclusive internal I2C1 bus to the ESP-IDF interrupt
+completion driver after M5Unified boot configuration and sensor validation.
+The high-priority reader blocks during transfer completion, allowing control
+on the same core to run. The existing 1 ms polling and 400/200 Hz ODR remain.
+Autonomous comparison Madgwick uses captured pre-decision data/beta and runs
+in the same sample after the control decision, before logs and publication.
+The complete runner deadline still includes comparison and logging. Latency
+metadata links sample sequences to receive, MEKF, decision and completion,
+with I2C/poll overlap explicitly labeled as wall time rather than CPU time.
+The 10 ms stale-data stop remains independent of the IDF driver's potentially
+longer bus-error watchdog. Hardware operation/timing needs measurement.
 
 Version 0.47.18 directly inverts the amplitude model into a continuous requested
 Q, clips feedforward before the existing side integral, then solves the current

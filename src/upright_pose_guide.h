@@ -45,13 +45,14 @@ inline float gyroNormDps(const ImuReading& r) {
   return sqrtf(r.gx_dps * r.gx_dps + r.gy_dps * r.gy_dps + r.gz_dps * r.gz_dps);
 }
 
-inline float directionErrorDeg(const ImuReading& r) {
-  const float n = accelNormG(r);
+inline float directionErrorDeg(const ImuReading& r, float n) {
   if (!isfinite(n) || n < 0.2f) return 180.0f;
   const float dot = clampf((r.ax_g * REF_AX + r.ay_g * REF_AY + r.az_g * REF_AZ) / n,
                            -1.0f, 1.0f);
   return acosf(dot) * 57.29577951308232f;
 }
+
+inline float directionErrorDeg(const ImuReading& r) { return directionErrorDeg(r, accelNormG(r)); }
 
 // The IMU consumer retains the same acceleration over gyro-only deliveries.
 // Reuse its geometric diagnostics until that sensor's sequence changes. Age,
@@ -62,8 +63,8 @@ struct CachedMetrics {
   bool have_accel = false, have_gyro = false;
   void update(const ImuReading& r) {
     if (!have_accel || accel_sequence != r.accel_sequence) {
-      accel_norm_g = accelNormG(r);
-      direction_error_deg = directionErrorDeg(r);
+      accel_norm_g = r.acc_norm_g;
+      direction_error_deg = directionErrorDeg(r, accel_norm_g);
       accel_sequence = r.accel_sequence; have_accel = true;
     }
     if (!have_gyro || gyro_sequence != r.gyro_sequence) {

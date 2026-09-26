@@ -1403,6 +1403,9 @@ PsramString PsramLogger::buildMetadataJson() const {
   json += ",";
   json += "\"v46p_control_worker\":" + run_control.diagnosticsJson() + ",";
   json += "\"control_work_profile\":" + control_work::profile.json() + ",";
+  json += "\"control_latency\":";
+  control_latency::profile.appendJson(json);
+  json += ",";
   {
     // Export runs only after completion; do not infer terminal output from the
     // last regular sample, which may still precede an emergency stop.

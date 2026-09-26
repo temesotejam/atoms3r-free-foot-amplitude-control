@@ -5,6 +5,8 @@
 #include "config.h"
 #include "upright_pose_guide.h"
 #include "bmi270_timing_reader.h"
+#include "imu_i2c_transport.h"
+#include "control_latency.h"
 
 
 namespace {
@@ -114,6 +116,16 @@ bool ImuManager::initializeSensorAttempt() {
 }
 
 bool ImuManager::startAcquisition() {
+  // No task can access the internal bus yet. BMI configuration/conversion stay
+  // in M5Unified; only getImuRawData's register transport changes after boot.
+  auto* device = M5.Imu.getImuInstancePtr(0);
+  if (!device || !M5.In_I2C.release() ||
+      !imu_i2c::begin(internal_i2c_port_, internal_sda_, internal_scl_,
+                      device->getAddress(), Config::BMI270_I2C_HZ)) {
+    last_error_ = "imu_interrupt_transport_init_failed";
+    latchFault(last_error_); return false;
+  }
+  bmi270_timing::transport() = &imu_i2c::read;
   sample_queue_ = xQueueCreateStatic(kQueueLength, sizeof(ImuReading), queue_bytes_, &queue_storage_);
   if (!sample_queue_) { last_error_ = "imu_queue_create_failed"; return false; }
   esp_timer_create_args_t args{};
@@ -179,6 +191,7 @@ void ImuManager::acquisitionLoop() {
     portEXIT_CRITICAL(&notify_mux_);
     // Clock AFTER the snapshot: a callback on the other core cannot cause
     // unsigned underflow. Coalescing means this is latest-notification age.
+    control_latency::pollBegin();
     const uint32_t t0 = micros();
     poll_observation_ = ImuPollObservation{};
     poll_observation_.start_us = t0;
@@ -204,6 +217,7 @@ void ImuManager::acquisitionLoop() {
     RuntimeDiag::phase(RuntimeDiag::Lane::Imu, RuntimeDiag::Phase::ImuAudit);
     recordPollProfile(poll_observation_);
     RuntimeDiag::beat(RuntimeDiag::Lane::Imu, elapsed, allow_stack_scan);
+    control_latency::pollEnd();
     previous_yield_us_ = 0;
     // Keep the established overrun wait. Removing it could starve control/STOP.
     const uint32_t yield_start = micros();
@@ -282,6 +296,7 @@ void ImuManager::captureSensor() {
     capture_.gyro_update_dt_us = prev_gyro_update_us_ ? sample_us - prev_gyro_update_us_ : 1000000UL / Config::BMI270_GYRO_ODR_HZ;
     prev_gyro_update_us_ = sample_us;
     capture_.last_gyro_update_us = sample_us;
+    capture_.acquisition_poll_start_us = poll_observation_.start_us;
     ++capture_.gyro_sequence;
     capture_.update_dt_us = capture_.gyro_update_dt_us;
     capture_.last_update_us = sample_us;
@@ -384,6 +399,7 @@ void ImuManager::setAcquisitionContext(bool sequential, bool measurement, uint8_
 }
 void ImuManager::update() {
   // This function runs on the Arduino thread. It is the ONLY writer of reading_.
+  control_latency::profile.current = control_latency::Row{};
   reading_.accel_fresh = false;
   reading_.gyro_fresh = false;
   reading_.sensor_mask = 0;
@@ -430,6 +446,11 @@ void ImuManager::update() {
     last_error_ = "imu_delivery_backlog_over_10ms";
     return;
   }
+  control_latency::progress();
+  uint32_t receive_time;
+  const auto receive_activity = control_latency::activity(&receive_time);
+  control_latency::profile.receive(audit_.active, next.gyro_sequence,
+      next.last_gyro_update_us, next.acquisition_poll_start_us, receive_time, receive_activity);
   const uint32_t previous_accel_sequence = reading_.accel_sequence;
   // Preserve the same calibrated raw values and formulas. Only relocate work;
   // cache across gyro-only deliveries so this runs once per new accel sample.
@@ -440,6 +461,7 @@ void ImuManager::update() {
     next.acc_norm_error_g = reading_.acc_norm_error_g;
     next.pitch_accel_only_deg = reading_.pitch_accel_only_deg;
   }
+  control_latency::mark(control_latency::Derived);
   reading_ = next;
   // Accel may arrive on a poll before the next gyro publishes the combined row.
   reading_.accel_fresh = reading_.accel_sequence != previous_accel_sequence;
@@ -504,6 +526,7 @@ template<class Output> void ImuManager::appendDiagnostics(Output& json) const {
   json += ",\"motor_controller\":\"unchanged_V46l_legacy_V7\"";
   json += ",\"reader_core\":" + String(reader_core) + ",\"reader_priority\":" + String(reader_priority);
   json += ",\"consumer_core\":" + String(consumer_core) + ",\"consumer_priority\":" + String(consumer_priority);
+  json += ",\"transport\":\"idf_interrupt_i2c1_04719\"";
   json += ",\"internal_i2c_port\":" + String(internal_i2c_port_);
   json += ",\"internal_sda\":" + String(internal_sda_) + ",\"internal_scl\":" + String(internal_scl_);
   json += ",\"roller_i2c_port\":0,\"queue_capacity\":32,\"delivery_age_limit_us\":10000";

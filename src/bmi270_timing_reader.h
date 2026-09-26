@@ -6,6 +6,10 @@
 // Transport-only adaptation for pinned M5Unified 0.2.18. No axis, scale,
 // calibration, ODR, filter, or estimator changes. One reader task owns this.
 namespace bmi270_timing {
+// Installed only after boot validation and exclusive I2C1 handoff. A failed
+// runtime read never falls back to the old controller driver.
+using Transport = bool (*)(uint8_t, uint8_t*, size_t);
+inline Transport& transport() { static Transport fn = nullptr; return fn; }
 struct LastRead {
   uint32_t status_us = 0, data_us = 0;
   uint16_t data_bytes = 0;

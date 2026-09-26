@@ -7,6 +7,7 @@
 #define private public
 #include "../src/imu_manager.h"
 #undef private
+#include "host_v46o/imu_transport_stub.h"
 #include "../src/imu_manager.cpp"
 static void init(ImuManager& imu) {
   host_us=1000; host_tasks_created=0; M5=HostM5{};

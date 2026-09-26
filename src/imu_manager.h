@@ -51,6 +51,7 @@ struct ImuReading {
   uint32_t gyro_update_dt_us = 0;
   uint32_t last_accel_update_us = 0;
   uint32_t last_gyro_update_us = 0;
+  uint32_t acquisition_poll_start_us = 0;
   uint32_t update_dt_us = 0;
   uint32_t last_update_us = 0;
   uint32_t last_update_ms = 0;

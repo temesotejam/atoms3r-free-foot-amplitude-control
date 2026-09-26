@@ -39,6 +39,7 @@ int main(int argc, char** argv) {
     if (!(i % 2)) {
       r.accel_sequence = UINT32_MAX - 3000 + i / 2;
       r.ax_g = sample(); r.ay_g = sample(); r.az_g = sample();
+      r.acc_norm_g = UprightPoseGuide::accelNormG(r);
       r.pitch_accel_only_deg = Config::PITCH_SIGN * atan2f(-r.ax_g,
           sqrtf(r.ay_g*r.ay_g + r.az_g*r.az_g)) * 57.2957795f;
     }
@@ -54,7 +55,7 @@ int main(int argc, char** argv) {
     cached.update(r);
     assert(cached.direction_error_deg == UprightPoseGuide::directionErrorDeg(r));
   }
-  ++r.accel_sequence; r.ax_g = NAN; cached.update(r);
+  ++r.accel_sequence; r.ax_g = NAN; r.acc_norm_g = NAN; cached.update(r);
   assert(std::isnan(cached.accel_norm_g) && cached.direction_error_deg == 180);
   std::cout << "Control profile cohorts, idle exclusion, clock wrap, reset and cached geometry equivalence PASS\n";
 }
