@@ -9,7 +9,8 @@ static bool step(void* p) {
   auto& m=*static_cast<Model*>(p); ++m.steps;
   if(m.worker->takeStopRequest()) m.running=false;
   const auto command=m.worker->takeCommand();
-  if(command==RunControlWorker::Command::Start){m.running=true;m.worker->beginRunAudit();m.worker->completeCommand(true,"started");}
+  if(command==RunControlWorker::Command::Start){m.running=true;m.worker->beginRunAudit();m.worker->completeCommand(true,"started");
+    assert(!m.worker->commandPublished(m.worker->commandState().completed));}
   if(command==RunControlWorker::Command::Clear){m.running=false;m.worker->completeCommand(true,"cleared");}
   if(m.running){const auto t=micros();host_us+=750;m.worker->recordStep(t,100,600,750);}
   return m.running;
@@ -25,6 +26,7 @@ int main(){
   assert(w.request(RunControlWorker::Command::Start));
   assert(!w.request(RunControlWorker::Command::Clear)); // pending start blocks clear
   w.oneStep();assert(w.active()&&w.commandState().ok);
+  assert(w.commandPublished(w.commandState().completed));
   assert(!w.request(RunControlWorker::Command::Start));
   assert(!w.request(RunControlWorker::Command::Clear));
   for(int i=0;i<100;++i)w.oneStep();

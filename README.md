@@ -1,4 +1,6 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.20 normal-update execution
+# Current integrated build: Free-foot Runtime V2 / 0.47.21 offline run
+
+[0.47.21: offline run, tilt STOP, USB opt-in and log recovery](docs/OFFLINE_RUN_04721.md)
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
 [0.47.19 five-run results and 0.47.20 normal-update execution](docs/NORMAL_UPDATE_04720.md) ·

@@ -2,6 +2,7 @@
 #if defined(ARDUINO_ARCH_ESP32)
 #include "diagnostic_journal.h"
 #include "stack_scan_policy.h"
+#include "usb_diag_control.h"
 #include <Arduino.h>
 #include <esp_attr.h>
 #include <esp_system.h>
@@ -14,7 +15,7 @@ namespace RuntimeDiag {
 namespace {
 constexpr uint32_t kLanes = static_cast<uint32_t>(Lane::Count);
 struct Probe { uint32_t phase, last_ms, beats, detail, stack_free, core; };
-struct Memory { uint32_t at_ms, internal_free, internal_min, largest, dma_free, psram_free; };
+using Memory = MemorySnapshot;
 struct Boot { uint32_t id, reset, stage, failures; };
 struct CameraDriver {
   uint32_t observed, created, active, requested, allocated, stack_seen, stack_free, at_ms;
@@ -33,6 +34,8 @@ struct StackScan { uint32_t allowed, count, at_ms, last_us, max_us; };
 StackScan stack_scans[kLanes]{};
 stack_scan::Schedule stack_schedules[kLanes];  // one owner per lane; never exported directly
 Memory memory{};
+uint32_t diagnostics_enabled = 0, run_active = 0;
+usb_diag::Parser usb_commands;
 CameraDriver camera_driver{};
 uint32_t event_id = 0, event_count = 0, clients = 0, ap_active = 0;
 uint32_t boot_stage = 0, boot_failures = 0;
@@ -126,6 +129,22 @@ void appendSample(const char* label, const Sample& s) {
       label, m.at_ms, m.internal_free, m.internal_min, m.largest, m.dma_free, m.psram_free);
 }
 void tick() {
+  // A bounded command listener remains available before Wi-Fi/IMU startup.
+  // Merely connecting USB never enables periodic diagnostics.
+  for (uint8_t i = 0; i < 32 && Serial.available() > 0; ++i) {
+    const auto command = usb_commands.feed(static_cast<char>(Serial.read()));
+    if (command == usb_diag::Command::Enable) setEnabled(true);
+    else if (command == usb_diag::Command::Disable) setEnabled(false);
+    if (command != usb_diag::Command::None && Serial && Serial.availableForWrite() > 128) {
+      const char* reply = command == usb_diag::Command::Unknown ? "USBDBG,unknown_command\n" :
+          enabled() ? "USBDBG,diagnostics=ON\n" : "USBDBG,diagnostics=OFF\n";
+      Serial.write(reinterpret_cast<const uint8_t*>(reply), strlen(reply));
+    }
+  }
+  if (!enabled()) {
+    report_sent = report_length = 0; last_sample_ms = last_report_ms = 0;
+    return;
+  }
   const uint32_t now = millis();
   if (now - last_sample_ms >= 250 || !last_sample_ms) {
     sample_journal.save(capture()); last_sample_ms = now;
@@ -137,7 +156,8 @@ void tick() {
     report_sent = report_length = 0; report_started_ms = last_report_ms = now;
     append("\nUSBDBG,boot,version=" RUNTIME_VERSION ",id=%u,reset=%s,reset_id=%u,stage=%s,failures=0x%08x,observer=%u,observer_stack_bytes=%u,usb_dropped=%u\n",
         current_boot.id, reason(current_boot.reset), current_boot.reset, stageName(get(boot_stage)),
-        get(boot_failures), observer_started, uxTaskGetStackHighWaterMark(nullptr), dropped);
+        get(boot_failures), observer_started, heavyAllowed() ? uxTaskGetStackHighWaterMark(nullptr) : 0, dropped);
+    append("USBDBG,mode,enabled=1,run_quiet=%u,heavy_scans_allowed=%u\n", runActive(), heavyAllowed());
     if (have_previous_boot) {
       append("USBDBG,previous_boot,id=%u,stage=%s,failures=0x%08x,rtc_sample=%u\n",
           previous_boot.id, stageName(previous_boot.stage), previous_boot.failures, have_previous_sample);
@@ -168,6 +188,14 @@ void tick() {
 void observer(void*) { for (;;) { tick(); vTaskDelay(pdMS_TO_TICKS(20)); } }
 }
 
+bool enabled() { return get(diagnostics_enabled) != 0; }
+void setEnabled(bool value) { put(diagnostics_enabled, value); }
+bool runActive() { return get(run_active) != 0; }
+void setRunActive(bool value) { put(run_active, value); }
+MemorySnapshot memorySnapshot() {
+  return {get(memory.at_ms), get(memory.internal_free), get(memory.internal_min),
+      get(memory.largest), get(memory.dma_free), get(memory.psram_free)};
+}
 void boot(Stage stage) {
   current_boot.stage = static_cast<uint32_t>(stage);
   put(boot_stage, current_boot.stage); boot_journal.save(current_boot);
@@ -195,6 +223,7 @@ void begin() {
 void phase(Lane lane, Phase p) { put(probes[static_cast<uint32_t>(lane)].phase, static_cast<uint32_t>(p)); }
 Phase currentPhase(Lane lane) { return static_cast<Phase>(get(probes[static_cast<uint32_t>(lane)].phase)); }
 void beat(Lane lane, uint32_t detail, bool allow_stack_scan) {
+  allow_stack_scan = allow_stack_scan && heavyAllowed();
   const uint32_t index = static_cast<uint32_t>(lane);
   auto& p = probes[index];
   auto& scan = stack_scans[index];
@@ -214,6 +243,7 @@ void beat(Lane lane, uint32_t detail, bool allow_stack_scan) {
   put(p.detail, detail); put(p.last_ms, now); put(p.beats, get(p.beats) + 1);
 }
 void sampleMemory() {
+  if (!heavyAllowed()) return;
   const uint32_t now = millis();
   if (now - get(memory.at_ms) < 1000) return;
   Scope diagnostic(Lane::Http, Phase::HttpMemory);

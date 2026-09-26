@@ -4,12 +4,13 @@ static const char RUNTIME_HTML[] PROGMEM = R"FREEFOOT(<!doctype html><html lang=
 <style>
 :root{font-family:system-ui,sans-serif;color:#1d293d;background:#eef2f5;font-size:16px}*{box-sizing:border-box}body{max-width:950px;margin:auto;padding:20px}h1{font-size:1.65rem;margin-bottom:4px}h2{font-size:1.08rem}p{line-height:1.6}.muted{color:#546477;font-size:.88rem}.card{background:white;border-radius:14px;padding:20px;margin:16px 0;border:1px solid #d9e1e8}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.value{font-size:2rem;font-variant-numeric:tabular-nums;margin:4px 0}.label{font-size:.85rem;color:#546477}button{padding:13px 18px;border:0;border-radius:8px;background:#174b8e;color:white;font:inherit;cursor:pointer;margin:4px 4px 4px 0}button:disabled{opacity:.4;cursor:default}#stop{background:#b62032}#clear,#cancel{background:#58677a}code,pre{font-family:ui-monospace,monospace}pre{white-space:pre-wrap;font-size:.78rem;overflow-wrap:anywhere}#connection{font-weight:600}progress{width:100%;height:24px}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px 4px;border-bottom:1px solid #e1e6eb}canvas{width:100%;height:120px;background:#f3f6fa;border-radius:8px}#message{min-height:26px;color:#9c2636}a{color:#174b8e}
 </style>
-<h1>AtomS3R Free-foot</h1><div class="muted">0.47.20 · 通常更新の処理時間改善版 · 足角度はMEKF基準の暫定校正・観測用</div>
+<h1>AtomS3R Free-foot</h1><div class="muted">0.47.21 · 運転中Wi-Fi停止・姿勢STOP・USB診断切り替え · 足角度はMEKF基準の暫定校正・観測用</div>
 <p id="connection">接続を確認中…</p>
 <section class="card"><div class="grid"><div><div class="label">状態</div><div class="value" id="state">—</div></div><div><div class="label">残り時間</div><div class="value" id="remaining">—</div></div><div><div class="label">胴体の左右揺動 · MEKF</div><div class="value" id="pitch">—</div></div><div><div class="label">指令 / 実測電流</div><div class="value" style="font-size:1.5rem" id="current">—</div></div></div>
 <p id="guide">起動後は静止させてください。LEDが点灯したら直立させ、左右マーカーが見える状態で2秒以上静止します。</p>
-<button id="start" disabled>30秒測定を開始</button><button id="stop">停止</button><button id="clear" disabled>ログを消去・次の測定へ</button>
+<button id="start" disabled>30秒測定を開始</button><button id="reconnect" style="display:none">再接続を確認</button><button id="clear" disabled>ログを消去・次の測定へ</button>
 <div id="message" role="status"></div><p class="muted">開始・終了のLED同期はそれぞれ5秒。制御は既存のAutonomous、固定3ms補償、300mA / 最大100msパルスです。</p></section>
+<p class="muted">運転中はWi-Fiを停止し、本体で制御・観測・記録します。前後90°以上の転倒で停止し、姿勢を戻しても再始動しません。終了後は同じWi-Fiへ接続してログを保存してください。通信復帰だけではログは消えません。本体の電源断・再起動では未取得のログが失われます。</p>
 <section class="card"><h2>左右足角度 · 胴体に対する相対角</h2><div class="grid"><div><div class="label">右足 · 上段マーカー A</div><div class="value" id="right">—</div></div><div><div class="label">左足 · 下段マーカー B</div><div class="value" id="left">—</div></div><div><div class="label">カメラ実測 / 目標</div><div class="value" style="font-size:1.5rem" id="fps">— / 15 fps</div></div></div>
 <canvas id="markers" width="640" height="120" aria-label="マーカー検出位置。上段が右足、下段が左足。"></canvas>
 <p class="muted" id="foot-status">ゼロ点は起動ごとに1回だけ確定します。</p><p class="muted">角度の正方向はマーカーが左へ動く方向です。検出失敗・古い画像・設定範囲外を区別して表示し、その状態もログに保存します。候補を区別できないときは角度を無効にします。足を地面に固定して胴体を前後に傾けると、この相対角は変わります。</p><details><summary>検出画像を確認</summary><p class="muted">待機中に更新される1枚の画像です。測定完了後は測定前の画像を保持します。ログ保存後に「次の測定へ」進むと画像更新を再開します。線は検出に使った帯、丸は選択位置、黄色は未確定の位置・別候補です。</p><button id="preview" disabled>検出画像を取得</button><button id="preview-save" disabled>画像付き診断を保存</button><p class="muted" id="preview-status">画像はまだ取得していません。</p><canvas id="preview-image" width="640" height="480" style="height:auto;display:none" aria-label="カメラ画像と同じフレームの検出位置"></canvas></details></section>
@@ -24,7 +25,7 @@ static const char RUNTIME_HTML[] PROGMEM = R"FREEFOOT(<!doctype html><html lang=
 <section class="card"><h2>測定ログ</h2><p>測定終了後にログを確定します。中断した場合は「取得・再開」で続きから取得できます。画面を再読み込みしても、端末に保存済みの部分を再利用します。</p>
 <button id="download" disabled>RWLOGを取得・再開</button><button id="cancel" disabled>取得を一時停止</button><button id="csv" disabled>足角度CSVを保存</button>
 <progress id="progress" value="0" max="1"></progress><div id="transfer" role="status">測定待ち</div><p class="muted">RWLOGにIMU・制御イベント・電流・LED同期・足角度をまとめて保存します。USB診断ログは書き込みページから保存できます。</p></section>
-<details class="card"><summary>診断情報</summary><p class="muted">MEKFのroll・pitch・yaw、クォータニオン、有効性・更新時刻を保存します。3軸角度は補償・測定ゼロ差し引き前の推定値です。</p><button id="diagnostics">診断JSONを保存</button><pre id="diagnostic-view">—</pre></details>
+<details class="card"><summary>診断情報</summary><label><input type="checkbox" id="usb-diag">USB診断を有効にする</label><p class="muted">起動ごとにOFFです。運転中の変更はUSB側から行えます。メモリ・スタックの調査は有効時の待機中だけ行い、診断JSONには測定時刻付きで保持します。未測定のメモリ値は0です。</p><p class="muted">MEKFのroll・pitch・yaw、クォータニオン、有効性・更新時刻を保存します。3軸角度は補償・測定ゼロ差し引き前の推定値です。</p><button id="diagnostics">診断JSONを保存</button><pre id="diagnostic-view">—</pre></details>
 <script>
 'use strict';
 // Pure analysis of frozen frame-delivery snapshots. No device writes or fits.
@@ -136,6 +137,8 @@ let previewRunning = false, previewEvidence = null;
 let poseRunning = false, poseCancelled = false, poseSession = null, poseSaved = false;
 let latest = null, lastSeen = 0, refreshInFlight = false, commandInFlight = false;
 let transferRunning = false, cancelTransfer = false, completedFile = null, completedName = '', completedFoot = null;
+let offlineMode = false, offlineUntil = 0;
+const offlineKey = 'freefoot-offline-run-until';
 const nap = ms => new Promise(resolve => setTimeout(resolve, ms));
 function crc32(data, crc = 0) {
   crc = ~crc;
@@ -158,7 +161,7 @@ async function request(path, {method = 'GET', kind = 'json', timeout = 3000} = {
   } finally { clearTimeout(timer); }
 }
 function controls() {
-  const fresh = latest && Date.now() - lastSeen < 3500;
+  const fresh = !offlineMode && latest && Date.now() - lastSeen < 3500;
   const busy = commandInFlight || previewRunning || poseRunning || !!latest?.command?.pending;
   const building = latest?.export_phase === 'building';
   $('start').disabled = !fresh || busy || transferRunning || !latest.ready || latest.running || latest.export_phase !== 'empty';
@@ -175,6 +178,28 @@ function controls() {
   $('pose-cancel').disabled = !poseRunning;
   $('pose-save').disabled = !poseSession?.baseline || poseRunning;
   $('pose-reset').disabled = !poseSession || poseRunning || (!!poseSession.baseline && !poseSaved);
+  if ($('usb-diag')) $('usb-diag').disabled = !fresh || commandInFlight;
+  if ($('reconnect')) $('reconnect').style.display = offlineMode ? 'inline-block' : 'none';
+}
+function setOffline(waitMs) {
+  offlineMode = true; offlineUntil = Date.now() + Math.max(0, Math.min(45000, waitMs));
+  try { sessionStorage.setItem(offlineKey, String(offlineUntil)); } catch (_) {}
+  renderOffline();
+}
+function clearOffline() {
+  offlineMode = false; offlineUntil = 0;
+  try { sessionStorage.removeItem(offlineKey); } catch (_) {}
+}
+function renderOffline() {
+  const remaining = Math.max(0, Math.ceil((offlineUntil - Date.now()) / 1000));
+  $('connection').textContent = remaining ? '運転のため通信を停止中 · 終了後に再接続' : '通信の復帰待ち · 同じWi-Fiへの接続を確認してください';
+  $('state').textContent = '通信停止モード';
+  $('remaining').textContent = remaining ? `${remaining} s（再接続目安）` : '復帰待ち';
+  for (const id of ['pitch', 'current', 'right', 'left', 'fps']) $(id).textContent = '—';
+  $('guide').textContent = '本体で制御・観測・記録を行います。開始5秒＋測定30秒＋終了5秒が予定時間です。前後90°以上の転倒でSTOPします。表示時間はPC側の目安で、実際の進行・終了を確認した値ではありません。';
+  $('foot-status').textContent = '足角度の画面更新を停止。本体内の記録は継続します。';
+  $('mekf-axes').textContent = '運転中の姿勢表示を停止しています。';
+  controls();
 }
 const format = (n, digits = 2) => Number.isFinite(n) ? n.toFixed(digits) : '—';
 function drawMarkers(f) {
@@ -233,20 +258,27 @@ function render(s) {
   else if (!f.right_valid || !f.left_valid) $('guide').textContent = '未検出の足があります。マーカーの見え方を確認してください。この姿勢の診断JSONを保存すると原因の確認に使えます。';
   else $('guide').textContent = s.ready ? '直立姿勢を保ち、測定を開始してください。' : 'IMUの初期化・静止確認を待っています。';
   $('diagnostic-view').textContent = JSON.stringify(s, null, 2);
+  if ($('usb-diag')) $('usb-diag').checked = s.usb_diagnostics === true;
   $('mekf-axes').textContent = s.mekf?.valid && s.mekf.fresh
     ? `前後 roll ${format(s.mekf.roll_deg)}° · 左右 pitch ${format(s.mekf.pitch_deg)}° · yaw ${format(s.mekf.yaw_deg)}°`
     : 'MEKFの更新を待っています。';
   drawMarkers(f); controls();
 }
-async function refresh() {
+async function refresh(force = false) {
+  if (offlineMode && Date.now() < offlineUntil && !force) { renderOffline(); return; }
   if (refreshInFlight) return;
   refreshInFlight = true;
   let received = false;
   try {
     const s = await request('/status.json', {timeout: 2500}); received = true;
-    adoptStatus(s); render(latest);
+    if (s?.offline_run === true && Number.isFinite(s.wait_ms)) { setOffline(s.wait_ms); return; }
+    const wasOffline = offlineMode;
+    adoptStatus(s); clearOffline(); render(latest);
+    if (wasOffline) $('message').textContent = s.network?.last_error || s.last_error ||
+      (s.downloadable ? '通信が復帰しました。ログを保存してください。' : s.command.result || '通信が復帰しました。');
   } catch (error) {
     lastSeen = 0;
+    if (offlineMode) { renderOffline(); return; }
     $('connection').textContent = received || error instanceof SyntaxError
       ? '状態データ・画面更新のエラー（自動再試行）'
       : '装置から応答がありません（自動再試行）';
@@ -273,6 +305,17 @@ async function poll() {
   try { await refresh(); }
   catch (error) { $('connection').textContent = '画面更新のエラー（自動再試行）'; }
   finally { setTimeout(poll, 800); }
+}
+async function startOfflineRun() {
+  if (commandInFlight || offlineMode) return;
+  commandInFlight = true; setOffline(45000); $('message').textContent = '開始要求を送信中…';
+  try {
+    await request('/start-energy-control-autonomous', {method:'POST', kind:'text'});
+    $('message').textContent = '開始要求を受け付けました。通信停止後に本体が開始条件を確認します。画面は閉じずにお待ちください。';
+  } catch (error) {
+    if (/^\d{3}:/.test(error.message)) { clearOffline(); await refresh(); }
+    $('message').textContent = `開始結果の確認: ${error.message}。通信復帰後に本体の結果を確認します。`;
+  } finally { commandInFlight = false; controls(); }
 }
 async function command(path) {
   commandInFlight = true; controls(); $('message').textContent = '要求を送信中…';
@@ -526,8 +569,18 @@ async function capturePose(baseline) {
     if (baseline && !poseSession.baseline) poseSession = null;
   } finally { poseRunning = false; controls(); }
 }
-$('start').onclick = () => command('/start-energy-control-autonomous');
-$('stop').onclick = () => { poseCancelled = true; return command('/stop'); };
+$('start').onclick = startOfflineRun;
+if ($('stop')) $('stop').onclick = () => { poseCancelled = true; return command('/stop'); };
+if ($('reconnect')) $('reconnect').onclick = () => refresh(true);
+if ($('usb-diag')) $('usb-diag').onchange = async () => {
+  const enabled = $('usb-diag').checked;
+  commandInFlight = true; controls();
+  try {
+    await request(`/diagnostics/usb?enabled=${enabled ? 1 : 0}`, {method:'POST', kind:'text'});
+    $('message').textContent = enabled ? 'USB診断を有効にしました。' : 'USB診断を停止しました。';
+  } catch (error) { $('message').textContent = error.message; }
+  finally { commandInFlight = false; await refresh(); }
+};
 $('clear').onclick = () => command('/clear');
 $('download').onclick = download;
 $('cancel').onclick = () => { cancelTransfer = true; };
@@ -547,6 +600,10 @@ $('pose-reset').onclick = () => {
   poseSession = null; poseSaved = false; renderPoses(); controls();
   $('pose-status').textContent = '胴体と両足を直立させ、基準を取得してください。';
 };
+try {
+  const until = Number(sessionStorage.getItem(offlineKey));
+  if (until > Date.now() && until <= Date.now() + 45000) setOffline(until - Date.now());
+} catch (_) {}
 poll();
 
 </script></html>

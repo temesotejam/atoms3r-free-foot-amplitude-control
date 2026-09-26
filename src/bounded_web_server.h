@@ -8,6 +8,7 @@
 class BoundedWriteWebServer : public WebServer {
  public:
   explicit BoundedWriteWebServer(int port = 80) : WebServer(port) {}
+  bool listening() { return static_cast<bool>(_server); }
 
  protected:
   size_t _currentClientWrite(const char* buffer, size_t length) override;

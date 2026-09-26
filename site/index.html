@@ -13,7 +13,7 @@
     <header class="hero">
       <p class="eyebrow">ATOMS3R / FREE-FOOT AMPLITUDE CONTROL</p>
       <h1>Free-foot Runtime V2<br><span>左右足角度・制御・ログを統合</span></h1>
-      <p class="lead">Free-foot Runtime V2 / 0.47.20 通常更新の処理時間改善版。姿勢推定と比較用フィルターを、計算内容を保って高速化します。</p>
+      <p class="lead">Free-foot Runtime V2 / 0.47.21。運転中はWi-Fiを停止し、本体で制御・観測・記録します。終了後に通信を再開してログを取得します。</p>
       <div class="badges"><span>ESP32-S3</span><span>BMI270 400/200 Hz</span><span>RWLOG v51</span><span>MEKF</span><span>左右足角度</span></div>
     </header>
     <section class="panel important">
@@ -21,14 +21,14 @@
       <p>V46al-R2の制御計算、固定3ms補償、300mA・最大100msパルス、30秒測定、開始・終了のLED同期を維持。白マーカーの位置から左右足角度を取得・表示・保存します。足角度は観測用で、制御入力には使用しません。</p>
       <p>ログ用イベント配列と大きな説明データはPSRAMに配置します。測定後にログを確定し、CRCで検証できる4KB以下のチャンクで取得します。ブラウザの一時停止・再接続・再読み込み後も保存済みの部分を再利用できます。</p>
       <p><strong>今回の校正はMEKFを基準にした暫定値です。係数決定に使わなかった手持ち2姿勢では、再計算上の残差が左右とも約0.26〜0.32°です。</strong>ビルドとホスト検証の範囲、実機で確認する項目は<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/FOOT_CALIBRATION_0477.md">校正の根拠</a>を参照してください。カメラは15fpsを目標に設定し、画面に実測値を表示します。</p>
-      <p>0.47.19の5回を比較基準に、同じ目標8°・30秒で測定します。初めに1回で起動・測定・ログ保存を確認し、問題なければ計5回のRWLOGと足CSVを保存してください。遅延の内訳も自動記録します。実機での改善量は測定後に確認します。<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/NORMAL_UPDATE_04720.md">変更内容と比較方法</a></p>
+      <p>まず1回、正常終了後のWi-Fi復帰とRWLOG・足CSVの保存を確認してください。姿勢STOP後の回収・通信中断後の再取得も確認してから、同じ目標8°・30秒を計5回測定します。処理時間の改善量と無線の停止・復帰は実機確認が必要です。<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/OFFLINE_RUN_04721.md">変更内容と比較方法</a></p>
       <p>公開ビルド：<code id="build-sha">取得中</code><br><a href="build-sha.txt">ビルドSHA</a> / <a href="firmware/SHA256SUMS.txt">ファームウェアSHA-256</a></p>
     </section>
     <section class="panel important">
       <h2>書き込みと測定</h2>
       <p>書き込み時はPCをインターネットにつながるWi-Fiまたは有線LANへ接続し、AtomS3RをUSBでつないでください。PC版ChromeまたはEdgeで下のボタンを押します。機体のWi-Fiへ切り替えるのは書き込み完了後です。</p>
       <esp-web-install-button manifest="manifest-freefoot-runtime-v2.json">
-        <button slot="activate" class="primary">0.47.20 処理時間改善版を書き込む</button>
+        <button slot="activate" class="primary">0.47.21 運転中Wi-Fi停止版を書き込む</button>
         <span slot="unsupported" class="warning">PC版ChromeまたはEdgeを使用してください。</span>
       </esp-web-install-button>
       <ol>
@@ -38,13 +38,14 @@
         <li>次の測定には「ログを消去・次の測定へ」を使います。ゼロ点は同じ起動中は保持されます。</li>
       </ol>
       <p>足角度の比較は、測定を開始せず「前後傾斜と足角度の比較」で行います。「直立基準を取得」→各傾斜で「この姿勢を追加」→「比較JSONを保存」の順に操作してください。各姿勢で約3秒静止します。個別の画像を見る場合は「検出画像を確認」を開きます。直立時と、両足を地面に固定して胴体を前後に傾けた時のそれぞれで「検出画像を取得」→「画像付き診断を保存」を押してください。緑の選択位置が左右の白四角に重なっているか確認できます。足角度は胴体に対する相対角、MEKF表示は胴体の左右揺動です。「診断JSONを保存」にはMEKFの3軸角度とクォータニオンも入ります。</p>
-      <p>電源・通信・カメラ・制御の確認情報は装置のWeb画面からJSONで保存できます。この診断版はUSB接続がなくても8秒後に通常処理へ進みます。不安定な場合は下のUSBログを保存してください。</p>
+      <p><strong>開始・測定・終了同期の間はWi-Fiが消えます。</strong>PCの画面は通信せず再接続の目安を表示します。終了後は同じSSIDへ接続してください。WebからのSTOPは使えません。前後90°以上の転倒（横倒し・反転も含む）で本体がSTOPし、明示的に解除するまで再始動しません。緊急時はモーターへの給電を遮断します。本体も電源断・再起動すると未取得ログは失われます。</p>
+      <p>電源・通信・カメラ・制御の確認情報は装置のWeb画面からJSONで保存できます。USB診断は起動ごとにOFFです。USB接続がなくても8秒後に通常処理へ進みます。不安定な場合は下のUSBログを保存してください。</p>
       <details><summary>デバイスが表示されない場合</summary><p>AtomS3RをDownload Modeへ入れてから書き込み、完了後に通常起動してください。</p></details>
     </section>
 
     <section class="panel important" id="usb-serial-panel">
       <h2>USBシリアルログ</h2>
-      <p>書き込み完了後に書き込み画面を閉じ、通常起動してから下の「USBシリアルに接続」で対象ポートを選びます。起動時の8秒間はカメラ・Wi-Fi初期化前の待機です。接続後は操作せず、問題が出るまでログを受信し、「ログを保存」でTXTを保存してください。WebUIが開けなくてもこのページから受信できます。</p>
+      <p>書き込み完了後に書き込み画面を閉じ、通常起動してから下の「USBシリアルに接続」で対象ポートを選びます。起動時の8秒間はカメラ・Wi-Fi初期化前の待機です。「USB診断を有効化」にチェックしてから接続し、問題が出るまでログを受信して、「ログを保存」でTXTを保存してください。WebUIが開けなくてもこのページから受信できます。</p>
       <p>ポートが消えても、それまでのログを保持して許可済みのポートへ再接続します。書き込みモードのままでは通常プログラムの診断ログは出ません。<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/USB_DIAGNOSTICS.md">ログの読み方と確認手順</a></p>
 
       <div class="serial-toolbar">
@@ -55,12 +56,13 @@
         <button id="serial-clear" class="serial-button" type="button">ログをクリア</button>
       </div>
 
+      <p><label><input id="serial-diagnostics" type="checkbox"> USB診断を有効化（通常はOFF）</label></p>
       <p><label><input id="serial-reconnect" type="checkbox" checked> USBポートの復帰後に自動再接続する</label></p>
       <p class="serial-status">状態: <strong id="serial-status">未接続</strong></p>
 
       <pre id="serial-log" class="serial-log" aria-live="polite">USBシリアル未接続
 </pre>
-      <p class="hint"><code>USBDBG,boot</code>に再起動理由、<code>previous</code>に前回起動中の保存済み状態、<code>live</code>に現在の状態が出ます。USBモニターはログ受信のみで、測定の開始や再起動は行いません。電源断によって前回記録が残らない場合もあります。</p>
+      <p class="hint"><code>USBDBG,boot</code>に再起動理由、<code>previous</code>に前回起動中の保存済み状態、<code>live</code>に現在の状態が出ます。このモニターは診断ON/OFFだけを送信します。測定の開始や再起動は行いません。再接続時は選択した診断設定を送信し、切断ボタンではOFFを送信します。電源断によって前回記録が残らない場合もあります。</p>
 
     </section>
 

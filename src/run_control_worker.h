@@ -118,6 +118,12 @@ class RunControlWorker {
     portEXIT_CRITICAL(&mux_);
     return copy;
   }
+  bool commandPublished(uint32_t id) const {
+    portENTER_CRITICAL(&mux_);
+    const bool result = published_command_completed_ == id;
+    portEXIT_CRITICAL(&mux_);
+    return result;
+  }
   void beginRunAudit(uint32_t epoch_us = 0) {
     // Owner only. The previous run has already been released by HTTP.
     control_work::profile.reset();
@@ -274,6 +280,7 @@ class RunControlWorker {
     portENTER_CRITICAL(&mux_);
     snapshot_ = next;
     active_ = next.running;
+    published_command_completed_ = command_state_.completed;
     portEXIT_CRITICAL(&mux_);
     RuntimeDiag::beat(RuntimeDiag::Lane::Control, next.state_id, !next.running);
     RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::Wait);
@@ -287,6 +294,7 @@ class RunControlWorker {
     }
   }
   Step step_ = nullptr;
+  uint32_t published_command_completed_ = 0;
   Capture capture_ = nullptr;
   void* context_ = nullptr;
   TaskHandle_t task_ = nullptr;

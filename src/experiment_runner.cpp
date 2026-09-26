@@ -6,6 +6,8 @@
 #include "control_latency.h"
 #include "rate_baseline_correction.h"
 #include "previous_peak_control_correction.h"
+#include "runtime_diagnostics.h"
+#include "tilt_stop.h"
 
 #include <math.h>
 
@@ -153,6 +155,14 @@ void ExperimentRunner::update() {
     if (status_.state == ExperimentState::STARTUP_GYRO_CALIB) updateStartupCalibration(r);
     updateCurrentRollState(r, now_ms);
     control_latency::mark(control_latency::Ready);
+    if (running()) {
+      const auto& attitude = status_.mekf_attitude;
+      const mekf6::Vec3 upright{-UprightPoseGuide::REF_AX,
+          UprightPoseGuide::REF_AY, -UprightPoseGuide::REF_AZ};
+      const char* stop_reason = tilt_stop::reason(attitude.quaternion, attitude.valid,
+          static_cast<uint32_t>(micros() - attitude.sample_us), upright);
+      if (stop_reason) { requestEmergencyStop(stop_reason); logSampleNow(); }
+    }
     if ((passive_capture_mode_ || q_ident_mode_ || energy_control_v0_mode_ || energy_control_autonomous_mode_) && status_.state == ExperimentState::RUNNING_BATCH_SWEEP) {
       control_work::Scope work(control_work::Stage::Motion, true, status_.pulse_active);
       updateQ1ShadowAtZeroCross(now_ms);
@@ -3398,7 +3408,7 @@ void ExperimentRunner::updateStartSync(uint32_t now_ms) {
 
       g_v46_mekf_run_reinit.done = true;
       g_v46_mekf_run_reinit.active = false;
-      Serial.printf("MEKF run reinit: n=%u mean=(%.5f,%.5f,%.5f) pitch=%.3f conf=%.3f resid=%.3f\n",
+      if (RuntimeDiag::enabled()) Serial.printf("MEKF run reinit: n=%u mean=(%.5f,%.5f,%.5f) pitch=%.3f conf=%.3f resid=%.3f\n",
                     static_cast<unsigned>(n), mean_accel.x, mean_accel.y, mean_accel.z,
                     raw_mekf_pitch_abs_deg_, status_.mekf_accel_confidence,
                     status_.mekf_accel_residual_deg);
@@ -5833,7 +5843,6 @@ const char* ExperimentRunner::stateName() const {
   }
   return "UNKNOWN";
 }
-
 
 
 

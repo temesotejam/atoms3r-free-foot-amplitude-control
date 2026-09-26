@@ -8,9 +8,13 @@ async function until(condition) {
 }
 function port(text) {
   let finish;
-  const state = {opens: 0, closes: 0, releases: 0, cancels: 0};
+  const state = {opens: 0, closes: 0, releases: 0, cancels: 0, writes:[], writeReleases:0};
   return {state, getInfo: () => ({usbVendorId: 0x303a, usbProductId: 0x1001}),
     async open() { ++state.opens; }, async close() { ++state.closes; },
+    writable: {getWriter() { return {
+      async write(bytes) { state.writes.push(new TextDecoder().decode(bytes)); },
+      releaseLock() { ++state.writeReleases; }
+    }; }},
     readable: {getReader() {
       let sent = false;
       return {
@@ -39,13 +43,20 @@ function port(text) {
   const monitor = new UsbSerialMonitor(serial, {data: s => { log += s; }, sleep: async () => { ++retries; await turn(); }});
   const session = monitor.connect();
   await until(() => log.includes('boot=1'));
+  assert.deepEqual(a.state.writes,['DIAG OFF\n']);
+  await monitor.setDiagnostics(true);
+  assert.equal(a.state.writes[1],'DIAG ON\n');
+  monitor.diagnosticsEnabled=()=>true;
   devices = [b]; listener({target: a});
   await until(() => log.includes('boot=2'));
   assert.equal(log, 'boot=1\nboot=2\n'); // Reset does not clear previous evidence.
-  assert.equal(chooserCalls, 1); // No permission chooser or firmware command on retry.
+  assert.equal(chooserCalls, 1); // Only the explicit diagnostic selection is reapplied.
+  assert.deepEqual(b.state.writes,['DIAG ON\n']);
   assert.equal(a.state.closes, 1); assert.equal(a.state.releases, 1);
   await monitor.disconnect(); await session;
   assert.equal(b.state.closes, 1); assert.equal(b.state.releases, 1);
+  assert.deepEqual(b.state.writes,['DIAG ON\n','DIAG OFF\n']);
+  assert.equal(b.state.writeReleases,2);
   const opens = b.state.opens; await turn(); assert.equal(b.state.opens, opens);
   assert.ok(retries >= 1);
   // Auto reconnect off: a disconnect completes instead of reopening the port.

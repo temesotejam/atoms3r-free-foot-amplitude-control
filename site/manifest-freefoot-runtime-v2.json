@@ -1,6 +1,6 @@
 {
   "name": "AtomS3R Free-foot Runtime V2",
-  "version": "0.47.20-hot-update",
+  "version": "0.47.21-offline-run",
   "builds": [
     {
       "chipFamily": "ESP32-S3",

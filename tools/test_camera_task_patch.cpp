@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <freertos/task.h>
 #include "camera_task_priority_patch.h"
+#include "runtime_diagnostics.h"
 
 namespace {
 struct Call {
@@ -47,6 +48,13 @@ int main() {
   assert(s.original_priority == 23 && s.effective_priority == 3 && s.core == 0);
 
   host_us = 1000000;
+  cameraTaskPriorityPatchSampleStack();
+  assert(host_stack_scans == 0); // Default OFF does not scan the camera driver.
+  RuntimeDiag::setEnabled(true);
+  RuntimeDiag::setRunActive(true);
+  cameraTaskPriorityPatchSampleStack();
+  assert(host_stack_scans == 0); // Even opt-in diagnostics defer run-time scans.
+  RuntimeDiag::setRunActive(false);
   cameraTaskPriorityPatchSampleStack();
   assert(host_stack_scans == 1 && host_stack_scanned_task == task_handle);
   s = cameraTaskPriorityPatchSnapshot();

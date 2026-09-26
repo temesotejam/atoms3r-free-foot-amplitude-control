@@ -64,6 +64,7 @@ static bool controlStep(void*) {
   RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::ControlService);
   const uint32_t start = micros();
   const bool was_running = runner.running();
+  bool run_started = false;
   const bool profile_measurement = runner.status().state == ExperimentState::RUNNING_BATCH_SWEEP;
   const bool profile_pulse = runner.status().pulse_active;
   {
@@ -108,6 +109,7 @@ static bool controlStep(void*) {
         ok = runner.startEnergyControlAutonomousCapture();
         error = ok ? "started" : runner.status().last_error;
         if (ok) {
+          run_started = true;
           log_epoch_us = esp_timer_get_time() - static_cast<uint32_t>(micros() - logger.runStartUs());
           measurement_epoch_us = 0;
           feet.beginRun(runner.status().run_id, log_epoch_us);
@@ -143,7 +145,7 @@ static bool controlStep(void*) {
   }
   runner.setLoopDt(done - start);
   RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::ControlFinish);
-  if (was_running && !runner.running()) { runner.sealCompletedLog(); feet.finishRun(); }
+  if ((was_running || run_started) && !runner.running()) { runner.sealCompletedLog(); feet.finishRun(); }
   // The existing LED sync pattern has exclusive authority during every run.
   if (!runner.running()) {
     RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::ControlIdle);

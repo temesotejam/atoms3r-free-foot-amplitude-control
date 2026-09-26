@@ -1,9 +1,10 @@
 #pragma once
 #include <stdint.h>
 
-#define RUNTIME_VERSION "0.47.20-hot-update"
+#define RUNTIME_VERSION "0.47.21-offline-run"
 
 namespace RuntimeDiag {
+struct MemorySnapshot { uint32_t at_ms, internal_free, internal_min, largest, dma_free, psram_free; };
 enum class Lane : uint32_t { Control, Imu, Camera, Http, Roller, Export, Count };
 enum class Stage : uint32_t {
   UsbWindow, M5, Logger, Imu, Camera, Roller, Runner, Control, Feet, Export, Web, Ready
@@ -18,6 +19,11 @@ enum class Phase : uint32_t {
 };
 #if defined(ARDUINO_ARCH_ESP32)
 void begin();
+bool enabled();
+void setEnabled(bool enabled);
+bool runActive();
+void setRunActive(bool active);
+MemorySnapshot memorySnapshot();
 void boot(Stage stage);
 void result(bool ok);
 // Single task owns each lane. These probes never log or acquire application locks.
@@ -33,6 +39,13 @@ void cameraDriverStopped();
 void wifiEvent(uint32_t event, int client_change = 0, int ap_active = -1);
 void pollFallback(); // Only used if the independent observer task could not be created.
 #else
+inline bool& enabledState() { static bool value = false; return value; }
+inline bool& runState() { static bool value = false; return value; }
+inline bool enabled() { return enabledState(); }
+inline void setEnabled(bool value) { enabledState() = value; }
+inline bool runActive() { return runState(); }
+inline void setRunActive(bool value) { runState() = value; }
+inline MemorySnapshot memorySnapshot() { return {}; }
 inline void phase(Lane, Phase) {}
 inline Phase currentPhase(Lane) { return Phase::Unseen; }
 inline void beat(Lane, uint32_t = 0, bool = true) {}
@@ -40,6 +53,7 @@ inline void cameraDriverTask(uint32_t, uint32_t, bool) {}
 inline void cameraDriverStack(uint32_t) {}
 inline void cameraDriverStopped() {}
 #endif
+inline bool heavyAllowed() { return enabled() && !runActive(); }
 struct Scope {
   Lane lane; Phase previous;
   Scope(Lane l, Phase p) : lane(l), previous(currentPhase(l)) { phase(l, p); }

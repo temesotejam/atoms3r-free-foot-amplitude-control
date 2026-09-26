@@ -46,7 +46,7 @@ jobs:
           cp bmi270-build-patch.json madgwick-build-patch.json dist/
           python "$HOME/.platformio/packages/tool-esptoolpy/esptool.py" --chip esp32s3 merge_bin -o dist/merged-firmware.bin 0x0000 dist/bootloader.bin 0x8000 dist/partitions.bin 0xe000 dist/boot_app0.bin 0x10000 dist/firmware.bin
           printf '%s\n' "$GITHUB_SHA" > dist/build-sha.txt
-          printf '%s\n' 'Free-foot Runtime V2 0.47.20 targeted normal-update O2/no-fast-math and IRAM; unchanged estimator/comparator arithmetic and same-sample ordering; direct-Q solver, foot calibration, acquisition scheduling, 3ms compensation and 300mA/100ms limits retained; 10ms stale STOP independent of I2C timeout; hardware timing validation pending' > dist/FLASH_LAYOUT.txt
+          printf '%s\n' 'Free-foot Runtime V2 0.47.21 offline Wi-Fi/HTTP run; mechanical 90deg tilt STOP; opt-in USB diagnostics; heavy scans deferred during run; sealed RWLOG/foot frames and export token survive transport restart; unchanged control math/MEKF/3ms/300mA/100ms; hardware reconnection and timing validation pending' > dist/FLASH_LAYOUT.txt
           (cd dist && sha256sum *.bin > SHA256SUMS.txt)
           git diff --exit-code
       - uses: actions/upload-artifact@v4

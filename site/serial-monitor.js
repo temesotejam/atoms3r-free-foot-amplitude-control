@@ -4,12 +4,14 @@
 // reader; it never nulls a handle still used by another async function.
 class UsbSerialMonitor {
   constructor(serial, {data = () => {}, state = () => {}, event = () => {},
-      autoReconnect = () => true, sleep = ms => new Promise(resolve => setTimeout(resolve, ms))} = {}) {
-    Object.assign(this, {serial, data, state, event, autoReconnect, sleep});
+      autoReconnect = () => true, diagnosticsEnabled = () => false,
+      sleep = ms => new Promise(resolve => setTimeout(resolve, ms))} = {}) {
+    Object.assign(this, {serial, data, state, event, autoReconnect, diagnosticsEnabled, sleep});
     this.wanted = false;
     this.task = null;
     this.reader = null;
     this.port = null;
+    this.writeTask = Promise.resolve();
     serial?.addEventListener('disconnect', e => {
       if (this.port && (e.target === this.port || e.port === this.port)) {
         this.event('USBデバイスが切断されました');
@@ -66,6 +68,7 @@ class UsbSerialMonitor {
             if (!port.readable) throw new Error('読み取り可能なUSBポートではありません');
             preferred = port;
             this.port = port;
+            await this.setDiagnostics(this.diagnosticsEnabled());
             reader = port.readable.getReader();
             this.reader = reader;
             this.event('USB接続・ログ受信開始');
@@ -92,7 +95,29 @@ class UsbSerialMonitor {
       await this.sleep(1000);
     }
   }
+  async setDiagnostics(enabled) {
+    const port = this.port;
+    if (!port?.writable) return;
+    const write = async () => {
+      if (this.port !== port) return;
+      const writer = port.writable.getWriter();
+      let timer;
+      try {
+        await Promise.race([
+          writer.write(new TextEncoder().encode(enabled ? 'DIAG ON\n' : 'DIAG OFF\n')),
+          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('USB送信タイムアウト')), 2000); })
+        ]);
+        this.event(enabled ? 'USB診断ONを要求しました' : 'USB診断OFFを要求しました');
+      } catch (error) {
+        if (writer.abort) void writer.abort(error).catch(() => {});
+        throw error;
+      } finally { clearTimeout(timer); writer.releaseLock(); }
+    };
+    this.writeTask = this.writeTask.then(write, write).catch(error => this.event(`診断切り替え失敗: ${error.message}`));
+    await this.writeTask;
+  }
   async disconnect() {
+    await this.setDiagnostics(false);
     this.wanted = false;
     if (this.reader) { try { await this.reader.cancel(); } catch (_) {} }
     if (this.task) await this.task;
@@ -117,11 +142,13 @@ if (typeof document !== 'undefined') {
   const monitor = new UsbSerialMonitor(navigator.serial, {
     data: append, event,
     autoReconnect: () => get('serial-reconnect').checked,
+    diagnosticsEnabled: () => get('serial-diagnostics').checked,
     state: (text, active) => {
       status.textContent = text; connect.disabled = active; disconnect.disabled = !active;
     }
   });
   connect.addEventListener('click', () => { void monitor.connect(); });
+  get('serial-diagnostics').addEventListener('change', () => { void monitor.setDiagnostics(get('serial-diagnostics').checked); });
   disconnect.addEventListener('click', () => { void monitor.disconnect(); });
   get('serial-clear').addEventListener('click', () => { logText = ''; log.textContent = ''; });
   get('serial-copy').addEventListener('click', async () => {

@@ -90,7 +90,7 @@ CameraTaskPriorityPatchSnapshot cameraTaskPriorityPatchSnapshot() {
 }
 
 void cameraTaskPriorityPatchSampleStack() {
-  if (!g_camera_task) return;
+  if (!g_camera_task || !RuntimeDiag::heavyAllowed()) return;
   const uint32_t now = millis();
   if (g_stack_sample_ms && now - g_stack_sample_ms < 1000) return;
   // The lifecycle owner guarantees this task is alive throughout this scan.

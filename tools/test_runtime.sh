@@ -7,6 +7,11 @@ node tools/test_pose_comparison.js
 node --check site/serial-monitor.js
 node tools/test_serial_monitor.js
 node tools/test_runtime_web.js
+node tools/test_offline_web.js
+g++ -std=c++17 -O2 -Wall -Wextra -Werror -Isrc tools/test_offline_run.cpp -o /tmp/test_offline_run
+/tmp/test_offline_run
+g++ -std=c++17 -O2 -Wall -Wextra -Werror -Isrc tools/test_tilt_stop.cpp src/mekf6.cpp -o /tmp/test_tilt_stop
+/tmp/test_tilt_stop
 g++ -std=c++17 -O2 -Wall -Wextra -Werror tools/test_stack_scan_policy.cpp -o /tmp/test_stack_scan_policy
 /tmp/test_stack_scan_policy
 python3 tools/test_realtime_code_link.py
@@ -47,6 +52,7 @@ g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o tools/test_control_wo
 /tmp/test_control_work /tmp/control-work-fixture.json
 g++ -std=c++17 -O2 -Wall -Wextra -Werror -Wno-format -ffunction-sections -fdata-sections -Itools/host_v46o tools/test_runtime_logger.cpp src/psram_logger.cpp src/foot_observer.cpp src/foot_angle_estimator.cpp src/white_marker_tracker.cpp src/immutable_export.cpp src/control_work_profile.cpp src/control_latency.cpp -Wl,--gc-sections -o /tmp/test_logger
 /tmp/test_logger /tmp/runtime-fixture.rwlog
+node tools/test_runtime_download.js
 python3 tools/test_runtime_fixture.py
 
 g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o -Isrc tools/test_control_latency.cpp src/control_latency.cpp -o /tmp/test_control_latency

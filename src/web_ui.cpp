@@ -5,7 +5,7 @@
 #include "foot_range_diagnostics.h"
 #include "foot_calibration_diagnostics.h"
 #include <WiFi.h>
-#include <esp_heap_caps.h>
+#include <esp_wifi.h>
 #include <esp_timer.h>
 #include <esp_system.h>
 #include <errno.h>
@@ -19,18 +19,22 @@ static const char* phase(ImmutableExport::Phase p) {
     default: return "empty";
   }
 }
-void WebUi::begin(WebServer& s, RunControlWorker& control, FootObserver& feet, ImmutableExport& exporter) {
+void WebUi::begin(BoundedWriteWebServer& s, RunControlWorker& control, FootObserver& feet, ImmutableExport& exporter) {
   server_ = &s; control_ = &control; feet_ = &feet; export_ = &exporter;
   preview_buffer_ = static_cast<uint8_t*>(ps_malloc(FootObserver::kPreviewBytes));
-  WiFi.onEvent([](WiFiEvent_t event) {
+  WiFi.onEvent([this](arduino_event_id_t event, arduino_event_info_t) {
+    if (event == ARDUINO_EVENT_WIFI_AP_START) __atomic_store_n(&ap_active_, 1U, __ATOMIC_RELEASE);
+    if (event == ARDUINO_EVENT_WIFI_AP_STOP) __atomic_store_n(&ap_active_, 0U, __ATOMIC_RELEASE);
     RuntimeDiag::wifiEvent(static_cast<uint32_t>(event),
         event == ARDUINO_EVENT_WIFI_AP_STACONNECTED ? 1 : event == ARDUINO_EVENT_WIFI_AP_STADISCONNECTED ? -1 : 0,
         event == ARDUINO_EVENT_WIFI_AP_START ? 1 : event == ARDUINO_EVENT_WIFI_AP_STOP ? 0 : -1);
   });
   RuntimeDiag::result(WiFi.mode(WIFI_AP));
   RuntimeDiag::result(WiFi.softAP(Config::AP_SSID, Config::AP_PASS, Config::AP_CHANNEL));
+  RuntimeDiag::result(WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0)));
   boot_id_ = esp_random();
   s.on("/", HTTP_GET, [this]() {
+    if (quietResponse()) return;
     RuntimeDiag::Scope diagnostic(RuntimeDiag::Lane::Http, RuntimeDiag::Phase::HttpRoot);
     server_->sendHeader("Cache-Control", "no-store");
     server_->send_P(200, "text/html; charset=utf-8", RUNTIME_HTML);
@@ -43,9 +47,11 @@ void WebUi::begin(WebServer& s, RunControlWorker& control, FootObserver& feet, I
   s.on("/stop", HTTP_POST, [this]() {
     RuntimeDiag::Scope diagnostic(RuntimeDiag::Lane::Http, RuntimeDiag::Phase::HttpCommand);
     const bool ok = control_->requestStop();
+    offline_.cancel(millis());
     server_->send(ok ? 202 : 503, "text/plain", ok ? "stop_queued" : "controller_unavailable");
   });
   s.on("/export/prepare", HTTP_POST, [this]() {
+    if (offline_.busy()) { server_->send(409, "text/plain", "run_preparing"); return; }
     RuntimeDiag::Scope diagnostic(RuntimeDiag::Lane::Http, RuntimeDiag::Phase::HttpCommand);
     const auto st = control_->snapshot();
     const bool ok = !st.running && st.downloadable && !control_->commandState().pending && export_->prepare();
@@ -53,6 +59,13 @@ void WebUi::begin(WebServer& s, RunControlWorker& control, FootObserver& feet, I
   });
   s.on("/export/manifest", HTTP_GET, [this]() { manifest(); });
   s.on("/export/chunk", HTTP_GET, [this]() { chunk(); });
+  s.on("/diagnostics/usb", HTTP_POST, [this]() {
+    if (offline_.busy()) { server_->send(409, "text/plain", "run_preparing"); return; }
+    const String value = server_->arg("enabled");
+    if (value != "1" && value != "0") { server_->send(400, "text/plain", "enabled_0_or_1_required"); return; }
+    RuntimeDiag::setEnabled(value == "1");
+    server_->send(200, "text/plain", RuntimeDiag::enabled() ? "diagnostics_on" : "diagnostics_off");
+  });
   s.on("/download/rwlog", HTTP_GET, [this]() {
     server_->send(410, "text/plain", "Open http://192.168.4.1/ and use resumable RWLOG download.");
   });
@@ -60,13 +73,69 @@ void WebUi::begin(WebServer& s, RunControlWorker& control, FootObserver& feet, I
   s.enableDelay(false); s.begin();
 }
 void WebUi::update() {
+  if (offline_.busy()) {
+    if (offline_.serving() && server_) server_->handleClient();
+    const uint32_t now = millis();
+    if (now - offline_poll_ms_ >= 20) { offline_poll_ms_ = now; offline_.update(now, *this); }
+    return;
+  }
   RuntimeDiag::phase(RuntimeDiag::Lane::Http, RuntimeDiag::Phase::HttpPoll);
   if (server_) server_->handleClient();
   RuntimeDiag::sampleMemory();
   RuntimeDiag::beat(RuntimeDiag::Lane::Http);
   RuntimeDiag::phase(RuntimeDiag::Lane::Http, RuntimeDiag::Phase::Wait);
 }
+void WebUi::stopServer() { server_->client().stop(); server_->stop(); }
+bool WebUi::stopRadio() {
+  // Preserve initialized driver/netif/configuration; no deinit or app reset.
+  // Pair SDK stop/start here; do not mix Arduino mode(WIFI_OFF) bookkeeping.
+  radio_start_requested_ = false;
+  return esp_wifi_stop() == ESP_OK;
+}
+bool WebUi::radioActive() const { return __atomic_load_n(&ap_active_, __ATOMIC_ACQUIRE) != 0; }
+bool WebUi::queueStart() {
+  start_command_id_ = control_->commandState().submitted + 1;
+  start_submitted_ = control_->request(RunControlWorker::Command::Start);
+  return start_submitted_;
+}
+OfflineRunSession::StartResult WebUi::startResult() const {
+  if (!start_submitted_) return OfflineRunSession::StartResult::Rejected;
+  const auto c = control_->commandState();
+  if (c.pending || c.completed != start_command_id_ || !control_->commandPublished(start_command_id_))
+    return OfflineRunSession::StartResult::Pending;
+  return c.ok ? OfflineRunSession::StartResult::Started : OfflineRunSession::StartResult::Rejected;
+}
+bool WebUi::runActive() const { return control_->active(); }
+void WebUi::cancelStart() { if (!cancel_sent_) cancel_sent_ = control_->requestStop(); }
+bool WebUi::restoreTransport() {
+  const uint32_t now = millis();
+  if (!radio_start_requested_ || (!radioActive() && now - radio_retry_ms_ >= 2000)) {
+    // Obtain a fresh AP_START even after a missing AP_STOP event or a failed
+    // start. Never trust a pre-pause 'AP up' flag to mean sockets recovered.
+    esp_wifi_stop();
+    __atomic_store_n(&ap_active_, 0U, __ATOMIC_RELEASE);
+    radio_retry_ms_ = now;
+    radio_start_requested_ = true;
+    RuntimeDiag::result(esp_wifi_start() == ESP_OK);
+    return false;
+  }
+  if (!radioActive()) return false;
+  // Rebind port 80 after the AP is up; preserve routes, boot ID, all buffers,
+  // sealed logs and ImmutableExport token/CRC/metadata on every retry.
+  server_->begin();
+  return server_->listening();
+}
+void WebUi::transportReady() { RuntimeDiag::setRunActive(false); }
+bool WebUi::quietResponse() {
+  if (!offline_.busy()) return false;
+  char json[160];
+  snprintf(json, sizeof(json), "{\"offline_run\":true,\"phase\":\"%s\",\"wait_ms\":%lu}",
+      offline_.name(), static_cast<unsigned long>(offline_.displayWaitMs(millis())));
+  server_->sendHeader("Cache-Control", "no-store"); server_->send(200, "application/json", json);
+  return true;
+}
 void WebUi::command(RunControlWorker::Command cmd) {
+  if (offline_.busy()) { server_->send(409, "text/plain", "run_preparing"); return; }
   RuntimeDiag::Scope diagnostic(RuntimeDiag::Lane::Http, RuntimeDiag::Phase::HttpCommand);
   if (server_->hasArg("timing_ms")) {
     server_->send(400, "text/plain", "fixed_3ms_reload_page"); return;
@@ -82,10 +151,20 @@ void WebUi::command(RunControlWorker::Command cmd) {
   if (cmd == RunControlWorker::Command::Clear && !export_->reset()) {
     server_->send(409, "text/plain", "export_preparing"); return;
   }
-  const bool ok = control_->request(cmd);
-  server_->send(ok ? 202 : 409, "text/plain", ok ? "command_queued" : "command_busy");
+  if (cmd == RunControlWorker::Command::Start) {
+    const bool ok = offline_.queue(millis());
+    if (ok) {
+      start_submitted_ = cancel_sent_ = radio_start_requested_ = false;
+      RuntimeDiag::setRunActive(true);
+    }
+    server_->send(ok ? 202 : 409, "text/plain", ok ? "offline_run_queued" : "command_busy");
+  } else {
+    const bool ok = control_->request(cmd);
+    server_->send(ok ? 202 : 409, "text/plain", ok ? "command_queued" : "command_busy");
+  }
 }
 void WebUi::status() {
+  if (quietResponse()) return;
   RuntimeDiag::Scope diagnostic(RuntimeDiag::Lane::Http, RuntimeDiag::Phase::HttpStatus);
   const auto s = control_->snapshot(); const auto f = feet_->snapshot();
   const auto c = control_->commandState(); const auto e = export_->status();
@@ -96,6 +175,8 @@ void WebUi::status() {
   String json; json.reserve(6100);
   json = "{\"revision\":\"" RUNTIME_VERSION "\",\"state\":\"" + String(s.state_name) + "\"";
   json += ",\"boot_id\":" + String(boot_id_);
+  json += ",\"network\":{\"phase\":\"" + String(offline_.name()) + "\",\"last_error\":\"" + String(offline_.error()) + "\"}";
+  json += ",\"usb_diagnostics\":" + String(RuntimeDiag::enabled() ? "true" : "false");
   json += ",\"running\":" + String(s.running ? "true" : "false");
   json += ",\"ready\":" + String(s.ready && fresh && export_->ready() && feet_->readyToStart() ? "true" : "false");
   json += ",\"controller_fresh\":" + String(fresh ? "true" : "false");
@@ -159,11 +240,14 @@ void WebUi::status() {
   json += ",\"driver_task_core\":" + String(camera.cam_task_core);
   json += ",\"driver_task_priority\":" + String(camera.cam_task_effective_priority) + "}";
   RuntimeDiag::phase(RuntimeDiag::Lane::Http, RuntimeDiag::Phase::HttpMemory);
-  json += ",\"memory\":{\"internal_free\":" + String(heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
-  json += ",\"internal_min_free\":" + String(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
-  json += ",\"internal_largest\":" + String(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
-  json += ",\"dma_free\":" + String(heap_caps_get_free_size(MALLOC_CAP_DMA));
-  json += ",\"psram_free\":" + String(heap_caps_get_free_size(MALLOC_CAP_SPIRAM)) + "}";
+  const auto memory = RuntimeDiag::memorySnapshot();
+  json += ",\"memory\":{\"sampled_ms\":" + String(memory.at_ms);
+  json += ",\"sampled\":" + String(memory.at_ms ? "true" : "false");
+  json += ",\"internal_free\":" + String(memory.internal_free);
+  json += ",\"internal_min_free\":" + String(memory.internal_min);
+  json += ",\"internal_largest\":" + String(memory.largest);
+  json += ",\"dma_free\":" + String(memory.dma_free);
+  json += ",\"psram_free\":" + String(memory.psram_free) + "}";
   RuntimeDiag::phase(RuntimeDiag::Lane::Http, RuntimeDiag::Phase::HttpJson);
   json += ",\"control\":{\"steps\":" + String(h.steps);
   json += ",\"sample_deadline_over\":" + String(h.sample_deadline_over);
@@ -208,7 +292,7 @@ void WebUi::chunk() {
 }
 
 bool WebUi::previewAllowed() const {
-  return !control_->snapshot().running && !control_->commandState().pending &&
+  return !offline_.busy() && !control_->snapshot().running && !control_->commandState().pending &&
          export_->status().phase != ImmutableExport::Phase::Building;
 }
 static String previewMarkerJson(const WhiteMarkerObservation& m) {

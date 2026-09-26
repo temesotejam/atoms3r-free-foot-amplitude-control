@@ -4,6 +4,8 @@ let previewRunning = false, previewEvidence = null;
 let poseRunning = false, poseCancelled = false, poseSession = null, poseSaved = false;
 let latest = null, lastSeen = 0, refreshInFlight = false, commandInFlight = false;
 let transferRunning = false, cancelTransfer = false, completedFile = null, completedName = '', completedFoot = null;
+let offlineMode = false, offlineUntil = 0;
+const offlineKey = 'freefoot-offline-run-until';
 const nap = ms => new Promise(resolve => setTimeout(resolve, ms));
 function crc32(data, crc = 0) {
   crc = ~crc;
@@ -26,7 +28,7 @@ async function request(path, {method = 'GET', kind = 'json', timeout = 3000} = {
   } finally { clearTimeout(timer); }
 }
 function controls() {
-  const fresh = latest && Date.now() - lastSeen < 3500;
+  const fresh = !offlineMode && latest && Date.now() - lastSeen < 3500;
   const busy = commandInFlight || previewRunning || poseRunning || !!latest?.command?.pending;
   const building = latest?.export_phase === 'building';
   $('start').disabled = !fresh || busy || transferRunning || !latest.ready || latest.running || latest.export_phase !== 'empty';
@@ -43,6 +45,28 @@ function controls() {
   $('pose-cancel').disabled = !poseRunning;
   $('pose-save').disabled = !poseSession?.baseline || poseRunning;
   $('pose-reset').disabled = !poseSession || poseRunning || (!!poseSession.baseline && !poseSaved);
+  if ($('usb-diag')) $('usb-diag').disabled = !fresh || commandInFlight;
+  if ($('reconnect')) $('reconnect').style.display = offlineMode ? 'inline-block' : 'none';
+}
+function setOffline(waitMs) {
+  offlineMode = true; offlineUntil = Date.now() + Math.max(0, Math.min(45000, waitMs));
+  try { sessionStorage.setItem(offlineKey, String(offlineUntil)); } catch (_) {}
+  renderOffline();
+}
+function clearOffline() {
+  offlineMode = false; offlineUntil = 0;
+  try { sessionStorage.removeItem(offlineKey); } catch (_) {}
+}
+function renderOffline() {
+  const remaining = Math.max(0, Math.ceil((offlineUntil - Date.now()) / 1000));
+  $('connection').textContent = remaining ? '運転のため通信を停止中 · 終了後に再接続' : '通信の復帰待ち · 同じWi-Fiへの接続を確認してください';
+  $('state').textContent = '通信停止モード';
+  $('remaining').textContent = remaining ? `${remaining} s（再接続目安）` : '復帰待ち';
+  for (const id of ['pitch', 'current', 'right', 'left', 'fps']) $(id).textContent = '—';
+  $('guide').textContent = '本体で制御・観測・記録を行います。開始5秒＋測定30秒＋終了5秒が予定時間です。前後90°以上の転倒でSTOPします。表示時間はPC側の目安で、実際の進行・終了を確認した値ではありません。';
+  $('foot-status').textContent = '足角度の画面更新を停止。本体内の記録は継続します。';
+  $('mekf-axes').textContent = '運転中の姿勢表示を停止しています。';
+  controls();
 }
 const format = (n, digits = 2) => Number.isFinite(n) ? n.toFixed(digits) : '—';
 function drawMarkers(f) {
@@ -101,20 +125,27 @@ function render(s) {
   else if (!f.right_valid || !f.left_valid) $('guide').textContent = '未検出の足があります。マーカーの見え方を確認してください。この姿勢の診断JSONを保存すると原因の確認に使えます。';
   else $('guide').textContent = s.ready ? '直立姿勢を保ち、測定を開始してください。' : 'IMUの初期化・静止確認を待っています。';
   $('diagnostic-view').textContent = JSON.stringify(s, null, 2);
+  if ($('usb-diag')) $('usb-diag').checked = s.usb_diagnostics === true;
   $('mekf-axes').textContent = s.mekf?.valid && s.mekf.fresh
     ? `前後 roll ${format(s.mekf.roll_deg)}° · 左右 pitch ${format(s.mekf.pitch_deg)}° · yaw ${format(s.mekf.yaw_deg)}°`
     : 'MEKFの更新を待っています。';
   drawMarkers(f); controls();
 }
-async function refresh() {
+async function refresh(force = false) {
+  if (offlineMode && Date.now() < offlineUntil && !force) { renderOffline(); return; }
   if (refreshInFlight) return;
   refreshInFlight = true;
   let received = false;
   try {
     const s = await request('/status.json', {timeout: 2500}); received = true;
-    adoptStatus(s); render(latest);
+    if (s?.offline_run === true && Number.isFinite(s.wait_ms)) { setOffline(s.wait_ms); return; }
+    const wasOffline = offlineMode;
+    adoptStatus(s); clearOffline(); render(latest);
+    if (wasOffline) $('message').textContent = s.network?.last_error || s.last_error ||
+      (s.downloadable ? '通信が復帰しました。ログを保存してください。' : s.command.result || '通信が復帰しました。');
   } catch (error) {
     lastSeen = 0;
+    if (offlineMode) { renderOffline(); return; }
     $('connection').textContent = received || error instanceof SyntaxError
       ? '状態データ・画面更新のエラー（自動再試行）'
       : '装置から応答がありません（自動再試行）';
@@ -141,6 +172,17 @@ async function poll() {
   try { await refresh(); }
   catch (error) { $('connection').textContent = '画面更新のエラー（自動再試行）'; }
   finally { setTimeout(poll, 800); }
+}
+async function startOfflineRun() {
+  if (commandInFlight || offlineMode) return;
+  commandInFlight = true; setOffline(45000); $('message').textContent = '開始要求を送信中…';
+  try {
+    await request('/start-energy-control-autonomous', {method:'POST', kind:'text'});
+    $('message').textContent = '開始要求を受け付けました。通信停止後に本体が開始条件を確認します。画面は閉じずにお待ちください。';
+  } catch (error) {
+    if (/^\d{3}:/.test(error.message)) { clearOffline(); await refresh(); }
+    $('message').textContent = `開始結果の確認: ${error.message}。通信復帰後に本体の結果を確認します。`;
+  } finally { commandInFlight = false; controls(); }
 }
 async function command(path) {
   commandInFlight = true; controls(); $('message').textContent = '要求を送信中…';
@@ -394,8 +436,18 @@ async function capturePose(baseline) {
     if (baseline && !poseSession.baseline) poseSession = null;
   } finally { poseRunning = false; controls(); }
 }
-$('start').onclick = () => command('/start-energy-control-autonomous');
-$('stop').onclick = () => { poseCancelled = true; return command('/stop'); };
+$('start').onclick = startOfflineRun;
+if ($('stop')) $('stop').onclick = () => { poseCancelled = true; return command('/stop'); };
+if ($('reconnect')) $('reconnect').onclick = () => refresh(true);
+if ($('usb-diag')) $('usb-diag').onchange = async () => {
+  const enabled = $('usb-diag').checked;
+  commandInFlight = true; controls();
+  try {
+    await request(`/diagnostics/usb?enabled=${enabled ? 1 : 0}`, {method:'POST', kind:'text'});
+    $('message').textContent = enabled ? 'USB診断を有効にしました。' : 'USB診断を停止しました。';
+  } catch (error) { $('message').textContent = error.message; }
+  finally { commandInFlight = false; await refresh(); }
+};
 $('clear').onclick = () => command('/clear');
 $('download').onclick = download;
 $('cancel').onclick = () => { cancelTransfer = true; };
@@ -415,4 +467,8 @@ $('pose-reset').onclick = () => {
   poseSession = null; poseSaved = false; renderPoses(); controls();
   $('pose-status').textContent = '胴体と両足を直立させ、基準を取得してください。';
 };
+try {
+  const until = Number(sessionStorage.getItem(offlineKey));
+  if (until > Date.now() && until <= Date.now() + 45000) setOffline(until - Date.now());
+} catch (_) {}
 poll();
