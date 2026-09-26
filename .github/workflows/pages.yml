@@ -30,10 +30,12 @@ jobs:
           pio pkg install -e atoms3cam
           python3 tools/verify_madgwick_dependency.py --library ".pio/libdeps/atoms3cam/Adafruit AHRS"
           pio run -e atoms3cam
+          python3 tools/verify_madgwick_dependency.py --library ".pio/libdeps/atoms3cam/Adafruit AHRS"
           python3 tools/verify_camera_task_link.py .pio/build/atoms3cam/firmware.elf --objdump "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-objdump"
           python3 tools/verify_log_encoder_link.py .pio/build/atoms3cam/firmware.elf --nm "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-nm"
           python3 tools/verify_realtime_code_link.py .pio/build/atoms3cam/firmware.elf --objdump "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-objdump"
           python3 tools/verify_imu_transport_link.py .pio/build/atoms3cam/firmware.elf --nm "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-nm"
+          test -s madgwick-build-patch.json
           test -s bmi270-build-patch.json
           "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-nm" .pio/build/atoms3cam/firmware.elf | grep -q '__wrap_xTaskCreatePinnedToCore'
           "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-nm" .pio/build/atoms3cam/firmware.elf | grep -q ' cam_start$'
@@ -48,7 +50,7 @@ jobs:
           cp .pio/build/atoms3cam/partitions.bin _site/firmware/
           cp .pio/build/atoms3cam/firmware.bin _site/firmware/firmware-freefoot-runtime-v2.bin
           cp "$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" _site/firmware/
-          cp bmi270-build-patch.json _site/
+          cp bmi270-build-patch.json madgwick-build-patch.json _site/
           printf '%s\n' "$GITHUB_SHA" > _site/build-sha.txt
           (cd _site/firmware && sha256sum *.bin > SHA256SUMS.txt)
           git diff --exit-code
@@ -88,9 +90,9 @@ jobs:
                   if published != expected:
                       raise ValueError('Published build SHA differs: ' + published)
                   manifest = json.loads(get('manifest-freefoot-runtime-v2.json'))
-                  if manifest['version'] != '0.47.19-interrupt-imu':
+                  if manifest['version'] != '0.47.20-hot-update':
                       raise ValueError('Unexpected firmware version')
-                  if 'Free-foot Runtime V2 / 0.47.19' not in get('index.html').decode():
+                  if 'Free-foot Runtime V2 / 0.47.20' not in get('index.html').decode():
                       raise ValueError('Published page label differs')
                   provenance = json.loads(get('bmi270-build-patch.json'))
                   if provenance['upstream_git_blob'] != '41732382bbdfe413be758748bca24d9a15a3a1d8':
@@ -99,6 +101,13 @@ jobs:
                       raise ValueError('Unexpected BMI270 transport patch')
                   if provenance['header_sha256'] != 'c21d55b70e6d6ea95323780fda4e07a479d13602695099fd152e5f293adc2620':
                       raise ValueError('Unexpected selective reader')
+                  madgwick = json.loads(get('madgwick-build-patch.json'))
+                  if madgwick['revision'] != 'madgwick_hot_04720':
+                      raise ValueError('Unexpected Madgwick execution policy')
+                  if madgwick['patched_header_sha256'] != '0cebae58337480dc02b061bd4f876cef0078a98e2a9d94e888f775aaa9eb9654':
+                      raise ValueError('Unexpected Madgwick declarations')
+                  if madgwick['policy_header_sha256'] != '25b169313711b19f8e3b3ec5aed4619a4e7206f4c80d04460b02e1c3661984fc':
+                      raise ValueError('Unexpected normal-update compiler policy')
                   builds = manifest['builds']
                   if len(builds) != 1 or builds[0]['chipFamily'] != 'ESP32-S3':
                       raise ValueError('Unexpected chip manifest')
@@ -121,7 +130,7 @@ jobs:
                           raise ValueError('Published binary checksum mismatch: ' + path)
                       verified[path] = {'bytes': len(content), 'sha256': digest}
                   print(json.dumps({'published_sha': published, 'version': manifest['version'],
-                                    'driver': provenance, 'verified_assets': verified}, indent=2))
+                                    'driver': provenance, 'madgwick': madgwick, 'verified_assets': verified}, indent=2))
                   break
               except Exception as error:
                   last_error = error

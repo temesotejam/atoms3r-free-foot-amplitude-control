@@ -13,6 +13,7 @@
 #include "mekf_attitude_diagnostics.h"
 #include "psram_logger.h"
 #include "roller485_manager.h"
+#include "realtime_code.h"
 
 #include "experiment_status.h"
 
@@ -86,9 +87,9 @@ public:
 
 private:
   void beginFilters();
-  void updateFilterSeries(const ImuReading& r);
-  void finishDeferredComparison();
-  void updateComparisonDisplayAngles();
+  void RW_SPEED_CODE updateFilterSeries(const ImuReading& r);
+  void RW_SPEED_CODE finishDeferredComparison();
+  void RW_SPEED_CODE updateComparisonDisplayAngles();
   struct DeferredComparison {
     bool pending = false, pulse_at_entry = false;
     float gx = 0, gy = 0, gz = 0, ax = 0, ay = 0, az = 0, beta = 0;
@@ -220,8 +221,8 @@ private:
   void captureAngleOffsets();
   void captureMekfComparisonZero(float& zero_abs_deg, uint32_t& zero_sample_us);
   void updateMekfComparisonRelativeAngles();
-  void updateDisplayedAngles(const ImuReading& r);
-  void updateCurrentRollState(const ImuReading& r, uint32_t now_ms);
+  void RW_SPEED_CODE updateDisplayedAngles(const ImuReading& r);
+  void RW_SPEED_CODE updateCurrentRollState(const ImuReading& r, uint32_t now_ms);
   // Legacy E2 is compiled only as an offline diagnostic reference and is not
   // called by the passive Q1 runtime.
   void resetE2ShadowPeakTracker();
@@ -589,6 +590,4 @@ private:
   Adafruit_Madgwick filter_beta1_bias_;
   Adafruit_Madgwick filter_dynamic_bias_[Config::DYNAMIC_BETA_COUNT];
 };
-
-
 

@@ -28,10 +28,12 @@ jobs:
           pio pkg install -e atoms3cam
           python3 tools/verify_madgwick_dependency.py --library ".pio/libdeps/atoms3cam/Adafruit AHRS"
           pio run -e atoms3cam
+          python3 tools/verify_madgwick_dependency.py --library ".pio/libdeps/atoms3cam/Adafruit AHRS"
           python3 tools/verify_camera_task_link.py .pio/build/atoms3cam/firmware.elf --objdump "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-objdump"
           python3 tools/verify_log_encoder_link.py .pio/build/atoms3cam/firmware.elf --nm "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-nm"
           python3 tools/verify_realtime_code_link.py .pio/build/atoms3cam/firmware.elf --objdump "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-objdump"
           python3 tools/verify_imu_transport_link.py .pio/build/atoms3cam/firmware.elf --nm "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-nm"
+          test -s madgwick-build-patch.json
           test -s bmi270-build-patch.json
           "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-nm" .pio/build/atoms3cam/firmware.elf | grep -q '__wrap_xTaskCreatePinnedToCore'
           cat bmi270-build-patch.json
@@ -41,10 +43,10 @@ jobs:
           mkdir -p dist
           cp .pio/build/atoms3cam/{bootloader.bin,partitions.bin,firmware.bin,firmware.elf} dist/
           cp "$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" dist/
-          cp bmi270-build-patch.json dist/
+          cp bmi270-build-patch.json madgwick-build-patch.json dist/
           python "$HOME/.platformio/packages/tool-esptoolpy/esptool.py" --chip esp32s3 merge_bin -o dist/merged-firmware.bin 0x0000 dist/bootloader.bin 0x8000 dist/partitions.bin 0xe000 dist/boot_app0.bin 0x10000 dist/firmware.bin
           printf '%s\n' "$GITHUB_SHA" > dist/build-sha.txt
-          printf '%s\n' 'Free-foot Runtime V2 0.47.19 interrupt-driven dedicated I2C1; same-sample deferred Madgwick with captured beta; latency sequence/timing and I/O-overlap metadata; current direct-Q solver, MEKF, foot calibration, 1ms polling, 400/200Hz ODR, 3ms compensation and 300mA/100ms limits retained; 10ms stale STOP independent of I2C timeout; hardware validation pending' > dist/FLASH_LAYOUT.txt
+          printf '%s\n' 'Free-foot Runtime V2 0.47.20 targeted normal-update O2/no-fast-math and IRAM; unchanged estimator/comparator arithmetic and same-sample ordering; direct-Q solver, foot calibration, acquisition scheduling, 3ms compensation and 300mA/100ms limits retained; 10ms stale STOP independent of I2C timeout; hardware timing validation pending' > dist/FLASH_LAYOUT.txt
           (cd dist && sha256sum *.bin > SHA256SUMS.txt)
           git diff --exit-code
       - uses: actions/upload-artifact@v4

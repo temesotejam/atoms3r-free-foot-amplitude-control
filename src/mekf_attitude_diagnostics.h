@@ -17,7 +17,7 @@ struct MekfAttitudeSnapshot {
   mekf6::Diagnostics accel_update;
 };
 
-inline MekfAttitudeSnapshot captureMekfAttitude(const mekf6::Mekf6& filter,
+inline MekfAttitudeSnapshot RW_SPEED_CODE captureMekfAttitude(const mekf6::Mekf6& filter,
                                               bool initialized, uint32_t sample_us,
                                               const mekf6::Vec3& accel_g = {NAN, NAN, NAN},
                                               const mekf6::Vec3& gyro_rad_s = {NAN, NAN, NAN},

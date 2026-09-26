@@ -8,7 +8,8 @@ assert work['pulse_on']['log_row']==dict(count=1,max_us=251,sum_us=251,mean_us=2
 assert work['pulse_on']['log_encode']['mean_us']==100
 assert work['pulse_on']['log_store']['mean_us']==151
 assert work['log_substages']=='encode_includes_beta_ceilings;store_is_synchronous_psram_addSample'
-assert work['target_code_placement']=='IRAM_MEKF_hot_routines_and_log_encoder;external_calls_and_data_may_use_flash'
+assert work['target_code_placement']=='IRAM_MEKF_log_encoder_normal_update_and_Madgwick_IMU;external_calls_and_data_may_use_flash'
+assert work['normal_update_compiler']=='selected_routines_GCC_O2_no_fast_math;upstream_Madgwick_2.4.0_function_bodies_unchanged'
 assert work['pulse_off']['filter']['mean_us']==700
 assert work['pulse_on']['filter']['count']==0
 diagnostics=json.loads(Path('/tmp/mekf-diagnostics-fixture.json').read_text(),
@@ -68,7 +69,7 @@ header = converter.parse_header(data)
 metadata = json.loads(data[110:110+header['metadata_json_size']], parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
 assert metadata['metadata_json_final_bytes'] == header['metadata_json_size']
 assert not metadata['metadata_event_detail_truncated']
-assert metadata['firmware_revision']=='0.47.19-interrupt-imu'
+assert metadata['firmware_revision']=='0.47.20-hot-update'
 solver = metadata['v46s_solver_audit']
 assert solver['schema_version']==2 and solver['solver_revision']=='direct_q_branch_inverse_04718'
 assert 'minimum_absolute_Q_error' in solver['inverse_policy']

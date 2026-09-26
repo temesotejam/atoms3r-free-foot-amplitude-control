@@ -10,3 +10,13 @@
 #else
 #define RW_HOT_CODE
 #endif
+
+// Only selected normal-update routines opt into speed-oriented compilation.
+// Keep IEEE finite/NaN handling and the original expression order. This does
+// not enable fast-math, change the filter algorithm or suppress any samples.
+// Enable on the host as well so differential tests exercise this policy.
+#if defined(__GNUC__) && !defined(__clang__)
+#define RW_SPEED_CODE RW_HOT_CODE __attribute__((optimize("O2", "no-fast-math")))
+#else
+#define RW_SPEED_CODE RW_HOT_CODE
+#endif

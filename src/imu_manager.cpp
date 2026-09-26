@@ -7,12 +7,13 @@
 #include "bmi270_timing_reader.h"
 #include "imu_i2c_transport.h"
 #include "control_latency.h"
+#include "realtime_code.h"
 
 
 namespace {
 // Identical V46p expressions, relocated, not approximated. Run only at startup
 // or when the consumer sees a new accel sequence (normally 200Hz, not 400Hz).
-void updateDerivedAccel(ImuReading& r) {
+void RW_SPEED_CODE updateDerivedAccel(ImuReading& r) {
   r.acc_norm_g = sqrtf(r.ax_g*r.ax_g + r.ay_g*r.ay_g + r.az_g*r.az_g);
   r.acc_norm_error_g = r.acc_norm_g - 1.0f;
   r.pitch_accel_only_deg = Config::PITCH_SIGN * atan2f(-r.ax_g,

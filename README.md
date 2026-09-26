@@ -1,6 +1,7 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.19 interrupt-driven IMU
+# Current integrated build: Free-foot Runtime V2 / 0.47.20 normal-update execution
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
+[0.47.19 five-run results and 0.47.20 normal-update execution](docs/NORMAL_UPDATE_04720.md) ·
 [0.47.19 IMU waiting and control latency](docs/CONTROL_LATENCY_04719.md) ·
 [0.47.17 five-run baseline and direct-Q inverse](docs/DIRECT_Q_INVERSE_04718.md) ·
 [0.47.16 hardware results and exact-input calculation reuse](docs/CONTROL_CACHE_PREVIEW_04717.md) ·
@@ -110,6 +111,19 @@ Normal pulse starts account for 112 of the 132 runner-only overruns.
 or delivery sequence gaps. Foot support exceedances were zero on both sides.
 Right/left measurement detections were 1,444/1,462 and 1,462/1,462.
 
+**Version 0.47.19 completed all five 30-second runs.** Deadline overruns fell
+from 533/60,713 (0.878%, 5,582 us maximum) in 0.47.18 to 124/60,710
+(0.204%, 3,623 us maximum). No acquisition error, queue drop, delivery gap or
+foot calibration exceedance occurred. One run had significant amplitude
+asymmetry; timing improvement is not evidence of improved amplitude accuracy.
+
+Version 0.47.20 targets normal-update execution: selected estimator wrappers,
+derived acceleration, display calculations and comparison Madgwick routines
+use O2/no-fast-math and internal instruction RAM. Expressions, update ordering,
+sampling, control rules and the deadline measurement scope stay unchanged.
+Host differential tests and ESP32 link gates check equivalence and placement;
+hardware timing still needs the next five-run comparison.
+
 Version 0.47.19 gives the exclusive internal I2C1 bus to the ESP-IDF interrupt
 completion driver after M5Unified boot configuration and sensor validation.
 The high-priority reader blocks during transfer completion, allowing control
@@ -120,7 +134,7 @@ The complete runner deadline still includes comparison and logging. Latency
 metadata links sample sequences to receive, MEKF, decision and completion,
 with I2C/poll overlap explicitly labeled as wall time rather than CPU time.
 The 10 ms stale-data stop remains independent of the IDF driver's potentially
-longer bus-error watchdog. Hardware operation/timing needs measurement.
+longer bus-error watchdog. Fault-injection hardware testing is still pending.
 
 Version 0.47.18 directly inverts the amplitude model into a continuous requested
 Q, clips feedforward before the existing side integral, then solves the current
