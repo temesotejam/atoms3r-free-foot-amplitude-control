@@ -9,6 +9,7 @@
 #include <math.h>
 
 #include "upright_pose_guide.h"
+#include "direct_q_solver.h"
 
 namespace {
 struct V46MekfRunReinitAccumulator {
@@ -2874,20 +2875,10 @@ void ExperimentRunner::updateEnergyControlAutonomousAtZeroCross(uint32_t t_test_
   audit.solver_started = 1;
   audit.solver_start_us = micros();
   // V46s audit end
-  // V46r: the V46l shadow selector matched the legacy 0..100 ms exhaustive
-  // selector on every completed hardware comparison. Promote that bounded fast
-  // selector to the physical path so a control decision no longer occupies
-  // Core1 for ~7 ms. Safety limits are unchanged; invalid solver states coast.
-  struct FastCandidate {
-    bool valid = false;
-    uint16_t width_ms = 0;
-    float q_mA_s = NAN;
-    float energy_j = NAN;
-    float error_j = NAN;
-  };
-  uint16_t fast_eval_count = 0;
-  control_math::WidthPredictionCache<Config::ENERGY_CONTROL_AUTONOMOUS_MAX_PULSE_MS> width_cache;
-  static_assert(sizeof(width_cache) <= 1024, "Keep decision cache within control stack budget");
+  // Direct-Q control begin. The old two energy searches are replaced by an
+  // analytic amplitude inverse and one bounded signed-charge inverse.
+  static_assert(Config::ENERGY_CONTROL_AUTONOMOUS_MAX_PULSE_MS == direct_q::kMaxWidthMs,
+      "Revalidate the bounded inverse when the actuator width limit changes");
   const float fast_v = status_.beta_model_vbat_mV > 0
       ? static_cast<float>(status_.beta_model_vbat_mV) / 1000.0f
       : Config::MODEL_VBAT_REFERENCE_V;
@@ -2899,71 +2890,22 @@ void ExperimentRunner::updateEnergyControlAutonomousAtZeroCross(uint32_t t_test_
   audit.signed_target_current_mA = fast_signed_target_current_mA;
   audit.tau_s = fast_tau_s;
   // V46s audit end
-
-  auto evaluate_width = [&](uint16_t width_ms, float target_energy_j) -> FastCandidate {
-    FastCandidate c;
-    c.width_ms = width_ms;
-    ++fast_eval_count;
-    // Each logical candidate still counts in the audit. Reuse only its charge
-    // and energy within this decision; both targets keep their original search.
-    const auto prediction = width_cache.get(width_ms, [&]() {
-      float q_mA_s = 0.0f;
-      if (width_ms > 0) {
-        const float t_s = static_cast<float>(width_ms) / 1000.0f;
-        const float signed_q_mA_s =
-            fast_signed_target_current_mA * t_s +
-            (event.i0_estimated_mA - fast_signed_target_current_mA) * fast_tau_s *
-                (1.0f - expf(-t_s / fast_tau_s));
-        q_mA_s = fabsf(signed_q_mA_s);
-      }
-      const float predicted_peak_deg = energyControlAutonomousCorrectedPrediction(
-          event.free_next_peak_amplitude_deg, event.physical_next_peak_side, q_mA_s, nullptr);
-      return control_math::WidthPrediction{q_mA_s, energyControlPotentialJ(predicted_peak_deg)};
-    });
-    const float q_mA_s = prediction.q_mA_s;
-    const float energy_j = prediction.energy_j;
-    if (!isfinite(q_mA_s) || !isfinite(energy_j) || !isfinite(target_energy_j)) return c;
-    c.valid = true;
-    c.q_mA_s = q_mA_s;
-    c.energy_j = energy_j;
-    c.error_j = fabsf(target_energy_j - energy_j);
-    return c;
-  };
-
-  auto fast_pick_width = [&](float target_energy_j) -> FastCandidate {
-    uint16_t lo = Config::ENERGY_CONTROL_AUTONOMOUS_MIN_PULSE_MS;
-    uint16_t hi = Config::ENERGY_CONTROL_AUTONOMOUS_MAX_PULSE_MS;
-    while (hi > lo && static_cast<uint16_t>(hi - lo) > 8U) {
-      const uint16_t third = static_cast<uint16_t>((hi - lo) / 3U);
-      if (third == 0) break;
-      const uint16_t m1 = static_cast<uint16_t>(lo + third);
-      const uint16_t m2 = static_cast<uint16_t>(hi - third);
-      const FastCandidate c1 = evaluate_width(m1, target_energy_j);
-      const FastCandidate c2 = evaluate_width(m2, target_energy_j);
-      if (!c1.valid || !c2.valid) return FastCandidate{};
-      if (c1.error_j <= c2.error_j) hi = m2;
-      else lo = m1;
-    }
-    FastCandidate best;
-    for (uint16_t width_ms = lo; width_ms <= hi; ++width_ms) {
-      const FastCandidate c = evaluate_width(width_ms, target_energy_j);
-      if (!c.valid) return FastCandidate{};
-      if (!best.valid || c.error_j < best.error_j) best = c;
-    }
-    return best;
-  };
-
   const uint32_t v46r_fast_solver_t0_us = micros();
-  const FastCandidate ff = fast_pick_width(event.target_energy_j);
+  event.integral_side_mA_s = event.physical_next_peak_side > 0
+      ? energy_control_autonomous_integral_plus_mA_s_ : energy_control_autonomous_integral_minus_mA_s_;
+  const auto inverse_target = direct_q::target(event.free_next_peak_amplitude_deg,
+      event.target_peak_deg, event.g_side_base_deg_per_mA_s, event.c_side_used_deg,
+      event.g_side_corrected_deg_per_mA_s, Config::ENERGY_CONTROL_AUTONOMOUS_SIDE_RESPONSE_MAX_ABS_DEG,
+      event.q_available_mA_s, event.integral_side_mA_s);
   // V46s audit begin
   audit.ff_search_us = static_cast<uint32_t>(micros() - v46r_fast_solver_t0_us);
-  audit.ff_eval_count = fast_eval_count;
-  audit.eval_count = fast_eval_count;
-  audit.ff_valid = ff.valid;
-  audit.ff_width_ms = ff.valid ? ff.width_ms : 65535;
-  audit.ff_q_mA_s = ff.q_mA_s;
+  audit.ff_valid = inverse_target.valid;
+  // No feedforward pulse width is rounded or searched in this revision.
+  audit.ff_width_ms = 65535;
+  audit.ff_eval_count = 0;
+  audit.ff_q_mA_s = inverse_target.feedforward;
   // V46s audit end
-  if (!ff.valid) {
+  if (!inverse_target.valid) {
   // V46s audit begin
     audit.stage = 1;
     audit.solver_end_us = micros();
@@ -2973,21 +2915,15 @@ void ExperimentRunner::updateEnergyControlAutonomousAtZeroCross(uint32_t t_test_
     rearm_for_next_peak();
     return;
   }
-  const uint16_t ff_width_ms = ff.width_ms;
-  const float ff_q_mA_s = ff.q_mA_s;
-  const float ff_energy_j = ff.energy_j;
-  event.q_ff_energy_mA_s = ff_q_mA_s;
+  // Retain the binary field layout. Metadata identifies q_ff_energy as the
+  // continuous inverse clipped before the side integral, not a rounded pulse.
+  event.q_ff_energy_mA_s = inverse_target.feedforward;
   event.q_angle_diagnostic_mA_s = fmaxf(0.0f, (event.target_peak_deg -
       event.free_next_peak_amplitude_deg) / event.q1_gain_deg_per_mA_s);
-  event.integral_side_mA_s = event.physical_next_peak_side > 0
-      ? energy_control_autonomous_integral_plus_mA_s_ : energy_control_autonomous_integral_minus_mA_s_;
-  event.q_unclamped_mA_s = event.q_ff_energy_mA_s + event.integral_side_mA_s;
-  event.q_saturated_upper = event.q_unclamped_mA_s > event.q_available_mA_s ||
-      (ff_width_ms == Config::ENERGY_CONTROL_AUTONOMOUS_MAX_PULSE_MS &&
-       ff_energy_j + 1.0e-8f < event.target_energy_j);
-  event.q_saturated_lower = event.q_unclamped_mA_s < 0.0f;
-  const float corrected_q_target_mA_s = fmaxf(0.0f, fminf(event.q_available_mA_s,
-      event.q_unclamped_mA_s));
+  event.q_unclamped_mA_s = inverse_target.unclamped;
+  event.q_saturated_upper = inverse_target.upper;
+  event.q_saturated_lower = inverse_target.lower;
+  const float corrected_q_target_mA_s = inverse_target.charge;
   const float corrected_target_prediction_deg = energyControlAutonomousCorrectedPrediction(
       event.free_next_peak_amplitude_deg, event.physical_next_peak_side,
       corrected_q_target_mA_s, nullptr);
@@ -3008,15 +2944,23 @@ void ExperimentRunner::updateEnergyControlAutonomousAtZeroCross(uint32_t t_test_
   // V46s audit begin
   const uint32_t selected_search_t0_us = micros();
   // V46s audit end
-  const FastCandidate selected_fast = fast_pick_width(corrected_target_energy_j);
+  const auto selected_inverse = direct_q::width(corrected_q_target_mA_s,
+      event.i0_estimated_mA, fast_signed_target_current_mA, fast_tau_s,
+      Config::ENERGY_CONTROL_AUTONOMOUS_MAX_PULSE_MS);
+  const uint16_t selected_width_ms = selected_inverse.ms;
+  const float selected_q_mA_s = selected_inverse.charge;
+  const float selected_energy_j = selected_width_ms == 0 ? event.passive_energy_j :
+      energyControlPotentialJ(energyControlAutonomousCorrectedPrediction(
+          event.free_next_peak_amplitude_deg, event.physical_next_peak_side,
+          selected_q_mA_s, nullptr));
   // V46s audit begin
   audit.selected_search_us = static_cast<uint32_t>(micros() - selected_search_t0_us);
-  audit.selected_eval_count = fast_eval_count - audit.ff_eval_count;
-  audit.eval_count = fast_eval_count;
-  audit.selected_valid = selected_fast.valid;
-  audit.fast_selected_width_ms = selected_fast.valid ? selected_fast.width_ms : 65535;
+  audit.selected_eval_count = selected_inverse.evaluations;
+  audit.eval_count = selected_inverse.evaluations;
+  audit.selected_valid = selected_inverse.valid && isfinite(selected_energy_j);
+  audit.fast_selected_width_ms = selected_inverse.valid ? selected_width_ms : 65535;
   // V46s audit end
-  if (!selected_fast.valid) {
+  if (!selected_inverse.valid || !isfinite(selected_energy_j)) {
   // V46s audit begin
     audit.stage = 3;
     audit.solver_end_us = micros();
@@ -3026,30 +2970,15 @@ void ExperimentRunner::updateEnergyControlAutonomousAtZeroCross(uint32_t t_test_
     rearm_for_next_peak();
     return;
   }
-  // Preserve the legacy selector's special zero-output baseline exactly. The
-  // exhaustive implementation started from passive_energy_j and only replaced
-  // it on a strict error improvement. This matters at the no-output boundary.
-  uint16_t selected_width_ms = 0;
-  float selected_q_mA_s = 0.0f;
-  float selected_energy_j = event.passive_energy_j;
-  const float zero_output_error_j = fabsf(corrected_target_energy_j - selected_energy_j);
-  if (selected_fast.error_j < zero_output_error_j) {
-    selected_width_ms = selected_fast.width_ms;
-    selected_q_mA_s = selected_fast.q_mA_s;
-    selected_energy_j = selected_fast.energy_j;
-  }
-  const uint32_t v46r_fast_solver_us =
-      static_cast<uint32_t>(micros() - v46r_fast_solver_t0_us);
-  (void)v46r_fast_solver_us;
-  (void)fast_eval_count;
   // V46s audit begin
-  audit.fast_solver_us = v46r_fast_solver_us;
+  audit.fast_solver_us = static_cast<uint32_t>(micros() - v46r_fast_solver_t0_us);
   audit.stage = 4;
   audit.solver_complete = 1;
   audit.solver_end_us = micros();
   audit.selected_width_ms = selected_width_ms;
   audit.selected_q_mA_s = selected_q_mA_s;
   // V46s audit end
+  // Direct-Q control end.
   event.q_command_mA_s = selected_q_mA_s;
   event.q_effective_pred_mA_s = selected_q_mA_s;
   event.a_pred_base_deg = event.free_next_peak_amplitude_deg +

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Compile actual controller expressions/search against a frozen 0.47.16 oracle."""
+"""Test production current/tau functions and frozen legacy width-cache arithmetic.
+The active direct inverse is covered by test_direct_q_solver.py.
+"""
 import json
 import re
 import subprocess
@@ -29,13 +31,8 @@ def without_audit(text):
     return re.sub(r"  // V46s audit begin\n.*?  // V46s audit end\n", "", text, flags=re.S)
 
 
-start = source.index("  struct FastCandidate {", source.index(
-    "void ExperimentRunner::updateEnergyControlAutonomousAtZeroCross"))
-end = source.index("  const uint32_t v46r_fast_solver_t0_us", start)
-tail_end = source.index("  event.q_command_mA_s = selected_q_mA_s;", end)
-# No change to target correction, invalid branches, saturation or zero-output
-# selection is hidden in the harness. Compile that exact unchanged tail below.
-assert source[end:tail_end] == reference["solver_tail"]
+cached_fixture = json.loads((ROOT / "tools/fixtures/control_math_04717.json").read_text())
+assert cached_fixture["solver_tail"] == reference["solver_tail"]
 for name in ("energyControlPotentialJ", "energyControlAutonomousCorrectedPrediction"):
     assert method(name) == reference["methods"][name]
 
@@ -118,7 +115,7 @@ static void same(float a, float b) {
 }
 """
 cpp += model("Reference", reference["methods"], reference["solver_block"])
-cpp += model("Cached", {name: method(name) for name in reference["methods"]}, source[start:end])
+cpp += model("Cached", {name: method(name) for name in reference["methods"]}, cached_fixture["solver_block"])
 cpp += r"""
 static Result compare(const Input& input) {
   Reference old; Cached now; old.r = now.r = input;
@@ -200,7 +197,7 @@ for e in inputs["records"]:
     )
 cpp += r"""
   assert(hardware==208 && unique<logical);
-  std::printf("Hardware decisions: %u exact matches; logical evaluations=%u, computed=%u (saved=%u) PASS\n",
+  std::printf("Frozen legacy cache decisions: %u exact matches; logical evaluations=%u, computed=%u (saved=%u) PASS\n",
       hardware,logical,unique,logical-unique);
   // Reuse the actual physics expressions for random input sets. Includes both
   // signs, opposite residual current, integral saturation and no-output states.

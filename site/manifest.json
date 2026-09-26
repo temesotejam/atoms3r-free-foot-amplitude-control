@@ -1,6 +1,6 @@
 {
   "name": "AtomS3R Free-foot Runtime V2",
-  "version": "0.47.17-control-cache-idle-preview",
+  "version": "0.47.18-direct-q-inverse",
   "builds": [
     {
       "chipFamily": "ESP32-S3",

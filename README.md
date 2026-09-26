@@ -1,6 +1,7 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.17 control cache and idle preview
+# Current integrated build: Free-foot Runtime V2 / 0.47.18 direct Q inverse
 
 [Web flasher](https://temesotejam.github.io/atoms3r-free-foot-amplitude-control/) ·
+[0.47.17 five-run baseline and direct-Q inverse](docs/DIRECT_Q_INVERSE_04718.md) ·
 [0.47.16 hardware results and exact-input calculation reuse](docs/CONTROL_CACHE_PREVIEW_04717.md) ·
 [0.47.15 hardware result, targeted IRAM and weak candidate confirmation](docs/IRAM_AND_MARKER_GUARD_04716.md) ·
 [0.47.14 recovered run and deferred stack diagnostics](docs/RECOVERED_RUN_STACK_TIMING_04715.md) ·
@@ -102,6 +103,27 @@ completions, 311 exceeded 2.5 ms (0.854%, maximum 4,365 us), with no queue drops
 or delivery sequence gaps. During measurement, right/left feet were valid in
 872/879 and 877/879 frames, with no detected observation outside support.
 Normal pulse starts account for 112 of the 132 runner-only overruns.
+
+**Five new 0.47.17 runs completed 30 seconds each.** The comparison baseline is
+512/60,706 deadline overruns (0.843%, maximum 5,742 us), with no IMU queue drops
+or delivery sequence gaps. Foot support exceedances were zero on both sides.
+Right/left measurement detections were 1,444/1,462 and 1,462/1,462.
+
+Version 0.47.18 directly inverts the amplitude model into a continuous requested
+Q, clips feedforward before the existing side integral, then solves the current
+integral for one integer-ms pulse. Both signs of charge are handled when residual
+current opposes the command. Final quantization minimizes absolute Q error;
+equal errors choose the shorter pulse including zero. The prior intermediate
+feedforward width rounding and repeated angle/energy candidate calculations are
+removed. Same-state replay of the five runs changes 74/346 widths by exactly
+1 ms and keeps 272 unchanged; upper/lower saturation flags match throughout.
+The active production decision block is tested against a full 101-width Q-error
+oracle, including invalid inputs, reverse-current branches and domain guards.
+RWLOG v51 layout is retained; solver audit schema 2 explicitly identifies the
+new field meanings and unavailable feedforward width. This is an intentional
+arithmetic change, not a claim of identical physical control or achieved timing.
+MEKF, foot calibration, 3 ms compensation, 300 mA/100 ms limits, acquisition and
+logging rates, task priorities and the 10 ms stale-data stop are retained.
 
 Version 0.47.17 reuses charge/energy predictions only within one zero-cross
 selection and caches current-model results only for exactly matching inputs.

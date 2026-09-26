@@ -43,7 +43,7 @@ jobs:
           cp bmi270-build-patch.json dist/
           python "$HOME/.platformio/packages/tool-esptoolpy/esptool.py" --chip esp32s3 merge_bin -o dist/merged-firmware.bin 0x0000 dist/bootloader.bin 0x8000 dist/partitions.bin 0xe000 dist/boot_app0.bin 0x10000 dist/firmware.bin
           printf '%s\n' "$GITHUB_SHA" > dist/build-sha.txt
-          printf '%s\n' 'Free-foot Runtime V2 0.47.17 exact-input current/tau cache and per-decision width prediction cache; unchanged search targets, tie-breaks, zero-output baseline and control guards; idle-only preview copies with continuous full foot tracking; M5GFX pinned to the 0.47.16 build dependency 0.2.30; IRAM/marker safeguards and R39-182/L37-177.5 calibration retained; same 3ms compensation, 300mA/100ms limits, acquisition/logging rates and 10ms ESTOP; 2.5ms hardware deadline improvement pending' > dist/FLASH_LAYOUT.txt
+          printf '%s\n' 'Free-foot Runtime V2 0.47.18 direct amplitude-to-Q inverse; continuous feedforward clipped before side integral; one branch-aware signed-charge width inverse with integer-ms minimum Q error; 346 recorded decisions: 272 same and 74 +/-1ms; metadata identifies changed solver fields; current/tau cache and idle preview retained; same MEKF, calibration, acquisition/logging rates, 3ms compensation, 300mA/100ms limits and 10ms ESTOP; hardware timing and motion comparison pending' > dist/FLASH_LAYOUT.txt
           (cd dist && sha256sum *.bin > SHA256SUMS.txt)
           git diff --exit-code
       - uses: actions/upload-artifact@v4

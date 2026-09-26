@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <math.h>
 #include <stdint.h>
+#include "direct_q_solver.h"
 #include <string.h>
 
 // One writer (run-control), stopped-only reader (RWLOG export).
@@ -89,12 +90,14 @@ template<unsigned Capacity> class Buffer {
     return records_[((count_ == Capacity ? next_ : 0U) + index) % Capacity];
   }
   template<class Output> void appendJson(Output& json) const {
-    json += "{\"schema_version\":1,\"available\":true,\"solver_revision\":\"v46r_fast_solver_control_20260915\",";
+    json += "{\"schema_version\":2,\"available\":true,\"solver_revision\":\"" + String(direct_q::kRevision) + "\",";
     json += "\"policy\":\"diagnostic_only;elapsed_wall_time_includes_preemption;no_legacy_online;stopped_export\",";
     json += "\"capacity\":" + String(Capacity) + ",\"count\":" + String(count_);
     json += ",\"overwritten\":" + String(overwritten());
     json += ",\"stage_legend\":\"0=before_solver,1=ff_failed,2=corrected_target_failed,3=selected_failed,4=selected_complete\",";
-    json += "\"timing_scope\":\"decision=start_to_return_before_audit_copy;solver=cached_setup_through_selection;ff_and_selected=search_only;sample_age=consumed_host_sample_not_sensor_timestamp\",";
+    json += "\"timing_scope\":\"decision=start_to_return_before_audit_copy;solver=cached_setup_through_selection;ff=analytic_inverse;selected=charge_inverse_and_final_energy;sample_age=consumed_host_sample_not_sensor_timestamp\",";
+    json += "\"inverse_policy\":\"continuous_ff_clipped_before_side_integral;minimum_absolute_Q_error;integer_ms;ties_shorter;both_residual_current_branches\",";
+    json += "\"field_semantics\":\"ff_width_ms=65535_not_computed;ff_eval_count=0;eval_count=nonzero_width_charge_integral_calls;q_ff_energy_mA_s=continuous_clipped_inverse\",";
     json += "\"float_fields\":[\"i0_mA\",\"free_peak_deg\",\"target_peak_deg\",\"target_energy_j\",\"passive_energy_j\",\"q_available_mA_s\",\"integral_mA_s\",\"signed_target_current_mA\",\"tau_s\",\"base_gain\",\"correction_c\",\"correction_gain\",\"correction_limit\",\"ff_q_mA_s\",\"selected_q_mA_s\",\"corrected_target_energy_j\"],\"events\":[";
     for (unsigned i = 0; i < count_; ++i) {
       const Record& e = at(i);

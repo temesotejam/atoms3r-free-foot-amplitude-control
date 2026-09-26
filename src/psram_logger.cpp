@@ -1427,7 +1427,7 @@ PsramString PsramLogger::buildMetadataJson() const {
   json += "\"v46t_current_observation_policy\":\"single_snapshot_before_row_reference_clock;age_from_same_snapshot;zero_sample_time_is_missing;no_clamp\",";
   json += "\"v46s_solver_audit\":";
   if (solver_audit_) solver_audit_->appendJson(json);
-  else json += "{\"schema_version\":1,\"available\":false,\"reason\":\"audit_psram_allocation_failed\"}";
+  else json += "{\"schema_version\":2,\"available\":false,\"reason\":\"audit_psram_allocation_failed\"}";
   json += ",";
   json += "\"v46l_solver_shadow_revision\":\"v46l_discrete_ternary_shadow_20260914\",";
   json += "\"v46l_solver_shadow_policy\":\"disabled_since_v46r;legacy_comparison_offline_only;use_v46s_solver_audit\",";
@@ -1724,4 +1724,3 @@ RwLogFileHeader PsramLogger::buildHeader(uint32_t metadata_size) const {
   header.crc_offset = header.events_offset;
   return header;
 }
-

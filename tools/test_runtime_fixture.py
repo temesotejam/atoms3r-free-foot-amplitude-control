@@ -68,7 +68,12 @@ header = converter.parse_header(data)
 metadata = json.loads(data[110:110+header['metadata_json_size']], parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
 assert metadata['metadata_json_final_bytes'] == header['metadata_json_size']
 assert not metadata['metadata_event_detail_truncated']
-assert metadata['firmware_revision']=='0.47.17-control-cache-idle-preview'
+assert metadata['firmware_revision']=='0.47.18-direct-q-inverse'
+solver = metadata['v46s_solver_audit']
+assert solver['schema_version']==2 and solver['solver_revision']=='direct_q_branch_inverse_04718'
+assert 'minimum_absolute_Q_error' in solver['inverse_policy']
+assert 'ff_width_ms=65535_not_computed' in solver['field_semantics']
+assert len(solver['events'])==128 and solver['events'][0]['ff_width_ms']==65535
 assert metadata['terminal_state']['state']=='ESTOP' and metadata['terminal_state']['motor_cmd_mA']==0
 assert metadata['terminal_state']['actual_current_mA']==-7 and metadata['terminal_state']['heartbeat_us']==123456
 assert metadata['terminal_state']['last_error']=='imu_acquisition_overflow_backlog_or_stale'

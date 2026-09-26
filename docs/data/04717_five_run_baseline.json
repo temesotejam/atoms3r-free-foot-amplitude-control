@@ -1,0 +1,438 @@
+{
+  "scope": "0.47.17 five new 30s runs supplied 2026-09-26; previous 43655722 is reference only",
+  "completion_count": 60706,
+  "over_budget": 512,
+  "completion_mean_us": 865.5376873785128,
+  "max_completion_us": 5742,
+  "runs": [
+    {
+      "number": 1,
+      "run": "73137344",
+      "firmware": "0.47.17-control-cache-idle-preview",
+      "crc_verified": true,
+      "source_sha256": {
+        "energy_control_autonomous_run_1_73137344.rwlog": "3035fb184685b6143ff089d1f170e6d1d664ea125484d26fbb0996a0e7510000",
+        "energy_control_autonomous_run_1_73137344_foot.csv": "86fd3895a5a16824402a59c393a02830b99d94bb7ac3225c3116099ab8bd4ce0"
+      },
+      "foot_csv_matches": true,
+      "foot_csv_rows": 390,
+      "foot_csv_columns": 37,
+      "terminal": {
+        "state_id": 4,
+        "state": "FINISHED",
+        "last_error": "",
+        "motor_cmd_mA": 0,
+        "actual_current_mA": -4,
+        "heartbeat_us": 123446313
+      },
+      "duration_us": 30001050,
+      "completion": {
+        "budget_us": 2500,
+        "count": 12144,
+        "over_budget": 101,
+        "max_us": 5742,
+        "mean_us": 864.164,
+        "runner_over_budget": 15,
+        "runner_max_us": 3760,
+        "runner_mean_us": 591.257,
+        "all_observed_within_budget": false,
+        "scope": "RUNNING_fresh_gyro_only;host_acquisition_to_runner_return;not_sensor_capture_to_motor_apply"
+      },
+      "acquisition": {
+        "captured": 12144,
+        "delivered": 12144,
+        "queue_drops": 0,
+        "delivery_sequence_gaps": 0,
+        "fault": false,
+        "delivery_age_mean_us": 129.903,
+        "delivery_age_max_us": 3587
+      },
+      "mekf_adopted_all": true,
+      "attitude_finite_all": true,
+      "foot": {
+        "running_rows": 294,
+        "right_running_valid": 288,
+        "left_running_valid": 294,
+        "right_running_out_of_range": 0,
+        "left_running_out_of_range": 0,
+        "right_running_invalid_reasons": {
+          "ambiguous": 6
+        },
+        "left_running_invalid_reasons": {},
+        "running_frame_interval_max_us": 200522,
+        "running_frames_per_second": 9.79965701200458
+      },
+      "solver_us": {
+        "count": 69,
+        "mean": 390.7826086956522,
+        "median": 213,
+        "min": 145,
+        "max": 1054
+      },
+      "normal_decisions": 69,
+      "camera_processing_us": {
+        "count": 294,
+        "mean": 14951.979591836734,
+        "median": 13980.5,
+        "min": 11788,
+        "max": 27340
+      },
+      "battery_mV": {
+        "count": 69,
+        "mean": 7292.753623188406,
+        "median": 7290,
+        "min": 7280,
+        "max": 7300
+      },
+      "amplitude_5_30s": {
+        "n": 57,
+        "mae_deg": 1.0554510526315788,
+        "negative_mean_deg": 6.984025517241379,
+        "positive_mean_deg": 9.0787775
+      }
+    },
+    {
+      "number": 2,
+      "run": "280169596",
+      "firmware": "0.47.17-control-cache-idle-preview",
+      "crc_verified": true,
+      "source_sha256": {
+        "energy_control_autonomous_run_2_280169596.rwlog": "7dee29b81821ea2e3885dae642dd541103668de6d339ed68c5fb1bb1fcf23927",
+        "energy_control_autonomous_run_2_280169596_foot.csv": "3273a8adf9005f44e430e5fd63576bb89e70a06e48719fef3cdd108d4253db29"
+      },
+      "foot_csv_matches": true,
+      "foot_csv_rows": 389,
+      "foot_csv_columns": 37,
+      "terminal": {
+        "state_id": 4,
+        "state": "FINISHED",
+        "last_error": "",
+        "motor_cmd_mA": 0,
+        "actual_current_mA": -4,
+        "heartbeat_us": 324372711
+      },
+      "duration_us": 29999837,
+      "completion": {
+        "budget_us": 2500,
+        "count": 12141,
+        "over_budget": 109,
+        "max_us": 4918,
+        "mean_us": 866.329,
+        "runner_over_budget": 25,
+        "runner_max_us": 3070,
+        "runner_mean_us": 592.832,
+        "all_observed_within_budget": false,
+        "scope": "RUNNING_fresh_gyro_only;host_acquisition_to_runner_return;not_sensor_capture_to_motor_apply"
+      },
+      "acquisition": {
+        "captured": 12141,
+        "delivered": 12141,
+        "queue_drops": 0,
+        "delivery_sequence_gaps": 0,
+        "fault": false,
+        "delivery_age_mean_us": 131.576,
+        "delivery_age_max_us": 3712
+      },
+      "mekf_adopted_all": true,
+      "attitude_finite_all": true,
+      "foot": {
+        "running_rows": 291,
+        "right_running_valid": 290,
+        "left_running_valid": 291,
+        "right_running_out_of_range": 0,
+        "left_running_out_of_range": 0,
+        "right_running_invalid_reasons": {
+          "bad_shape": 1
+        },
+        "left_running_invalid_reasons": {},
+        "running_frame_interval_max_us": 200000,
+        "running_frames_per_second": 9.70005270361969
+      },
+      "solver_us": {
+        "count": 69,
+        "mean": 376.463768115942,
+        "median": 203,
+        "min": 139,
+        "max": 1060
+      },
+      "normal_decisions": 69,
+      "camera_processing_us": {
+        "count": 291,
+        "mean": 14819.103092783505,
+        "median": 13955,
+        "min": 11760,
+        "max": 28407
+      },
+      "battery_mV": {
+        "count": 69,
+        "mean": 7257.101449275362,
+        "median": 7260,
+        "min": 7250,
+        "max": 7260
+      },
+      "amplitude_5_30s": {
+        "n": 58,
+        "mae_deg": 1.0013127586206896,
+        "negative_mean_deg": 7.073224137931034,
+        "positive_mean_deg": 9.075849655172414
+      }
+    },
+    {
+      "number": 3,
+      "run": "378384457",
+      "firmware": "0.47.17-control-cache-idle-preview",
+      "crc_verified": true,
+      "source_sha256": {
+        "energy_control_autonomous_run_3_378384457.rwlog": "474e8cfbc5b8a8356eb2d2dd60fe4823a974afb332d293eb6279d5ba515397c6",
+        "energy_control_autonomous_run_3_378384457_foot.csv": "89d42070be761f89c81fe6df9480cfd44f79ec1a708f78753cd8bc3e62af30cb"
+      },
+      "foot_csv_matches": true,
+      "foot_csv_rows": 383,
+      "foot_csv_columns": 37,
+      "terminal": {
+        "state_id": 4,
+        "state": "FINISHED",
+        "last_error": "",
+        "motor_cmd_mA": 0,
+        "actual_current_mA": -3,
+        "heartbeat_us": 430124508
+      },
+      "duration_us": 30000915,
+      "completion": {
+        "budget_us": 2500,
+        "count": 12141,
+        "over_budget": 117,
+        "max_us": 4436,
+        "mean_us": 867.293,
+        "runner_over_budget": 25,
+        "runner_max_us": 4263,
+        "runner_mean_us": 594.071,
+        "all_observed_within_budget": false,
+        "scope": "RUNNING_fresh_gyro_only;host_acquisition_to_runner_return;not_sensor_capture_to_motor_apply"
+      },
+      "acquisition": {
+        "captured": 12141,
+        "delivered": 12141,
+        "queue_drops": 0,
+        "delivery_sequence_gaps": 0,
+        "fault": false,
+        "delivery_age_mean_us": 130.732,
+        "delivery_age_max_us": 2956
+      },
+      "mekf_adopted_all": true,
+      "attitude_finite_all": true,
+      "foot": {
+        "running_rows": 287,
+        "right_running_valid": 282,
+        "left_running_valid": 287,
+        "right_running_out_of_range": 0,
+        "left_running_out_of_range": 0,
+        "right_running_invalid_reasons": {
+          "ambiguous": 5
+        },
+        "left_running_invalid_reasons": {},
+        "running_frame_interval_max_us": 200148,
+        "running_frames_per_second": 9.566374892232455
+      },
+      "solver_us": {
+        "count": 69,
+        "mean": 335.4347826086956,
+        "median": 196,
+        "min": 144,
+        "max": 950
+      },
+      "normal_decisions": 69,
+      "camera_processing_us": {
+        "count": 287,
+        "mean": 14894.400696864112,
+        "median": 14030,
+        "min": 11710,
+        "max": 27122
+      },
+      "battery_mV": {
+        "count": 69,
+        "mean": 7243.333333333333,
+        "median": 7240,
+        "min": 7230,
+        "max": 7250
+      },
+      "amplitude_5_30s": {
+        "n": 58,
+        "mae_deg": 0.96903,
+        "negative_mean_deg": 7.0503786206896555,
+        "positive_mean_deg": 8.970124137931034
+      }
+    },
+    {
+      "number": 4,
+      "run": "520287544",
+      "firmware": "0.47.17-control-cache-idle-preview",
+      "crc_verified": true,
+      "source_sha256": {
+        "energy_control_autonomous_run_4_520287544.rwlog": "03b4f985b023e21951357ed9bd993cdf584e542e7f5bee8d3d73c2d529da5054",
+        "energy_control_autonomous_run_4_520287544_foot.csv": "7ed967ad606aaf272e726498bba8ffd4bf040f1f30dee02b4e3a78cc99347064"
+      },
+      "foot_csv_matches": true,
+      "foot_csv_rows": 391,
+      "foot_csv_columns": 37,
+      "terminal": {
+        "state_id": 4,
+        "state": "FINISHED",
+        "last_error": "",
+        "motor_cmd_mA": 0,
+        "actual_current_mA": -4,
+        "heartbeat_us": 568512681
+      },
+      "duration_us": 30001660,
+      "completion": {
+        "budget_us": 2500,
+        "count": 12141,
+        "over_budget": 115,
+        "max_us": 5183,
+        "mean_us": 869.077,
+        "runner_over_budget": 22,
+        "runner_max_us": 3347,
+        "runner_mean_us": 595.134,
+        "all_observed_within_budget": false,
+        "scope": "RUNNING_fresh_gyro_only;host_acquisition_to_runner_return;not_sensor_capture_to_motor_apply"
+      },
+      "acquisition": {
+        "captured": 12141,
+        "delivered": 12141,
+        "queue_drops": 0,
+        "delivery_sequence_gaps": 0,
+        "fault": false,
+        "delivery_age_mean_us": 131.335,
+        "delivery_age_max_us": 3859
+      },
+      "mekf_adopted_all": true,
+      "attitude_finite_all": true,
+      "foot": {
+        "running_rows": 295,
+        "right_running_valid": 289,
+        "left_running_valid": 295,
+        "right_running_out_of_range": 0,
+        "left_running_out_of_range": 0,
+        "right_running_invalid_reasons": {
+          "ambiguous": 6
+        },
+        "left_running_invalid_reasons": {},
+        "running_frame_interval_max_us": 200177,
+        "running_frames_per_second": 9.832789252328038
+      },
+      "solver_us": {
+        "count": 69,
+        "mean": 329.0289855072464,
+        "median": 198,
+        "min": 148,
+        "max": 825
+      },
+      "normal_decisions": 69,
+      "camera_processing_us": {
+        "count": 295,
+        "mean": 14587.152542372882,
+        "median": 13953,
+        "min": 11790,
+        "max": 25909
+      },
+      "battery_mV": {
+        "count": 69,
+        "mean": 7228.115942028986,
+        "median": 7230,
+        "min": 7220,
+        "max": 7230
+      },
+      "amplitude_5_30s": {
+        "n": 58,
+        "mae_deg": 1.073960344827586,
+        "negative_mean_deg": 6.963351724137931,
+        "positive_mean_deg": 9.111272413793102
+      }
+    },
+    {
+      "number": 5,
+      "run": "640764418",
+      "firmware": "0.47.17-control-cache-idle-preview",
+      "crc_verified": true,
+      "source_sha256": {
+        "energy_control_autonomous_run_5_640764418.rwlog": "09a756837bcb61d46e07bf0c9b2624f6c465fa1fc02872470e8e315c100f7409",
+        "energy_control_autonomous_run_5_640764418_foot.csv": "ff9590f4541723c0c170feaf5b24a5f71192350bdfc267c9d15b60df65d1159b"
+      },
+      "foot_csv_matches": true,
+      "foot_csv_rows": 392,
+      "foot_csv_columns": 37,
+      "terminal": {
+        "state_id": 4,
+        "state": "FINISHED",
+        "last_error": "",
+        "motor_cmd_mA": 0,
+        "actual_current_mA": -3,
+        "heartbeat_us": 687330602
+      },
+      "duration_us": 29999674,
+      "completion": {
+        "budget_us": 2500,
+        "count": 12139,
+        "over_budget": 70,
+        "max_us": 5030,
+        "mean_us": 860.825,
+        "runner_over_budget": 15,
+        "runner_max_us": 4423,
+        "runner_mean_us": 590.609,
+        "all_observed_within_budget": false,
+        "scope": "RUNNING_fresh_gyro_only;host_acquisition_to_runner_return;not_sensor_capture_to_motor_apply"
+      },
+      "acquisition": {
+        "captured": 12139,
+        "delivered": 12139,
+        "queue_drops": 0,
+        "delivery_sequence_gaps": 0,
+        "fault": false,
+        "delivery_age_mean_us": 126.669,
+        "delivery_age_max_us": 3706
+      },
+      "mekf_adopted_all": true,
+      "attitude_finite_all": true,
+      "foot": {
+        "running_rows": 295,
+        "right_running_valid": 295,
+        "left_running_valid": 295,
+        "right_running_out_of_range": 0,
+        "left_running_out_of_range": 0,
+        "right_running_invalid_reasons": {},
+        "left_running_invalid_reasons": {},
+        "running_frame_interval_max_us": 200122,
+        "running_frames_per_second": 9.833440190050066
+      },
+      "solver_us": {
+        "count": 70,
+        "mean": 314.8285714285714,
+        "median": 184.0,
+        "min": 142,
+        "max": 971
+      },
+      "normal_decisions": 70,
+      "camera_processing_us": {
+        "count": 295,
+        "mean": 14943.149152542373,
+        "median": 14090,
+        "min": 11823,
+        "max": 24784
+      },
+      "battery_mV": {
+        "count": 70,
+        "mean": 7201.142857142857,
+        "median": 7200.0,
+        "min": 7190,
+        "max": 7210
+      },
+      "amplitude_5_30s": {
+        "n": 58,
+        "mae_deg": 0.4359596551724138,
+        "negative_mean_deg": 7.482201034482759,
+        "positive_mean_deg": 8.296651379310346
+      }
+    }
+  ],
+  "over_budget_percent": 0.8434092181991896
+}
