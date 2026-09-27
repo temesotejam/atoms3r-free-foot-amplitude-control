@@ -23,7 +23,7 @@ public:
   enum class QRunMode : uint8_t { NONE = 0, VALIDATION = 1, CONTROL = 2 };
   void begin(PsramLogger& logger, ImuManager& imu, Roller485Manager& roller);
   void serviceFast();
-  void update();
+  void RW_HOT_CODE update();
   void updateImuDynamicBetaContext();
   void setLoopDt(uint32_t dt_us) { status_.loop_dt_us = dt_us; }
   void recordTimingProbeLoop(uint32_t imu_update_us, uint32_t runner_update_us, uint32_t core1_path_us);
@@ -108,9 +108,9 @@ private:
   void beginEndSync(uint32_t now_ms);
   void updateInputPulse(uint32_t now_ms);
   void beginPulse(uint32_t now_ms, uint32_t t_test_ms, int8_t direction);
-  void stopActivePulse(uint32_t now_ms);
-  void updatePulseModelPrediction();
-  float predictedChargeMaS(float signed_i0_mA, int8_t direction, float width_ms,
+  void RW_SPEED_CODE stopActivePulse(uint32_t now_ms);
+  void RW_SPEED_CODE updatePulseModelPrediction();
+  float RW_SPEED_CODE predictedChargeMaS(float signed_i0_mA, int8_t direction, float width_ms,
                             int16_t commanded_current_mA) const;
   float identificationChargeMaS(float signed_i0_mA, int8_t direction, float width_ms) const;
   uint16_t widthForChargeTarget(float target_q_mA_s, float signed_i0_mA, int8_t direction,
@@ -213,9 +213,9 @@ private:
                                 float max_predicted_peak_deg, bool target_reachable, bool bootstrap,
                                 uint16_t width_ms, bool suppressed);
   void updateIdentificationPeak(uint32_t now_ms, float angle_deg, float rate_dps);
-  float predictCurrentGoalMa(float command_mA, float model_vbat_v) const;
-  float predictRiseTauS(float command_mA) const;
-  float predictBetaMin(float peak_current_mA) const;
+  float RW_SPEED_CODE predictCurrentGoalMa(float command_mA, float model_vbat_v) const;
+  float RW_SPEED_CODE predictRiseTauS(float command_mA) const;
+  float RW_SPEED_CODE predictBetaMin(float peak_current_mA) const;
   float betaFloorForStrategy(uint8_t index) const;
   float betaCeilingForStrategy(uint8_t index) const;
   uint16_t betaHoldAfterInputMsForStrategy(uint8_t index) const;
@@ -276,31 +276,31 @@ private:
     WAIT_PEAK = 0, WAIT_ZERO_CROSS = 1, PULSE_ACTIVE = 2,
   };
   void resetEnergyControlAutonomous();
-  void resetEnergyControlAutonomousPeakTracker(bool enable);
+  void RW_SPEED_CODE resetEnergyControlAutonomousPeakTracker(bool enable);
   void beginEnergyControlAutonomousStartKick(uint32_t now_ms);
-  void updateEnergyControlAutonomousMotion(uint32_t now_ms);
-  void updateEnergyControlAutonomousPeakTracker(uint32_t now_ms,
+  void RW_SPEED_CODE updateEnergyControlAutonomousMotion(uint32_t now_ms);
+  void RW_SPEED_CODE updateEnergyControlAutonomousPeakTracker(uint32_t now_ms,
                                                 float peak_relative_angle_deg,
                                                 float rate_dps);
-  bool recordEnergyControlAutonomousPeak(uint32_t peak_ms, int8_t physical_side,
+  bool RW_SPEED_CODE recordEnergyControlAutonomousPeak(uint32_t peak_ms, int8_t physical_side,
                                          float amplitude_deg, float detector_peak_angle_deg);
-  void updateEnergyControlAutonomousAtZeroCross(uint32_t t_test_ms, float rate_dps,
+  void RW_SPEED_CODE updateEnergyControlAutonomousAtZeroCross(uint32_t t_test_ms, float rate_dps,
                                                  float detector_before_deg,
                                                  float detector_after_deg,
                                                  float crossing_alpha,
                                                  float interpolated_time_ms);
-  void updateEnergyControlAutonomousPulse(uint32_t now_ms);
+  void RW_SPEED_CODE updateEnergyControlAutonomousPulse(uint32_t now_ms);
   void runEnergyControlAutonomousSolverShadow();
-  bool beginEnergyControlAutonomousPulse(uint32_t now_ms, uint32_t t_test_ms,
+  bool RW_SPEED_CODE beginEnergyControlAutonomousPulse(uint32_t now_ms, uint32_t t_test_ms,
                                          int8_t direction, uint16_t pulse_width_ms);
-  bool beginEnergyControlAutonomousStartKickPulse(uint32_t now_ms, int8_t direction);
-  float energyControlPotentialJ(float amplitude_deg) const;
+  bool RW_SPEED_CODE beginEnergyControlAutonomousStartKickPulse(uint32_t now_ms, int8_t direction);
+  float RW_SPEED_CODE energyControlPotentialJ(float amplitude_deg) const;
   // V46ai: no previous-amplitude free-peak method.
-  float energyControlAutonomousGainForSide(int8_t physical_side) const;
-  void energyControlAutonomousCorrectionParameters(int8_t physical_side,
+  float RW_SPEED_CODE energyControlAutonomousGainForSide(int8_t physical_side) const;
+  void RW_SPEED_CODE energyControlAutonomousCorrectionParameters(int8_t physical_side,
                                                     float* c_side_used_deg,
                                                     float* g_side_corrected_deg_per_mA_s) const;
-  float energyControlAutonomousCorrectedPrediction(float free_next_peak_deg, int8_t physical_side,
+  float RW_SPEED_CODE energyControlAutonomousCorrectedPrediction(float free_next_peak_deg, int8_t physical_side,
                                                     float q_mA_s, float* correction_deg) const;
   bool qIdentRateInSupport(float abs_rate_dps) const;
   float qIdentRequiredWidthMs(float q_target_mA_s, float signed_i0_mA, int8_t direction) const;
@@ -309,16 +309,16 @@ private:
                          uint16_t* width_ms, float* q_effective_pred_mA_s) const;
   bool beginQIdentPulse(uint32_t now_ms, uint32_t t_test_ms, int8_t direction,
                         uint16_t pulse_width_ms);
-  void startTimingProbe(uint8_t pulse_kind, uint32_t t_test_ms, int16_t command_mA,
+  void RW_SPEED_CODE startTimingProbe(uint8_t pulse_kind, uint32_t t_test_ms, int16_t command_mA,
                         uint16_t pulse_width_ms, uint32_t pulse_start_us,
                         uint32_t set_current_us, uint32_t state_update_us,
                         uint32_t current_model_us, uint32_t update_pulse_model_us,
                         uint32_t pulse_begin_total_us);
-  void maybeFinalizeTimingProbe();
-  void logSampleIfDue();
-  void logSampleNow();
+  void RW_SPEED_CODE maybeFinalizeTimingProbe();
+  void RW_HOT_CODE logSampleIfDue();
+  void RW_HOT_CODE logSampleNow();
   void finishRun();
-  void stopMotor();
+  void RW_SPEED_CODE stopMotor();
   void setSyncLed(bool on);
   uint32_t measurementTotalDurationMs() const;
   float accelPitchDeg(const ImuReading& r) const;

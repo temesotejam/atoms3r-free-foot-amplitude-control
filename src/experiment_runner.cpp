@@ -2767,7 +2767,7 @@ void ExperimentRunner::updateEnergyControlAutonomousAtZeroCross(uint32_t t_test_
   energy_control_autonomous_last_accepted_zero_cross_valid_ = true;
   energy_control_autonomous_last_accepted_zero_cross_ms_ = accepted_cross_ms;
   resetEnergyControlAutonomousPeakTracker(false);
-  auto rearm_for_next_peak = [this]() {
+  auto rearm_for_next_peak = [this]() RW_SPEED_CODE {
     energy_control_autonomous_half_cycle_state_ = EnergyControlAutonomousHalfCycleState::WAIT_PEAK;
     resetEnergyControlAutonomousPeakTracker(true);
   };
@@ -2785,7 +2785,7 @@ void ExperimentRunner::updateEnergyControlAutonomousAtZeroCross(uint32_t t_test_
   audit.sample_time_valid = audit.gyro_sequence != 0;
   audit.entry_sample_age_us = audit.sample_time_valid ?
       static_cast<uint32_t>(micros() - audit.sample_time_us) : 0;
-  auto finish_audit = [&]() {
+  auto finish_audit = [&]() RW_SPEED_CODE {
     audit.end_us = micros();
     audit.decision_us = static_cast<uint32_t>(audit.end_us - audit.start_us);
     audit.exit_sample_age_us = audit.sample_time_valid ?

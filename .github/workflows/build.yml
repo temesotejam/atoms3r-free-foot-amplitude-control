@@ -34,6 +34,7 @@ jobs:
           python3 tools/verify_realtime_code_link.py .pio/build/atoms3cam/firmware.elf --objdump "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-objdump"
           python3 tools/verify_imu_transport_link.py .pio/build/atoms3cam/firmware.elf --nm "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-nm"
           python3 tools/verify_core_isolation_link.py .pio/build/atoms3cam/firmware.elf --objdump "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-objdump"
+          python3 tools/verify_motion_acquisition_link.py .pio/build/atoms3cam/firmware.elf --objdump "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-objdump"
           test -s madgwick-build-patch.json
           test -s bmi270-build-patch.json
           "$HOME/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-nm" .pio/build/atoms3cam/firmware.elf | grep -q '__wrap_xTaskCreatePinnedToCore'
@@ -47,7 +48,7 @@ jobs:
           cp bmi270-build-patch.json madgwick-build-patch.json dist/
           python "$HOME/.platformio/packages/tool-esptoolpy/esptool.py" --chip esp32s3 merge_bin -o dist/merged-firmware.bin 0x0000 dist/bootloader.bin 0x8000 dist/partitions.bin 0xe000 dist/boot_app0.bin 0x10000 dist/firmware.bin
           printf '%s\n' "$GITHUB_SHA" > dist/build-sha.txt
-          printf '%s\n' 'Free-foot Runtime V2 0.47.24 Core1 hardware IMU timer; Core0 camera lifecycle and Wi-Fi events; bounded full overrun detail; Wi-Fi AP retained; HTTP paused during run; fore/aft-only 90deg STOP; sideways overturning excluded; opt-in USB diagnostics; heavy scans deferred during run; sealed RWLOG/foot frames and export token survive HTTP restart; unchanged control math/MEKF/3ms/300mA/100ms; hardware association retention and timing validation pending' > dist/FLASH_LAYOUT.txt
+          printf '%s\n' 'Free-foot Runtime V2 0.47.25 motion and acquisition IRAM/O2; unchanged arithmetic and deadline; Core1 hardware IMU timer; Core0 camera lifecycle and Wi-Fi events; bounded full overrun detail; Wi-Fi AP retained; HTTP paused during run; fore/aft-only 90deg STOP; sideways overturning excluded; opt-in USB diagnostics; heavy scans deferred during run; sealed RWLOG/foot frames and export token survive HTTP restart; unchanged control math/MEKF/3ms/300mA/100ms; hardware association retention and timing validation pending' > dist/FLASH_LAYOUT.txt
           (cd dist && sha256sum *.bin > SHA256SUMS.txt)
           git diff --exit-code
       - uses: actions/upload-artifact@v4

@@ -11,7 +11,7 @@
 #define RW_HOT_CODE
 #endif
 
-// Only selected normal-update routines opt into speed-oriented compilation.
+// Selected estimator, acquisition and motion/pulse routines use speed-oriented compilation.
 // Keep IEEE finite/NaN handling and the original expression order. This does
 // not enable fast-math, change the filter algorithm or suppress any samples.
 // Enable on the host as well so differential tests exercise this policy.

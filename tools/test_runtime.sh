@@ -17,6 +17,8 @@ g++ -std=c++17 -O2 -Wall -Wextra -Werror -Isrc tools/test_tilt_stop.cpp src/mekf
 g++ -std=c++17 -O2 -Wall -Wextra -Werror tools/test_stack_scan_policy.cpp -o /tmp/test_stack_scan_policy
 /tmp/test_stack_scan_policy
 python3 tools/test_realtime_code_link.py
+python3 tools/test_motion_acquisition_link.py
+python3 tools/test_motion_speed.py
 python3 tools/test_control_math_cache.py
 g++ -std=c++17 -Os -ffp-contract=off -Wall -Wextra -Werror -Isrc tools/test_direct_q_math.cpp -o /tmp/test_direct_q_math
 /tmp/test_direct_q_math

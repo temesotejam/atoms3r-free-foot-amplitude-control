@@ -69,7 +69,7 @@ header = converter.parse_header(data)
 metadata = json.loads(data[110:110+header['metadata_json_size']], parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
 assert metadata['metadata_json_final_bytes'] == header['metadata_json_size']
 assert not metadata['metadata_event_detail_truncated']
-assert metadata['firmware_revision']=='0.47.24-core-isolation'
+assert metadata['firmware_revision']=='0.47.25-motion-acquisition-iram'
 latency=metadata['control_latency']
 assert latency['revision']=='control_latency_04724'
 details=latency['overrun_detail']

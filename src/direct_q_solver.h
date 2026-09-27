@@ -1,4 +1,5 @@
 #pragma once
+#include "realtime_code.h"
 #include <math.h>
 #include <stdint.h>
 
@@ -16,7 +17,9 @@ struct Target {
 // Invert free + base*Q + clamp(c + (gain-base)*Q, -limit, limit).
 // The deployed correction is disabled (c=0, gain=base). Keep the bounded
 // correction's three monotone pieces supported without iterative angle search.
-inline Target target(float free_peak, float target_peak, float base, float c,
+// Internal linkage keeps Xtensa's literals with any emitted IRAM body rather
+// than in a weak COMDAT literal section after the instructions that load them.
+static inline RW_SPEED_CODE Target target(float free_peak, float target_peak, float base, float c,
                      float gain, float limit, float available, float integral) {
   Target out;
   if (!isfinite(free_peak) || !isfinite(target_peak) || !isfinite(base) ||
@@ -54,7 +57,7 @@ struct Width {
 // integer interval, bracket BOTH +requested and -requested. Adjacent integers,
 // interval ends and the two integers around the turning point cover the minimum
 // absolute Q error. Exact error ties select the shorter pulse, including zero.
-inline Width width(float requested, float initial_current, float final_current,
+static inline RW_SPEED_CODE Width width(float requested, float initial_current, float final_current,
                    float tau_s, uint16_t max_ms = kMaxWidthMs) {
   Width out;
   if (!isfinite(requested) || !isfinite(initial_current) ||
@@ -66,7 +69,7 @@ inline Width width(float requested, float initial_current, float final_current,
   if (requested == 0.0f || max_ms == 0) return out;
   struct Point { uint16_t ms; float signed_q; };
   bool finite = true;
-  auto point = [&](uint16_t ms) -> Point {
+  auto point = [&](uint16_t ms) RW_SPEED_CODE -> Point {
     const float t = static_cast<float>(ms) / 1000.0f;
     const float signed_q = ms == 0 ? 0.0f :
         goal * t + (initial - goal) * tau_s * (1.0f - expf(-t / tau_s));
@@ -78,7 +81,7 @@ inline Width width(float requested, float initial_current, float final_current,
     }
     return {ms, signed_q};
   };
-  auto bracket = [&](Point lo, Point hi, float signed_target, bool increasing) {
+  auto bracket = [&](Point lo, Point hi, float signed_target, bool increasing) RW_SPEED_CODE {
     if (!finite || lo.ms == hi.ms) return;
     const float low_q = increasing ? lo.signed_q : hi.signed_q;
     const float high_q = increasing ? hi.signed_q : lo.signed_q;

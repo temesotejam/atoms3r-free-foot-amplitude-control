@@ -1,5 +1,6 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.24 Core isolation
+# Current integrated build: Free-foot Runtime V2 / 0.47.25 Motion/acquisition execution
 
+[0.47.25: acquisition and motion/pulse hot-code placement](docs/MOTION_ACQUISITION_04725.md) ·
 [0.47.24: Core1 IMU timer, Core0 camera lifecycle/events and overrun detail](docs/CORE_ISOLATION_04724.md) ·
 [0.47.23: keep Wi-Fi connected, pause HTTP, resume sealed-log downloads](docs/HTTP_PAUSE_04723.md)
 

@@ -1,6 +1,6 @@
 {
   "name": "AtomS3R Free-foot Runtime V2",
-  "version": "0.47.24-core-isolation",
+  "version": "0.47.25-motion-acquisition-iram",
   "builds": [
     {
       "chipFamily": "ESP32-S3",

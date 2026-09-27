@@ -11,6 +11,7 @@
 #include "imu_acquisition_audit.h"
 #include "imu_startup_boundary.h"
 #include "imu_poll_profile.h"
+#include "realtime_code.h"
 
 struct ImuReading {
   bool imu_ok = false;
@@ -63,7 +64,7 @@ struct ImuReading {
 class ImuManager {
  public:
   bool begin();
-  void update();  // Consume only. Never performs sensor I/O.
+  void RW_SPEED_CODE update();  // Consume only. Never performs sensor I/O.
   void setAcquisitionContext(bool sequential, bool measurement, uint8_t state_id = 0);
   bool acquisitionHealthy() const;
   String startupDiagnosticsJson() const;
@@ -97,11 +98,11 @@ class ImuManager {
   static void taskEntry(void* arg);
   bool initializeSensorAttempt();
   bool startAcquisition();
-  void acquisitionLoop();
-  void captureSensor();
-  void recordPollProfile(const ImuPollObservation& observation);
+  void RW_SPEED_CODE acquisitionLoop();
+  void RW_SPEED_CODE captureSensor();
+  void RW_SPEED_CODE recordPollProfile(const ImuPollObservation& observation);
   String pollProfileJson() const;
-  void publishSample();
+  void RW_SPEED_CODE publishSample();
   void latchFault(const char* reason, uint32_t sample_us = 0,
                   uint32_t age_us = 0, uint32_t depth = 0);
 

@@ -3,6 +3,7 @@
 #include <string.h>
 #include <type_traits>
 #include "timing_deadline.h"
+#include "realtime_code.h"
 
 // V46q diagnostic only. One writer: the Core1 reader. No I/O, allocation or
 // floating point. Export ONLY while measurement is inactive, on the idle owner.
@@ -61,7 +62,7 @@ struct ImuPollProfile {
     initialized = true; epoch_us = epoch;
   }
   static void maximum(uint32_t& a, uint32_t b) { if (b > a) a = b; }
-  void record(const ImuPollObservation& o) {
+  void RW_SPEED_CODE record(const ImuPollObservation& o) {
     if (!initialized || static_cast<int32_t>(o.start_us - epoch_us) < 0) return;
     ++polls; if (o.fresh_gyro) ++gyro; if (!o.mask) ++no_data;
     poll_work_deadline.add(o.total_us, 1000);

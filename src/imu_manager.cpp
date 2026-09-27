@@ -335,7 +335,7 @@ void ImuManager::publishSample() {
   audit_.sample(capture_.last_gyro_update_us, capture_.gyro_update_dt_us, capture_.gyro_sequence);
   portEXIT_CRITICAL(&mux_);
   if (!sample_queue_) return;  // Startup stream validation, before task creation.
-  auto send = [&]() {
+  auto send = [&]() RW_SPEED_CODE {
     capture_.queue_submit_us = micros();
     return xQueueSend(sample_queue_, &capture_, 0);
   };
