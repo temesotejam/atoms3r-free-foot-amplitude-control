@@ -69,7 +69,19 @@ header = converter.parse_header(data)
 metadata = json.loads(data[110:110+header['metadata_json_size']], parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
 assert metadata['metadata_json_final_bytes'] == header['metadata_json_size']
 assert not metadata['metadata_event_detail_truncated']
-assert metadata['firmware_revision']=='0.47.23-wifi-kept-on'
+assert metadata['firmware_revision']=='0.47.24-core-isolation'
+latency=metadata['control_latency']
+assert latency['revision']=='control_latency_04724'
+details=latency['overrun_detail']
+assert details['total']==70 and details['stored']==64 and details['overflow']==6
+assert details['budget_us']==2500 and details['rows_use_fields_above']
+for i,row in enumerate(details['samples']):
+    event=dict(zip(latency['fields'].split(','),row))
+    assert len(row)==len(latency['fields'].split(','))
+    assert event['sequence']==i+1 and event['done_age']==3000
+    assert event['queue_submit_age_us']==25 and event['queue_receive_age_us']==180
+    assert event['received_age']==200 and event['delivery_valid']==1
+assert metadata['execution_placement']['wifi_event_configured_core']==0
 solver = metadata['v46s_solver_audit']
 assert solver['schema_version']==2 and solver['solver_revision']=='direct_q_branch_inverse_04718'
 assert 'minimum_absolute_Q_error' in solver['inverse_policy']

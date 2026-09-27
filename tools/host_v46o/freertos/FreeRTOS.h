@@ -10,4 +10,6 @@ constexpr uint32_t portMAX_DELAY=UINT32_MAX;
 #define portMUX_INITIALIZER_UNLOCKED 0
 #define portENTER_CRITICAL(x) ((void)(x))
 #define portEXIT_CRITICAL(x) ((void)(x))
+#define portENTER_CRITICAL_ISR(x) portENTER_CRITICAL(x)
+#define portEXIT_CRITICAL_ISR(x) portEXIT_CRITICAL(x)
 #define pdMS_TO_TICKS(x) (x)

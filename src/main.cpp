@@ -127,6 +127,8 @@ static bool controlStep(void*) {
   const bool fresh = r.gyro_fresh;
   const bool pulse_at_runner_entry = runner.status().pulse_active;
   const bool accel_fresh = r.accel_fresh;
+  control_latency::profile.current.pulse_active_at_entry = pulse_at_runner_entry;
+  control_latency::profile.current.accel_fresh_at_entry = accel_fresh;
   const uint32_t sample_us = r.last_gyro_update_us;
   RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::ControlRunner);
   const uint32_t runner_start = micros(); runner.update();

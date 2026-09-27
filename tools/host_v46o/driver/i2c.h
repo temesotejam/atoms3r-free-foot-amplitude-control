@@ -1,9 +1,8 @@
 #pragma once
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
-using esp_err_t = int;
+#include <esp_err.h>
 using i2c_port_t = int;
-constexpr int ESP_OK=0, ESP_FAIL=-1, ESP_ERR_INVALID_ARG=258, ESP_ERR_INVALID_RESPONSE=264;
 constexpr int I2C_NUM_1=1, I2C_MODE_MASTER=1, GPIO_PULLUP_ENABLE=1;
 struct i2c_config_t { int mode=0,sda_io_num=0,scl_io_num=0,sda_pullup_en=0,scl_pullup_en=0; struct {uint32_t clk_speed=0;} master; };
 namespace idf_stub {

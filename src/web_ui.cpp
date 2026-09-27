@@ -9,6 +9,8 @@
 #include <esp_system.h>
 #include <errno.h>
 
+static_assert(ARDUINO_EVENT_RUNNING_CORE == 0, "Wi-Fi events must run outside the control core");
+
 static String num(float x) { return isfinite(x) ? String(x, 4) : String("null"); }
 static const char* phase(ImmutableExport::Phase p) {
   switch (p) {

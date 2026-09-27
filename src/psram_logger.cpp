@@ -436,6 +436,11 @@ PsramString PsramLogger::buildMetadataJson() const {
       (q_ident_mode_ ? "rwlog_q_ident_fixed_schedule" :
        (passive_capture_ ? "rwlog_passive_absolute_roll_free_decay" : "rwlog_dynamic_beta_vbat_hold_time_compare")))) + "\",";
   json += "\"firmware_revision\":\"" RUNTIME_VERSION "\",";
+  const auto placement = RuntimeDiag::executionSnapshot();
+  json += "\"execution_placement\":{\"revision\":\"core_isolation_04724\",\"camera_init_call_core\":" + String(placement.camera_init_core);
+  json += ",\"camera_deinit_call_core\":" + String(placement.camera_deinit_core);
+  json += ",\"wifi_event_observed_core\":" + String(placement.wifi_event_core);
+  json += ",\"wifi_event_configured_core\":0,\"observation_scope\":\"boot_to_export;minus_one_means_not_observed;camera_call_core_not_ISR_trace\"},";
   json += "\"attitude_validation_revision\":\"" + String(Config::ATTITUDE_VALIDATION_REVISION) + "\",";
   json += "\"amplitude_control_observation_revision\":\"" + String(Config::AMPLITUDE_CONTROL_OBSERVATION_REVISION) + "\",";
   json += "\"v46ak_pre_input_observation_semantics\":\"latest_independent_coast_current_and_speed_snapshots_captured_before_solver_and_command;speed_readback_register_0x60_x100_rpm;observation_only_never_read_by_control\",";

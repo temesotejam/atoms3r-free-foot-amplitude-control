@@ -129,29 +129,15 @@ bool ImuManager::startAcquisition() {
   bmi270_timing::transport() = &imu_i2c::read;
   sample_queue_ = xQueueCreateStatic(kQueueLength, sizeof(ImuReading), queue_bytes_, &queue_storage_);
   if (!sample_queue_) { last_error_ = "imu_queue_create_failed"; return false; }
-  esp_timer_create_args_t args{};
-  args.callback = &ImuManager::timerCallback;
-  args.arg = this;
-  args.dispatch_method = ESP_TIMER_TASK;
-  args.name = "bmi270_poll";
-  args.skip_unhandled_events = true;
-  if (esp_timer_create(&args, &acquisition_timer_) != ESP_OK) {
-    last_error_ = "imu_timer_create_failed";
-    return false;
-  }
   if (xTaskCreatePinnedToCore(&ImuManager::taskEntry, "bmi270_reader", 4096,
           this, kReaderPriority, &acquisition_task_, kReaderCore) != pdPASS) {
-    esp_timer_delete(acquisition_timer_);
-    acquisition_timer_ = nullptr;
     last_error_ = "imu_task_create_failed";
     return false;
   }
-  if (esp_timer_start_periodic(acquisition_timer_, Config::IMU_POLL_PERIOD_US) != ESP_OK) {
-    // Timer never started: the newly created task is only waiting for notification.
+  if (!acquisition_timer_.begin(&ImuManager::timerCallback, this, Config::IMU_POLL_PERIOD_US)) {
+    // begin() quiesces/frees a partially installed IRQ before returning failure.
     vTaskDelete(acquisition_task_);
     acquisition_task_ = nullptr;
-    esp_timer_delete(acquisition_timer_);
-    acquisition_timer_ = nullptr;
     last_error_ = "imu_timer_start_failed";
     return false;
   }
@@ -159,18 +145,22 @@ bool ImuManager::startAcquisition() {
   return true;
 }
 
-void ImuManager::timerCallback(void* arg) {
-  // ESP_TIMER_TASK context: wake only; never do sensor I/O or float work here.
+bool ImuManager::timerCallback(void* arg) {
+  // Core1 hardware ISR: stamp and notify only. IDF clears/rearms the alarm and
+  // performs portYIELD_FROM_ISR after this callback returns its wake flag.
   auto* self = static_cast<ImuManager*>(arg);
-  const uint32_t stamp = micros();
-  portENTER_CRITICAL(&self->notify_mux_);
+  const uint32_t stamp = static_cast<uint32_t>(esp_timer_get_time());
+  portENTER_CRITICAL_ISR(&self->notify_mux_);
   if (self->notify_stamp_.seen) self->notify_stamp_.gap_us = stamp - self->notify_stamp_.time_us;
   self->notify_stamp_.seen = true;
   self->notify_stamp_.time_us = stamp;
   ++self->notify_stamp_.sequence;
-  portEXIT_CRITICAL(&self->notify_mux_);
+  self->notify_stamp_.core = xPortGetCoreID();
+  portEXIT_CRITICAL_ISR(&self->notify_mux_);
   // Do not notify while holding a spinlock. No I2C, math or JSON in callback.
-  xTaskNotifyGive(self->acquisition_task_);
+  BaseType_t woken = pdFALSE;
+  vTaskNotifyGiveFromISR(self->acquisition_task_, &woken);
+  return woken == pdTRUE;
 }
 void ImuManager::taskEntry(void* arg) {
   static_cast<ImuManager*>(arg)->acquisitionLoop();
@@ -345,18 +335,22 @@ void ImuManager::publishSample() {
   audit_.sample(capture_.last_gyro_update_us, capture_.gyro_update_dt_us, capture_.gyro_sequence);
   portEXIT_CRITICAL(&mux_);
   if (!sample_queue_) return;  // Startup stream validation, before task creation.
-  if (xQueueSend(sample_queue_, &capture_, 0) != pdTRUE) {
+  auto send = [&]() {
+    capture_.queue_submit_us = micros();
+    return xQueueSend(sample_queue_, &capture_, 0);
+  };
+  if (send() != pdTRUE) {
     if (sequential) {
       // The high-priority reader can wake before the consumer removes the
       // pre-start history. Evict ONE pre-boundary idle item, never a live item.
       // Both owners are pinned to Core 1; this priority-6 producer cannot be
-      // preempted by the priority-2 consumer between peek and receive.
+      // preempted by the priority-4 consumer between peek and receive.
       ImuReading oldest;
       bool inserted = false;
       if (xQueuePeek(sample_queue_, &oldest, 0) == pdTRUE &&
           static_cast<int32_t>(oldest.gyro_sequence - cutoff) <= 0 &&
           xQueueReceive(sample_queue_, &oldest, 0) == pdTRUE) {
-        inserted = xQueueSend(sample_queue_, &capture_, 0) == pdTRUE;
+        inserted = send() == pdTRUE;
         portENTER_CRITICAL(&mux_);
         ++boundary_producer_discards_;
         portEXIT_CRITICAL(&mux_);
@@ -372,7 +366,7 @@ void ImuManager::publishSample() {
       // While idle only, prefer the most recent sample (e.g. during a download).
       ImuReading discarded;
       xQueueReceive(sample_queue_, &discarded, 0);
-      xQueueSend(sample_queue_, &capture_, 0);
+      send();
     }
   }
   const uint32_t depth = uxQueueMessagesWaiting(sample_queue_);
@@ -399,7 +393,7 @@ void ImuManager::setAcquisitionContext(bool sequential, bool measurement, uint8_
   portEXIT_CRITICAL(&mux_);
 }
 void ImuManager::update() {
-  // This function runs on the Arduino thread. It is the ONLY writer of reading_.
+  // Permanent control owner only. It is the ONLY writer of reading_.
   control_latency::profile.current = control_latency::Row{};
   reading_.accel_fresh = false;
   reading_.gyro_fresh = false;
@@ -415,7 +409,7 @@ void ImuManager::update() {
   if (fault) { reading_.imu_ok = false; last_error_ = reason; return; }
   ImuReading next;
   const uint32_t depth = uxQueueMessagesWaiting(sample_queue_);
-  // Empty queue: block for at most one tick, not a priority-2 busy loop.
+  // Empty queue: block for at most one tick, not a priority-4 busy loop.
   // A published sample wakes us immediately; timed motor/HTTP service remains bounded.
   if (xQueueReceive(sample_queue_, &next, 1) != pdTRUE) return;
   if (sequential) {
@@ -429,7 +423,8 @@ void ImuManager::update() {
     for (uint32_t i = 1; i < kQueueLength && xQueueReceive(sample_queue_, &newer, 0) == pdTRUE; ++i)
       next = newer;
   }
-  const uint32_t age_us = static_cast<uint32_t>(micros() - next.last_gyro_update_us);
+  const uint32_t queue_receive_us = micros();
+  const uint32_t age_us = static_cast<uint32_t>(queue_receive_us - next.last_gyro_update_us);
   const int core = xPortGetCoreID();
   const uint32_t priority = uxTaskPriorityGet(nullptr);
   portENTER_CRITICAL(&mux_);
@@ -451,7 +446,8 @@ void ImuManager::update() {
   uint32_t receive_time;
   const auto receive_activity = control_latency::activity(&receive_time);
   control_latency::profile.receive(audit_.active, next.gyro_sequence,
-      next.last_gyro_update_us, next.acquisition_poll_start_us, receive_time, receive_activity);
+      next.last_gyro_update_us, next.acquisition_poll_start_us, receive_time, receive_activity,
+      control_latency::Delivery(next.queue_submit_us, queue_receive_us));
   const uint32_t previous_accel_sequence = reading_.accel_sequence;
   // Preserve the same calibrated raw values and formulas. Only relocate work;
   // cache across gyro-only deliveries so this runs once per new accel sample.
@@ -522,12 +518,18 @@ template<class Output> void ImuManager::appendDiagnostics(Output& json) const {
   total = total_captured_;
   portEXIT_CRITICAL(&mux_);
   const auto& a = audit_snapshot_;
-  json += "{\"revision\":\"v46q_lightweight_acquisition_20260914\",\"firmware_version\":\"0.46.16\"";
+  json += "{\"revision\":\"core1_hw_timer_acquisition_04724\",\"firmware_version\":\"" RUNTIME_VERSION "\"";
   json += ",\"timestamp_semantics\":\"M5Unified_host_acquisition_not_sensor_clock\"";
   json += ",\"motor_controller\":\"unchanged_V46l_legacy_V7\"";
   json += ",\"reader_core\":" + String(reader_core) + ",\"reader_priority\":" + String(reader_priority);
   json += ",\"consumer_core\":" + String(consumer_core) + ",\"consumer_priority\":" + String(consumer_priority);
   json += ",\"transport\":\"idf_interrupt_i2c1_04719\"";
+  NotifyStamp notification;
+  portENTER_CRITICAL(&notify_mux_); notification = notify_stamp_; portEXIT_CRITICAL(&notify_mux_);
+  json += ",\"poll_trigger\":{\"type\":\"core1_hardware_timer_isr_04724\",\"group\":1,\"timer\":0,\"period_us\":1000";
+  json += ",\"allocation_core\":" + String(acquisition_timer_.ownerCore());
+  json += ",\"observed_isr_core\":" + String(notification.core);
+  json += ",\"last_error\":" + String(acquisition_timer_.lastError()) + "}";
   json += ",\"internal_i2c_port\":" + String(internal_i2c_port_);
   json += ",\"internal_sda\":" + String(internal_sda_) + ",\"internal_scl\":" + String(internal_scl_);
   json += ",\"roller_i2c_port\":0,\"queue_capacity\":32,\"delivery_age_limit_us\":10000";

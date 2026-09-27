@@ -38,6 +38,7 @@ uint32_t diagnostics_enabled = 0, run_active = 0;
 usb_diag::Parser usb_commands;
 CameraDriver camera_driver{};
 uint32_t event_id = 0, event_count = 0, clients = 0, ap_active = 0;
+uint32_t camera_init_core = UINT32_MAX, camera_deinit_core = UINT32_MAX, wifi_event_core = UINT32_MAX;
 uint32_t boot_stage = 0, boot_failures = 0;
 Boot current_boot{}, previous_boot{};
 Sample previous_sample{};
@@ -191,6 +192,16 @@ void observer(void*) { for (;;) { tick(); vTaskDelay(pdMS_TO_TICKS(20)); } }
 bool enabled() { return get(diagnostics_enabled) != 0; }
 void setEnabled(bool value) { put(diagnostics_enabled, value); }
 bool runActive() { return get(run_active) != 0; }
+ExecutionSnapshot executionSnapshot() {
+  ExecutionSnapshot s;
+  s.camera_init_core = static_cast<int32_t>(get(camera_init_core));
+  s.camera_deinit_core = static_cast<int32_t>(get(camera_deinit_core));
+  s.wifi_event_core = static_cast<int32_t>(get(wifi_event_core));
+  return s;
+}
+void cameraLifecycleCore(bool initialize, int core) {
+  put(initialize ? camera_init_core : camera_deinit_core, static_cast<uint32_t>(core));
+}
 void setRunActive(bool value) { put(run_active, value); }
 MemorySnapshot memorySnapshot() {
   return {get(memory.at_ms), get(memory.internal_free), get(memory.internal_min),
@@ -265,6 +276,7 @@ void cameraDriverStack(uint32_t free_bytes) {
 }
 void cameraDriverStopped() { put(camera_driver.active, 0); }
 void wifiEvent(uint32_t event, int change, int active) {
+  put(wifi_event_core, static_cast<uint32_t>(xPortGetCoreID()));
   put(event_id, event); put(event_count, get(event_count) + 1);
   if (active >= 0) { put(ap_active, active); if (!active) put(clients, 0); }
   if (change > 0) put(clients, get(clients) + 1);

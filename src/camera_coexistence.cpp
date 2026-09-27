@@ -1,5 +1,7 @@
 #include "camera_coexistence.h"
 #include "camera_task_priority_patch.h"
+#include "camera_lifecycle.h"
+#include "runtime_diagnostics.h"
 
 #include <Arduino.h>
 #include "driver/gpio.h"
@@ -84,6 +86,16 @@ void OneShotCamera::flushQueuedFrames() {
 }
 
 bool OneShotCamera::begin() {
+  const auto result = camera_lifecycle::run([](void* self) {
+    return static_cast<OneShotCamera*>(self)->beginOnOwnerCore();
+  }, this);
+  if (!result.invoked) setError(result.error);
+  return result.ok;
+}
+
+bool OneShotCamera::beginOnOwnerCore() {
+  if (xPortGetCoreID() != 0) { setError("camera_init_wrong_core"); return false; }
+  RuntimeDiag::cameraLifecycleCore(true, xPortGetCoreID());
   snapshot_ = CameraOneShotSnapshot{};
   snapshot_.xclk_hz = kCameraXclkHz;
   snapshot_.xclk_warmup_ms = kXclkWarmupMs;
@@ -266,6 +278,16 @@ bool OneShotCamera::debugPowerSensorOff() {
 }
 
 bool OneShotCamera::debugDeinit() {
+  const auto result = camera_lifecycle::run([](void* self) {
+    return static_cast<OneShotCamera*>(self)->deinitOnOwnerCore();
+  }, this);
+  if (!result.invoked) setError(result.error);
+  return result.ok;
+}
+
+bool OneShotCamera::deinitOnOwnerCore() {
+  if (xPortGetCoreID() != 0) { setError("camera_deinit_wrong_core"); return false; }
+  RuntimeDiag::cameraLifecycleCore(false, xPortGetCoreID());
   if (!capture_mutex_) return false;
   if (xSemaphoreTake(capture_mutex_, pdMS_TO_TICKS(250)) != pdTRUE) {
     setError("camera_debug_deinit_mutex_timeout");

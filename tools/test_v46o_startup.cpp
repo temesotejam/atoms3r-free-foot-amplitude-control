@@ -11,15 +11,22 @@
 #include "host_v46o/imu_transport_stub.h"
 #include "../src/imu_manager.cpp"
 
-static void resetHost(){host_us=1000;host_tasks_created=0;M5=HostM5{};imu_i2c::begin_ok=true;bmi270_timing::transport()=nullptr;}
+static void resetHost(){host_us=1000;host_core=1;host_task_result=pdPASS;host_tasks_created=0;host_isr_notifications=0;timer_stub::reset();M5=HostM5{};imu_i2c::begin_ok=true;bmi270_timing::transport()=nullptr;}
 static void initialized(ImuManager& imu){resetHost();assert(imu.begin());assert(imu.ok());assert(host_tasks_created==1);}
 static void put(ImuManager& imu,uint32_t seq,uint32_t stamp){
-  ImuReading r=imu.reading_;r.gyro_sequence=seq;r.last_gyro_update_us=stamp;r.gyro_update_dt_us=2500;r.last_update_ms=stamp/1000;
+  ImuReading r=imu.reading_;r.gyro_sequence=seq;r.last_gyro_update_us=stamp;r.queue_submit_us=stamp;r.gyro_update_dt_us=2500;r.last_update_ms=stamp/1000;
   imu.latest_capture_sequence_=seq;imu.latest_capture_us_=stamp;imu.latest_capture_ms_=stamp/1000;
   assert(xQueueSend(imu.sample_queue_,&r,0)==pdTRUE);
 }
 int main(){
   unsigned checks=0;
+  {ImuManager imu;initialized(imu);const auto reads=M5.Imu.data.usec;
+   host_us=UINT32_MAX-100;assert(timer_stub::callback(timer_stub::context));
+   host_us=899;assert(timer_stub::callback(timer_stub::context));
+   assert(host_isr_notifications==2&&imu.notify_stamp_.gap_us==1000&&imu.notify_stamp_.core==1);
+   assert(M5.Imu.data.usec==reads);++checks;}
+  {resetHost();timer_stub::fail="start";ImuManager imu;assert(!imu.begin());
+   assert(!imu.acquisition_task_&&!timer_stub::registered&&!timer_stub::initialized);++checks;}
   {resetHost();M5.In_I2C.release_ok=false;ImuManager imu;assert(!imu.begin() && imu.fault_ && !host_tasks_created);++checks;}
   {resetHost();imu_i2c::begin_ok=false;ImuManager imu;assert(!imu.begin() && imu.fault_ && !host_tasks_created);assert(!bmi270_timing::transport());++checks;}
 

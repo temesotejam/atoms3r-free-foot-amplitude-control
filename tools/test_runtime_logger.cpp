@@ -27,6 +27,12 @@ int main(int argc,char** argv){
   run_control.snapshot_.heartbeat_us=123456;
   control_work::profile.reset();
   control_work::profile.add(control_work::Stage::LogRow,true,777);
+  control_latency::profile.reset();
+  for(unsigned i=0;i<70;++i){
+    const uint32_t stamp=10000+i*5000;
+    control_latency::profile.receive(true,i+1,stamp,stamp-500,stamp+200,{},control_latency::Delivery(stamp+25,stamp+180));
+    control_latency::profile.finish(stamp+3000,{});
+  }
   // A copied preview must stay paired with its own observation when the next
   // camera frame arrives. No camera hardware or RTOS scheduling is simulated.
   feet.preview_=static_cast<uint8_t*>(ps_malloc(FootObserver::kPreviewBytes));

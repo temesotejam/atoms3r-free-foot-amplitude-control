@@ -1,10 +1,11 @@
 #pragma once
 #include <stdint.h>
 
-#define RUNTIME_VERSION "0.47.23-wifi-kept-on"
+#define RUNTIME_VERSION "0.47.24-core-isolation"
 
 namespace RuntimeDiag {
 struct MemorySnapshot { uint32_t at_ms, internal_free, internal_min, largest, dma_free, psram_free; };
+struct ExecutionSnapshot { int32_t camera_init_core = -1, camera_deinit_core = -1, wifi_event_core = -1; };
 enum class Lane : uint32_t { Control, Imu, Camera, Http, Roller, Export, Count };
 enum class Stage : uint32_t {
   UsbWindow, M5, Logger, Imu, Camera, Roller, Runner, Control, Feet, Export, Web, Ready
@@ -24,6 +25,8 @@ void setEnabled(bool enabled);
 bool runActive();
 void setRunActive(bool active);
 MemorySnapshot memorySnapshot();
+ExecutionSnapshot executionSnapshot();
+void cameraLifecycleCore(bool initialize, int core);
 void boot(Stage stage);
 void result(bool ok);
 // Single task owns each lane. These probes never log or acquire application locks.
@@ -46,6 +49,8 @@ inline void setEnabled(bool value) { enabledState() = value; }
 inline bool runActive() { return runState(); }
 inline void setRunActive(bool value) { runState() = value; }
 inline MemorySnapshot memorySnapshot() { return {}; }
+inline ExecutionSnapshot executionSnapshot() { return {}; }
+inline void cameraLifecycleCore(bool, int) {}
 inline void phase(Lane, Phase) {}
 inline Phase currentPhase(Lane) { return Phase::Unseen; }
 inline void beat(Lane, uint32_t = 0, bool = true) {}

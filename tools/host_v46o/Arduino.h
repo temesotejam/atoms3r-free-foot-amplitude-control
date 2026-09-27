@@ -1,4 +1,5 @@
 #pragma once
+#define IRAM_ATTR
 #include <algorithm>
 #include <math.h>
 #include <cstdint>

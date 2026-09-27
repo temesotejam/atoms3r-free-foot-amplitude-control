@@ -7,6 +7,7 @@
 #include <freertos/task.h>
 #include <freertos/queue.h>
 #include <esp_timer.h>
+#include "imu_poll_timer.h"
 #include "imu_acquisition_audit.h"
 #include "imu_startup_boundary.h"
 #include "imu_poll_profile.h"
@@ -52,6 +53,7 @@ struct ImuReading {
   uint32_t last_accel_update_us = 0;
   uint32_t last_gyro_update_us = 0;
   uint32_t acquisition_poll_start_us = 0;
+  uint32_t queue_submit_us = 0;  // Immediately before the successful queue-send attempt.
   uint32_t update_dt_us = 0;
   uint32_t last_update_us = 0;
   uint32_t last_update_ms = 0;
@@ -91,7 +93,7 @@ class ImuManager {
   static constexpr uint32_t kMaximumDeliveryAgeUs = 10000;
   static constexpr uint8_t kReaderCore = 1;
   static constexpr uint8_t kReaderPriority = 6;
-  static void timerCallback(void* arg);
+  static bool IRAM_ATTR timerCallback(void* arg);
   static void taskEntry(void* arg);
   bool initializeSensorAttempt();
   bool startAcquisition();
@@ -104,7 +106,7 @@ class ImuManager {
                   uint32_t age_us = 0, uint32_t depth = 0);
 
   // After begin(), the producer exclusively owns capture_ and M5.Imu.
-  // The Arduino thread exclusively owns reading_, beta context and last_error_.
+  // The permanent control task exclusively owns reading_, beta context and last_error_.
   ImuReading reading_;
   ImuReading capture_;
   bool imu_present_ = false;
@@ -117,7 +119,7 @@ class ImuManager {
   const char* last_error_ = "not_initialized";
 
   TaskHandle_t acquisition_task_ = nullptr;
-  esp_timer_handle_t acquisition_timer_ = nullptr;
+  ImuPollTimer acquisition_timer_;
   QueueHandle_t sample_queue_ = nullptr;
   StaticQueue_t queue_storage_;
   alignas(4) uint8_t queue_bytes_[kQueueLength * sizeof(ImuReading)];
@@ -151,6 +153,7 @@ class ImuManager {
   struct NotifyStamp {
     bool seen = false;
     uint32_t time_us = 0, gap_us = 0, sequence = 0;
+    int core = -1;
   };
   mutable portMUX_TYPE notify_mux_ = portMUX_INITIALIZER_UNLOCKED;
   NotifyStamp notify_stamp_;  // Timer writes; reader takes a small coherent copy.

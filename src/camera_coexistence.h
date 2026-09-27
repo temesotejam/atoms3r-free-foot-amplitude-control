@@ -66,6 +66,8 @@ class OneShotCamera {
   const char* lastError() const { return last_error_; }
 
  private:
+  bool beginOnOwnerCore();
+  bool deinitOnOwnerCore();
   bool initCameraOnTemporaryI2c0();
   void setXclkEnabled(bool enabled);
   void flushQueuedFrames();

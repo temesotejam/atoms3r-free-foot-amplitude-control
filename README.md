@@ -1,5 +1,6 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.23 Wi-Fi retained, HTTP paused
+# Current integrated build: Free-foot Runtime V2 / 0.47.24 Core isolation
 
+[0.47.24: Core1 IMU timer, Core0 camera lifecycle/events and overrun detail](docs/CORE_ISOLATION_04724.md) ·
 [0.47.23: keep Wi-Fi connected, pause HTTP, resume sealed-log downloads](docs/HTTP_PAUSE_04723.md)
 
 [0.47.22: fore/aft-only STOP, sideways overturning excluded](docs/FORE_AFT_STOP_04722.md)
