@@ -7,7 +7,6 @@
 #include "rate_baseline_correction.h"
 #include "previous_peak_control_correction.h"
 #include "runtime_diagnostics.h"
-#include "tilt_stop.h"
 
 #include <math.h>
 
@@ -159,7 +158,7 @@ void ExperimentRunner::update() {
       const auto& attitude = status_.mekf_attitude;
       const mekf6::Vec3 upright{-UprightPoseGuide::REF_AX,
           UprightPoseGuide::REF_AY, -UprightPoseGuide::REF_AZ};
-      const char* stop_reason = tilt_stop::reason(attitude.quaternion, attitude.valid,
+      const char* stop_reason = tilt_guard_.reason(attitude.quaternion, attitude.valid,
           static_cast<uint32_t>(micros() - attitude.sample_us), upright);
       if (stop_reason) { requestEmergencyStop(stop_reason); logSampleNow(); }
     }
@@ -1183,6 +1182,7 @@ void ExperimentRunner::recordV59StateGateEvent(uint32_t crossing_ms, float hprev
 }
 
 void ExperimentRunner::beginStartSync(uint32_t now_ms) {
+  tilt_guard_.reset();
   // V46z comparison-zero begin
   captureMekfComparisonZero(status_.mekf_start_sync_zero_abs_deg,
                             status_.mekf_start_sync_zero_sample_us);

@@ -63,7 +63,7 @@ function renderOffline() {
   $('state').textContent = '通信停止モード';
   $('remaining').textContent = remaining ? `${remaining} s（再接続目安）` : '復帰待ち';
   for (const id of ['pitch', 'current', 'right', 'left', 'fps']) $(id).textContent = '—';
-  $('guide').textContent = '本体で制御・観測・記録を行います。開始5秒＋測定30秒＋終了5秒が予定時間です。前後90°以上の転倒でSTOPします。表示時間はPC側の目安で、実際の進行・終了を確認した値ではありません。';
+  $('guide').textContent = '本体で制御・観測・記録を行います。開始5秒＋測定30秒＋終了5秒が予定時間です。前後90°以上の傾斜でSTOPします。横倒しは姿勢STOPの対象にしません。表示時間はPC側の目安で、実際の進行・終了を確認した値ではありません。';
   $('foot-status').textContent = '足角度の画面更新を停止。本体内の記録は継続します。';
   $('mekf-axes').textContent = '運転中の姿勢表示を停止しています。';
   controls();

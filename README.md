@@ -1,4 +1,6 @@
-# Current integrated build: Free-foot Runtime V2 / 0.47.21 offline run
+# Current integrated build: Free-foot Runtime V2 / 0.47.22 fore/aft STOP only
+
+[0.47.22: fore/aft-only STOP, sideways overturning excluded](docs/FORE_AFT_STOP_04722.md)
 
 [0.47.21: offline run, tilt STOP, USB opt-in and log recovery](docs/OFFLINE_RUN_04721.md)
 

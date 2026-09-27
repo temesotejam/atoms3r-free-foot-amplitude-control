@@ -14,6 +14,7 @@
 #include "psram_logger.h"
 #include "roller485_manager.h"
 #include "realtime_code.h"
+#include "tilt_stop.h"
 
 #include "experiment_status.h"
 
@@ -582,6 +583,7 @@ private:
   float offset_mekf_pitch_deg_ = 0.0f;
   bool mekf_initialized_ = false;
   mekf6::Mekf6 mekf_;
+  tilt_stop::ForeAftGuard tilt_guard_;
   float gyro_raw_deg_ = 0.0f;
   float gyro_bias_corrected_deg_ = 0.0f;
 
