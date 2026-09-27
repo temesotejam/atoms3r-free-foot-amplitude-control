@@ -5,6 +5,7 @@ let poseRunning = false, poseCancelled = false, poseSession = null, poseSaved = 
 let latest = null, lastSeen = 0, refreshInFlight = false, commandInFlight = false;
 let transferRunning = false, cancelTransfer = false, completedFile = null, completedName = '', completedFoot = null;
 let offlineMode = false, offlineUntil = 0;
+let offlineGeneration = 0;
 const offlineKey = 'freefoot-offline-run-until';
 const nap = ms => new Promise(resolve => setTimeout(resolve, ms));
 function crc32(data, crc = 0) {
@@ -49,19 +50,21 @@ function controls() {
   if ($('reconnect')) $('reconnect').style.display = offlineMode ? 'inline-block' : 'none';
 }
 function setOffline(waitMs) {
+  ++offlineGeneration;
   offlineMode = true; offlineUntil = Date.now() + Math.max(0, Math.min(45000, waitMs));
   try { sessionStorage.setItem(offlineKey, String(offlineUntil)); } catch (_) {}
   renderOffline();
 }
 function clearOffline() {
+  ++offlineGeneration;
   offlineMode = false; offlineUntil = 0;
   try { sessionStorage.removeItem(offlineKey); } catch (_) {}
 }
 function renderOffline() {
   const remaining = Math.max(0, Math.ceil((offlineUntil - Date.now()) / 1000));
-  $('connection').textContent = remaining ? '運転のため通信を停止中 · 終了後に再接続' : '通信の復帰待ち · 同じWi-Fiへの接続を確認してください';
-  $('state').textContent = '通信停止モード';
-  $('remaining').textContent = remaining ? `${remaining} s（再接続目安）` : '復帰待ち';
+  $('connection').textContent = remaining ? 'Web更新を休止中 · Wi-Fi接続を維持してください' : 'Webの復帰待ち · 自動再試行';
+  $('state').textContent = 'Web休止中';
+  $('remaining').textContent = remaining ? `${remaining} s（Web復帰目安）` : '復帰待ち';
   for (const id of ['pitch', 'current', 'right', 'left', 'fps']) $(id).textContent = '—';
   $('guide').textContent = '本体で制御・観測・記録を行います。開始5秒＋測定30秒＋終了5秒が予定時間です。前後90°以上の傾斜でSTOPします。横倒しは姿勢STOPの対象にしません。表示時間はPC側の目安で、実際の進行・終了を確認した値ではありません。';
   $('foot-status').textContent = '足角度の画面更新を停止。本体内の記録は継続します。';
@@ -135,14 +138,18 @@ async function refresh(force = false) {
   if (offlineMode && Date.now() < offlineUntil && !force) { renderOffline(); return; }
   if (refreshInFlight) return;
   refreshInFlight = true;
+  const generation = offlineGeneration;
   let received = false;
   try {
     const s = await request('/status.json', {timeout: 2500}); received = true;
+    // A pre-START poll can arrive after START entered quiet mode. Do not let
+    // that old READY response restart automatic polling during the run.
+    if (generation !== offlineGeneration) { if (offlineMode) renderOffline(); return; }
     if (s?.offline_run === true && Number.isFinite(s.wait_ms)) { setOffline(s.wait_ms); return; }
     const wasOffline = offlineMode;
     adoptStatus(s); clearOffline(); render(latest);
     if (wasOffline) $('message').textContent = s.network?.last_error || s.last_error ||
-      (s.downloadable ? '通信が復帰しました。ログを保存してください。' : s.command.result || '通信が復帰しました。');
+      (s.downloadable ? 'Web表示が復帰しました。ログを保存してください。' : s.command.result || 'Web表示が復帰しました。');
   } catch (error) {
     lastSeen = 0;
     if (offlineMode) { renderOffline(); return; }
@@ -178,10 +185,10 @@ async function startOfflineRun() {
   commandInFlight = true; setOffline(45000); $('message').textContent = '開始要求を送信中…';
   try {
     await request('/start-energy-control-autonomous', {method:'POST', kind:'text'});
-    $('message').textContent = '開始要求を受け付けました。通信停止後に本体が開始条件を確認します。画面は閉じずにお待ちください。';
+    $('message').textContent = '開始要求を受け付けました。Web休止後に本体が開始条件を確認します。Wi-Fi接続と画面をそのまま保ってお待ちください。';
   } catch (error) {
     if (/^\d{3}:/.test(error.message)) { clearOffline(); await refresh(); }
-    $('message').textContent = `開始結果の確認: ${error.message}。通信復帰後に本体の結果を確認します。`;
+    $('message').textContent = `開始結果の確認: ${error.message}。Web復帰後に本体の結果を確認します。`;
   } finally { commandInFlight = false; controls(); }
 }
 async function command(path) {

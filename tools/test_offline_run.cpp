@@ -5,25 +5,24 @@
 #include "runtime_diagnostics.h"
 using Session = OfflineRunSession;
 struct Host {
-  bool radio = true, active = false, stop_ok = true, queue_ok = true, restore_ok = true;
+  // Deliberately no radio methods: the lifecycle must depend only on HTTP.
+  bool listening = true, active = false, stop_ok = true, queue_ok = true, restore_ok = true;
   int stopped = 0, queued = 0, cancelled = 0, restored = 0, ready = 0;
   Session::StartResult result = Session::StartResult::Pending;
-  void stopServer() { ++stopped; }
-  bool stopRadio() { return stop_ok; }
-  bool radioActive() { return radio; }
-  bool queueStart() { ++queued; return queue_ok; }
+  bool stopServer() { ++stopped; if (stop_ok) listening=false; return stop_ok; }
+  bool queueStart() { assert(!listening); ++queued; return queue_ok; }
   Session::StartResult startResult() { return result; }
   bool runActive() { return active; }
   void cancelStart() { ++cancelled; }
-  bool restoreTransport() { ++restored; return restore_ok; }
-  void transportReady() { ++ready; }
+  bool restoreTransport() { assert(!active); ++restored; listening=restore_ok; return restore_ok; }
+  void transportReady() { assert(listening); ++ready; }
 };
 void enter(Session& s, Host& h, uint32_t origin = 0) {
-  assert(s.queue(origin)); assert(!s.queue(origin));
-  s.update(origin+349,h); assert(h.stopped==0 && h.queued==0);
-  s.update(origin+350,h); assert(h.stopped==1 && h.queued==0);
-  s.update(origin+400,h); assert(h.queued==0); // Driver event has not arrived.
-  h.radio=false; s.update(origin+450,h); assert(h.queued==1);
+  const int stopped=h.stopped, queued=h.queued;
+  assert(s.queue(origin)); assert(!s.queue(origin)); assert(s.serving());
+  s.update(origin+349,h); assert(h.stopped==stopped && h.queued==queued);
+  s.update(origin+350,h); assert(h.stopped==stopped+1 && h.queued==queued+1);
+  assert(!h.listening && !s.serving()); // No AP event or radio restart is needed.
 }
 int main() {
   for (uint32_t origin : {0U, 0xffffff00U}) {
@@ -37,12 +36,18 @@ int main() {
     h.restore_ok=true; s.update(origin+48020,h);
     assert(!s.busy() && h.ready==1 && h.queued==1);
     s.update(origin+100000,h); assert(h.stopped==1 && h.restored==2);
-    assert(s.queue(origin+100001)); // A second explicitly requested run works.
+    h.result=Session::StartResult::Pending;
+    enter(s,h,origin+100001); // A complete second run must rebind HTTP again.
+    h.result=Session::StartResult::Started; h.active=true; s.update(origin+100501,h);
+    assert(!s.serving() && !h.listening && h.queued==2);
+    h.active=false; s.update(origin+141001,h); s.update(origin+141021,h);
+    assert(!s.busy() && h.ready==2 && h.restored==3 && h.listening);
   }
   { Session s; Host h; h.stop_ok=false; assert(s.queue(0)); s.update(350,h); s.update(400,h);
-    assert(!s.busy() && h.queued==0 && s.error()==std::string("wifi_stop_failed")); }
-  { Session s; Host h; assert(s.queue(0)); s.update(350,h); s.update(2350,h); s.update(2400,h);
-    assert(!s.busy() && h.queued==0 && s.error()==std::string("wifi_stop_timeout")); }
+    assert(!s.busy() && h.queued==0 && s.error()==std::string("http_stop_failed")); }
+  { Session s; Host h; assert(s.queue(0)); s.cancel(100); h.result=Session::StartResult::Rejected;
+    s.update(120,h); s.update(140,h);
+    assert(!s.busy() && h.queued==0 && h.cancelled==1 && h.listening); }
   { Session s; Host h; h.queue_ok=false; enter(s,h); s.update(500,h); assert(!s.busy()); }
   { Session s; Host h; enter(s,h); h.result=Session::StartResult::Rejected;
     s.update(500,h); s.update(520,h); assert(!s.busy()); }
@@ -63,5 +68,5 @@ int main() {
   assert(line("DIAG STATUS\n")==usb_diag::Command::Status);
   assert(line("DIAG ONxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n")==usb_diag::Command::Unknown);
   assert(line("DIAG ON\n")==usb_diag::Command::Enable);
-  std::cout << "offline lifecycle: acknowledgement drain, AP events, start rejection/timeout, early STOP, restore retry, repeated runs, clock wrap; USB opt-in PASS\n";
+  std::cout << "HTTP pause lifecycle: response drain, stop-before-START, no radio dependency, start rejection/timeout, early STOP, bind retry, two full runs, clock wrap; USB opt-in PASS\n";
 }

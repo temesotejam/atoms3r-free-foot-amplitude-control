@@ -11,9 +11,7 @@ class WebUi {
   void update();
  private:
   friend class OfflineRunSession;
-  void stopServer();
-  bool stopRadio();
-  bool radioActive() const;
+  bool stopServer();
   bool queueStart();
   OfflineRunSession::StartResult startResult() const;
   bool runActive() const;
@@ -37,7 +35,7 @@ class WebUi {
   uint32_t preview_token_ = 0;
   uint32_t boot_id_ = 0;
   OfflineRunSession offline_;
-  uint32_t ap_active_ = 0, offline_poll_ms_ = 0, radio_retry_ms_ = 0;
+  uint32_t offline_poll_ms_ = 0;
   uint32_t start_command_id_ = 0;
-  bool start_submitted_ = false, cancel_sent_ = false, radio_start_requested_ = false;
+  bool start_submitted_ = false, cancel_sent_ = false;
 };

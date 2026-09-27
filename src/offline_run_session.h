@@ -1,11 +1,12 @@
 #pragma once
 #include <stdint.h>
 
-// Transport lifecycle only. Host callbacks never reset a logger, calibration,
-// exporter or controller. All calls execute in the low-priority HTTP owner.
+// HTTP lifecycle only; Wi-Fi/AP stays up throughout every phase. Host callbacks
+// never reset a logger, calibration, exporter or controller. All calls execute
+// in the low-priority HTTP owner. Legacy class/wire names retain compatibility.
 class OfflineRunSession {
  public:
-  enum class Phase { Online, Draining, Stopping, Starting, Running, Cancelling, Restoring };
+  enum class Phase { Online, Draining, Starting, Running, Cancelling, Restoring };
   enum class StartResult { Pending, Started, Rejected };
   static constexpr uint32_t kDisplayWaitMs = 45000;
   bool queue(uint32_t now) {
@@ -21,11 +22,10 @@ class OfflineRunSession {
     switch (phase_) {
       case Phase::Online: return "online";
       case Phase::Draining: return "preparing";
-      case Phase::Stopping: return "stopping_wifi";
       case Phase::Starting: return "starting_run";
-      case Phase::Running: return "offline_run";
+      case Phase::Running: return "http_paused_run";
       case Phase::Cancelling: return "cancelling_start";
-      default: return "restoring_wifi";
+      default: return "restoring_http";
     }
   }
   uint32_t displayWaitMs(uint32_t now) const {
@@ -39,15 +39,11 @@ class OfflineRunSession {
       case Phase::Draining:
         // Allow the START response to drain before closing its TCP connection.
         if (now - since_ms_ < 350) break;
-        h.stopServer();
-        if (!h.stopRadio()) restore(now, "wifi_stop_failed");
-        else { phase_ = Phase::Stopping; since_ms_ = now; }
-        break;
-      case Phase::Stopping:
-        if (!h.radioActive()) {
-          if (!h.queueStart()) restore(now, "start_queue_failed");
-          else { phase_ = Phase::Starting; since_ms_ = now; }
-        } else if (now - since_ms_ >= 2000) restore(now, "wifi_stop_timeout");
+        // Close the client/listener before submitting START. There is no AP
+        // stop event to wait for: association, DHCP and radio remain intact.
+        if (!h.stopServer()) restore(now, "http_stop_failed");
+        else if (!h.queueStart()) restore(now, "start_queue_failed");
+        else { phase_ = Phase::Starting; since_ms_ = now; }
         break;
       case Phase::Starting: {
         const auto result = h.startResult();

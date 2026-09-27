@@ -29,13 +29,13 @@ vm.runInContext(source,context);
   assert.ok(storage.size===1);
   // Transport failure after expected finish must keep the UI recoverable.
   now+=26000;
-  const fetch=context.fetch;context.fetch=async()=>{throw Error('AP not connected');};
+  const fetch=context.fetch;context.fetch=async()=>{throw Error('HTTP not listening');};
   await vm.runInContext('poll()',context);assert.match(element('connection').textContent,/復帰待ち/);
   context.fetch=fetch;
-  Object.assign(status,{state:'ESTOP',ready:false,downloadable:true,last_error:'body_tilt_90deg'});
+  Object.assign(status,{state:'ESTOP',ready:false,downloadable:true,last_error:'fore_aft_tilt_90deg'});
   await vm.runInContext('poll()',context);
   assert.equal(vm.runInContext('offlineMode',context),false);assert.equal(storage.size,0);
-  assert.equal(element('download').disabled,false);assert.match(element('message').textContent,/body_tilt_90deg/);
+  assert.equal(element('download').disabled,false);assert.match(element('message').textContent,/fore_aft_tilt_90deg/);
   Object.assign(status,{state:'READY_TO_MEASURE',ready:true,downloadable:false,last_error:''});
   failStart=true;await vm.runInContext('startOfflineRun()',context);
   assert.equal(vm.runInContext('offlineMode',context),false);
@@ -45,5 +45,24 @@ vm.runInContext(source,context);
   // A reload of an already loaded page preserves the quiet countdown.
   const restored=vm.createContext({...context,sessionStorage,document:{getElementById:element}});
   vm.runInContext(source,restored);assert.equal(vm.runInContext('offlineMode',restored),true);
-  console.log('offline browser: no run polling, lost/rejected START, reconnect failure, ESTOP download and restored countdown PASS');
+  // A status request already in flight at START must not clear the pause when
+  // its old READY response arrives. Otherwise polls would burden the live AP.
+  vm.runInContext('clearOffline()',context);loseReply=false;
+  let deliver;
+  context.fetch=async(path)=>path==='/status.json'
+    ? new Promise(resolve=>{deliver=resolve;}) : fetch(path);
+  const staleRefresh=vm.runInContext('refresh()',context);
+  calls=[];await vm.runInContext('startOfflineRun()',context);
+  deliver({ok:true,json:async()=>status});await staleRefresh;
+  assert.equal(vm.runInContext('offlineMode',context),true);
+  assert.match(element('connection').textContent,/Wi-Fi接続を維持/);
+  await vm.runInContext('poll()',context);assert.deepEqual(calls,['/start-energy-control-autonomous']);
+  // Default expiry resumes GETs automatically, including normal completion.
+  context.fetch=fetch;now+=46000;
+  Object.assign(status,{state:'FINISHED',ready:false,downloadable:true,last_error:''});
+  await vm.runInContext('poll()',context);
+  assert.equal(vm.runInContext('offlineMode',context),false);
+  assert.equal(element('download').disabled,false);
+  assert.match(element('message').textContent,/Web表示が復帰/);
+  console.log('HTTP pause browser: no run polling, stale pre-START response, lost/rejected START, HTTP retry, FINISHED/ESTOP download and restored countdown PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});

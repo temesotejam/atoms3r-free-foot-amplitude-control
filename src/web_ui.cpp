@@ -5,7 +5,6 @@
 #include "foot_range_diagnostics.h"
 #include "foot_calibration_diagnostics.h"
 #include <WiFi.h>
-#include <esp_wifi.h>
 #include <esp_timer.h>
 #include <esp_system.h>
 #include <errno.h>
@@ -23,8 +22,6 @@ void WebUi::begin(BoundedWriteWebServer& s, RunControlWorker& control, FootObser
   server_ = &s; control_ = &control; feet_ = &feet; export_ = &exporter;
   preview_buffer_ = static_cast<uint8_t*>(ps_malloc(FootObserver::kPreviewBytes));
   WiFi.onEvent([this](arduino_event_id_t event, arduino_event_info_t) {
-    if (event == ARDUINO_EVENT_WIFI_AP_START) __atomic_store_n(&ap_active_, 1U, __ATOMIC_RELEASE);
-    if (event == ARDUINO_EVENT_WIFI_AP_STOP) __atomic_store_n(&ap_active_, 0U, __ATOMIC_RELEASE);
     RuntimeDiag::wifiEvent(static_cast<uint32_t>(event),
         event == ARDUINO_EVENT_WIFI_AP_STACONNECTED ? 1 : event == ARDUINO_EVENT_WIFI_AP_STADISCONNECTED ? -1 : 0,
         event == ARDUINO_EVENT_WIFI_AP_START ? 1 : event == ARDUINO_EVENT_WIFI_AP_STOP ? 0 : -1);
@@ -85,14 +82,11 @@ void WebUi::update() {
   RuntimeDiag::beat(RuntimeDiag::Lane::Http);
   RuntimeDiag::phase(RuntimeDiag::Lane::Http, RuntimeDiag::Phase::Wait);
 }
-void WebUi::stopServer() { server_->client().stop(); server_->stop(); }
-bool WebUi::stopRadio() {
-  // Preserve initialized driver/netif/configuration; no deinit or app reset.
-  // Pair SDK stop/start here; do not mix Arduino mode(WIFI_OFF) bookkeeping.
-  radio_start_requested_ = false;
-  return esp_wifi_stop() == ESP_OK;
+bool WebUi::stopServer() {
+  server_->client().stop();
+  server_->stop();
+  return !server_->listening();
 }
-bool WebUi::radioActive() const { return __atomic_load_n(&ap_active_, __ATOMIC_ACQUIRE) != 0; }
 bool WebUi::queueStart() {
   start_command_id_ = control_->commandState().submitted + 1;
   start_submitted_ = control_->request(RunControlWorker::Command::Start);
@@ -108,20 +102,10 @@ OfflineRunSession::StartResult WebUi::startResult() const {
 bool WebUi::runActive() const { return control_->active(); }
 void WebUi::cancelStart() { if (!cancel_sent_) cancel_sent_ = control_->requestStop(); }
 bool WebUi::restoreTransport() {
-  const uint32_t now = millis();
-  if (!radio_start_requested_ || (!radioActive() && now - radio_retry_ms_ >= 2000)) {
-    // Obtain a fresh AP_START even after a missing AP_STOP event or a failed
-    // start. Never trust a pre-pause 'AP up' flag to mean sockets recovered.
-    esp_wifi_stop();
-    __atomic_store_n(&ap_active_, 0U, __ATOMIC_RELEASE);
-    radio_retry_ms_ = now;
-    radio_start_requested_ = true;
-    RuntimeDiag::result(esp_wifi_start() == ESP_OK);
-    return false;
-  }
-  if (!radioActive()) return false;
-  // Rebind port 80 after the AP is up; preserve routes, boot ID, all buffers,
-  // sealed logs and ImmutableExport token/CRC/metadata on every retry.
+  // AP/netif/DHCP were never stopped. Rebind only port 80, preserving routes,
+  // boot ID, buffers, sealed logs and ImmutableExport token/CRC/metadata.
+  // Also close a client left by cancellation during the response-drain phase.
+  server_->client().stop();
   server_->begin();
   return server_->listening();
 }
@@ -154,7 +138,7 @@ void WebUi::command(RunControlWorker::Command cmd) {
   if (cmd == RunControlWorker::Command::Start) {
     const bool ok = offline_.queue(millis());
     if (ok) {
-      start_submitted_ = cancel_sent_ = radio_start_requested_ = false;
+      start_submitted_ = cancel_sent_ = false;
       RuntimeDiag::setRunActive(true);
     }
     server_->send(ok ? 202 : 409, "text/plain", ok ? "offline_run_queued" : "command_busy");
