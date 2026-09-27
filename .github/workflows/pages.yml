@@ -108,7 +108,7 @@ jobs:
                       raise ValueError('Unexpected Madgwick execution policy')
                   if madgwick['patched_header_sha256'] != '0cebae58337480dc02b061bd4f876cef0078a98e2a9d94e888f775aaa9eb9654':
                       raise ValueError('Unexpected Madgwick declarations')
-                  if madgwick['policy_header_sha256'] != '25b169313711b19f8e3b3ec5aed4619a4e7206f4c80d04460b02e1c3661984fc':
+                  if madgwick['policy_header_sha256'] != 'f8e5f7e091975e9b11ad1f5576f296025221e8c740ec5d2321e3838fba204a07':
                       raise ValueError('Unexpected normal-update compiler policy')
                   builds = manifest['builds']
                   if len(builds) != 1 or builds[0]['chipFamily'] != 'ESP32-S3':

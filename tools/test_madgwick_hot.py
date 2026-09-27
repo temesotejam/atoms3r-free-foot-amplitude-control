@@ -4,11 +4,20 @@ Verify both IMU overloads, lazy getters, and strict patch provenance. This is
 arithmetic regression testing, not an ESP32 time or scheduling measurement.
 """
 from pathlib import Path
+import hashlib
+import re
 import shutil
 import subprocess
 import tempfile
 from patch_madgwick_hot import ROOT, FIXTURES, HEADER, patch
 from verify_madgwick_dependency import verify
+
+# A comment-only policy edit changes its provenance hash too. Reject a stale
+# live-publication pin during host verification, before building/deploying.
+workflow = (ROOT / '.github/workflows/pages.yml').read_text()
+policy_pins = re.findall(r"madgwick\['policy_header_sha256'\] != '([0-9a-f]{64})'", workflow)
+assert policy_pins == [hashlib.sha256((ROOT / 'src/realtime_code.h').read_bytes()).hexdigest()], \
+    'Live publication compiler-policy pin differs from the reviewed source header'
 
 with tempfile.TemporaryDirectory() as directory:
     p = Path(directory)
