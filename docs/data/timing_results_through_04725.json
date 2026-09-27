@@ -1,0 +1,1864 @@
+{
+  "schema_version": 1,
+  "updated_date": "2026-09-27",
+  "reviewed_source_commit": "9e1f6c0b058ecb886d5dec667be316530fa25ec2",
+  "scope": "Selected cohorts used in the README timing history; raw input files are unchanged and are not bundled.",
+  "deadline": {
+    "budget_us": 2500,
+    "overrun_rule": "strict_greater_than",
+    "population": "RUNNING_fresh_gyro_only",
+    "origin": "host_IMU_read_complete",
+    "end": "runner.update_return",
+    "includes": [
+      "MEKF",
+      "control",
+      "same_sample_comparison_Madgwick",
+      "synchronous_regular_log_storage"
+    ],
+    "excludes": [
+      "sensor_internal_acquisition_delay",
+      "physical_motor_application",
+      "post_runner_snapshot_and_publication"
+    ]
+  },
+  "cohort_notes": {
+    "0.47.17": "Five formal follow-up runs; pilot 43655722 excluded.",
+    "0.47.20": "Five follow-up runs; pilot 53253541 excluded. All six: count 72855, over 11, mean 557.9212133690206 us, max 3475 us.",
+    "0.47.21": "No separate repeated-run cohort; offline operation evaluated after fore/aft STOP correction in 0.47.22.",
+    "0.47.22": "Five completed runs; intentional tilt ESTOP 315957546 excluded. Wi-Fi stopped.",
+    "0.47.23_to_0.47.25": "Wi-Fi AP retained; HTTP paused during START_SYNC/RUNNING/END_SYNC."
+  },
+  "groups": [
+    {
+      "version": "0.47.8",
+      "aggregate": {
+        "runs": 1,
+        "count": 207,
+        "over_budget": 97,
+        "max_us": 11186,
+        "mean_us": 4180.203,
+        "sum_us": null,
+        "mean_basis": "count-weighted firmware means rounded to 0.001 us"
+      },
+      "runs": [
+        {
+          "source": "energy_control_autonomous_run_1_45028066.rwlog",
+          "sha256": "ce00ea966686fbd15ff7435c8dada1ec8d4c0f5f82bcd7aa07d1877a5e9ae565",
+          "crc_verified": true,
+          "firmware_revision": "0.47.8-control-work-profile",
+          "terminal_state": {
+            "state_id": 5,
+            "state": "ESTOP",
+            "last_error": "imu_acquisition_overflow_backlog_or_stale",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 3,
+            "heartbeat_us": 69938144
+          },
+          "measurement_duration_us": 521007,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 207,
+            "over_budget": 97,
+            "max_us": 11186,
+            "reported_mean_us": 4180.203,
+            "sum_us": null,
+            "mean_us": 4180.203
+          }
+        }
+      ]
+    },
+    {
+      "version": "0.47.9",
+      "aggregate": {
+        "runs": 1,
+        "count": 12144,
+        "over_budget": 947,
+        "max_us": 6884,
+        "mean_us": 1514.268,
+        "sum_us": null,
+        "mean_basis": "count-weighted firmware means rounded to 0.001 us"
+      },
+      "runs": [
+        {
+          "source": "energy_control_autonomous_run_1_32653719.rwlog",
+          "sha256": "776d0f42ff28cf4fba64490004f82d24fcc47fd5ef3f9a316c97bdb52649babb",
+          "crc_verified": true,
+          "firmware_revision": "0.47.9-control-work-reduction",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -2,
+            "heartbeat_us": 76907777
+          },
+          "measurement_duration_us": 29999910,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12144,
+            "over_budget": 947,
+            "max_us": 6884,
+            "reported_mean_us": 1514.268,
+            "sum_us": null,
+            "mean_us": 1514.268
+          }
+        }
+      ]
+    },
+    {
+      "version": "0.47.10",
+      "aggregate": {
+        "runs": 1,
+        "count": 12145,
+        "over_budget": 1007,
+        "max_us": 7589,
+        "mean_us": 1535.954,
+        "sum_us": null,
+        "mean_basis": "count-weighted firmware means rounded to 0.001 us"
+      },
+      "runs": [
+        {
+          "source": "energy_control_autonomous_run_1_42183521.rwlog",
+          "sha256": "ebf43abd26b7c88adc92d060e72ad2e303446c0775eefc711fd2516dfdc08e62",
+          "crc_verified": true,
+          "firmware_revision": "0.47.10-range-timing-optimization",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 4,
+            "heartbeat_us": 86837354
+          },
+          "measurement_duration_us": 30000567,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12145,
+            "over_budget": 1007,
+            "max_us": 7589,
+            "reported_mean_us": 1535.954,
+            "sum_us": null,
+            "mean_us": 1535.954
+          }
+        }
+      ]
+    },
+    {
+      "version": "0.47.11",
+      "aggregate": {
+        "runs": 1,
+        "count": 12145,
+        "over_budget": 1127,
+        "max_us": 6235,
+        "mean_us": 1574.942,
+        "sum_us": null,
+        "mean_basis": "count-weighted firmware means rounded to 0.001 us"
+      },
+      "runs": [
+        {
+          "source": "energy_control_autonomous_run_1_33554009.rwlog",
+          "sha256": "d1cf1e96e2dbd123ab642064b8321eb93cbee6cacef6ea9c5934789f8256092e",
+          "crc_verified": true,
+          "firmware_revision": "0.47.11-deferred-attitude-display",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -2,
+            "heartbeat_us": 78483055
+          },
+          "measurement_duration_us": 30000125,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12145,
+            "over_budget": 1127,
+            "max_us": 6235,
+            "reported_mean_us": 1574.942,
+            "sum_us": null,
+            "mean_us": 1574.942
+          }
+        }
+      ]
+    },
+    {
+      "version": "0.47.12",
+      "aggregate": {
+        "runs": 1,
+        "count": 12145,
+        "over_budget": 806,
+        "max_us": 7170,
+        "mean_us": 1417.2800000000002,
+        "sum_us": null,
+        "mean_basis": "count-weighted firmware means rounded to 0.001 us"
+      },
+      "runs": [
+        {
+          "source": "energy_control_autonomous_run_1_53979692.rwlog",
+          "sha256": "bb063b6bf052723beeb4c57746327fc231c77c90dcd590e53d0479a2f97b0550",
+          "crc_verified": true,
+          "firmware_revision": "0.47.12-filter-path-optimization",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 2,
+            "heartbeat_us": 97257495
+          },
+          "measurement_duration_us": 30001854,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12145,
+            "over_budget": 806,
+            "max_us": 7170,
+            "reported_mean_us": 1417.28,
+            "sum_us": null,
+            "mean_us": 1417.28
+          }
+        }
+      ]
+    },
+    {
+      "version": "0.47.13",
+      "aggregate": {
+        "runs": 1,
+        "count": 31,
+        "over_budget": 30,
+        "max_us": 11276,
+        "mean_us": 6088.968,
+        "sum_us": null,
+        "mean_basis": "count-weighted firmware means rounded to 0.001 us"
+      },
+      "runs": [
+        {
+          "source": "energy_control_autonomous_run_1_53514900.rwlog",
+          "sha256": "1cd1abf792e8686a178b4e515e8905279e7e549fd336426d9d471de5f5a1014e",
+          "crc_verified": true,
+          "firmware_revision": "0.47.13-log-encoder-optimization",
+          "terminal_state": {
+            "state_id": 5,
+            "state": "ESTOP",
+            "last_error": "imu_acquisition_overflow_backlog_or_stale",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -1,
+            "heartbeat_us": 67378247
+          },
+          "measurement_duration_us": 87904,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 31,
+            "over_budget": 30,
+            "max_us": 11276,
+            "reported_mean_us": 6088.968,
+            "sum_us": null,
+            "mean_us": 6088.968
+          }
+        }
+      ]
+    },
+    {
+      "version": "0.47.14",
+      "aggregate": {
+        "runs": 1,
+        "count": 12145,
+        "over_budget": 1045,
+        "max_us": 6905,
+        "mean_us": 1513.6009999999999,
+        "sum_us": null,
+        "mean_basis": "count-weighted firmware means rounded to 0.001 us"
+      },
+      "runs": [
+        {
+          "source": "energy_control_autonomous_run_1_47136279.rwlog",
+          "sha256": "ab414e072c3194a549172e13ee303a3ae4a89d938d5c04a42d58d5fe70e9a331",
+          "crc_verified": true,
+          "firmware_revision": "0.47.14-compact-log-encoder",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 0,
+            "heartbeat_us": 90524305
+          },
+          "measurement_duration_us": 30000238,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12145,
+            "over_budget": 1045,
+            "max_us": 6905,
+            "reported_mean_us": 1513.601,
+            "sum_us": null,
+            "mean_us": 1513.601
+          }
+        }
+      ]
+    },
+    {
+      "version": "0.47.15",
+      "aggregate": {
+        "runs": 1,
+        "count": 12144,
+        "over_budget": 942,
+        "max_us": 7720,
+        "mean_us": 1449.287,
+        "sum_us": null,
+        "mean_basis": "count-weighted firmware means rounded to 0.001 us"
+      },
+      "runs": [
+        {
+          "source": "energy_control_autonomous_run_1_55522052.rwlog",
+          "sha256": "af69d36540784f0732e499a135a82c1f0065d0f35e9813a64b0c4a594a584320",
+          "crc_verified": true,
+          "firmware_revision": "0.47.15-deferred-stack-diagnostics",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 1,
+            "heartbeat_us": 101462865
+          },
+          "measurement_duration_us": 30000371,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12144,
+            "over_budget": 942,
+            "max_us": 7720,
+            "reported_mean_us": 1449.287,
+            "sum_us": null,
+            "mean_us": 1449.287
+          }
+        }
+      ]
+    },
+    {
+      "version": "0.47.16",
+      "aggregate": {
+        "runs": 3,
+        "count": 36423,
+        "over_budget": 311,
+        "max_us": 4365,
+        "mean_us": 923.8049872333415,
+        "sum_us": null,
+        "mean_basis": "count-weighted firmware means rounded to 0.001 us"
+      },
+      "runs": [
+        {
+          "source": "energy_control_autonomous_run_1_308239713.rwlog",
+          "sha256": "ba3ab5ab1bc4dc95fe9fdcde65533cb2d1f7bcb664daa873b8c28cd8e174fb93",
+          "crc_verified": true,
+          "firmware_revision": "0.47.16-iram-and-marker-guard",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 0,
+            "heartbeat_us": 352051120
+          },
+          "measurement_duration_us": 30001028,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12140,
+            "over_budget": 103,
+            "max_us": 4026,
+            "reported_mean_us": 945.449,
+            "sum_us": null,
+            "mean_us": 945.449
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_1_55810244.rwlog",
+          "sha256": "ba1939453c6585f8006d1fc0f37aedb466753063a6d0c9db0230fe8a0f1afa2a",
+          "crc_verified": true,
+          "firmware_revision": "0.47.16-iram-and-marker-guard",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 0,
+            "heartbeat_us": 100306500
+          },
+          "measurement_duration_us": 30000657,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12143,
+            "over_budget": 108,
+            "max_us": 4087,
+            "reported_mean_us": 911.51,
+            "sum_us": null,
+            "mean_us": 911.51
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_2_230069463.rwlog",
+          "sha256": "9e50847220e70a3a4c84cb7e61c94de74c4e7301b1a64d6e7bca49c57691d041",
+          "crc_verified": true,
+          "firmware_revision": "0.47.16-iram-and-marker-guard",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -1,
+            "heartbeat_us": 274566357
+          },
+          "measurement_duration_us": 30000571,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12140,
+            "over_budget": 100,
+            "max_us": 4365,
+            "reported_mean_us": 914.459,
+            "sum_us": null,
+            "mean_us": 914.459
+          }
+        }
+      ]
+    },
+    {
+      "version": "0.47.17",
+      "aggregate": {
+        "runs": 5,
+        "count": 60706,
+        "over_budget": 512,
+        "max_us": 5742,
+        "mean_us": 865.5376873785128,
+        "sum_us": null,
+        "mean_basis": "count-weighted firmware means rounded to 0.001 us"
+      },
+      "runs": [
+        {
+          "source": "energy_control_autonomous_run_1_73137344.rwlog",
+          "sha256": "3035fb184685b6143ff089d1f170e6d1d664ea125484d26fbb0996a0e7510000",
+          "crc_verified": true,
+          "firmware_revision": "0.47.17-control-cache-idle-preview",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -4,
+            "heartbeat_us": 123446313
+          },
+          "measurement_duration_us": 30001050,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12144,
+            "over_budget": 101,
+            "max_us": 5742,
+            "reported_mean_us": 864.164,
+            "sum_us": null,
+            "mean_us": 864.164
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_2_280169596.rwlog",
+          "sha256": "7dee29b81821ea2e3885dae642dd541103668de6d339ed68c5fb1bb1fcf23927",
+          "crc_verified": true,
+          "firmware_revision": "0.47.17-control-cache-idle-preview",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -4,
+            "heartbeat_us": 324372711
+          },
+          "measurement_duration_us": 29999837,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 109,
+            "max_us": 4918,
+            "reported_mean_us": 866.329,
+            "sum_us": null,
+            "mean_us": 866.329
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_3_378384457.rwlog",
+          "sha256": "474e8cfbc5b8a8356eb2d2dd60fe4823a974afb332d293eb6279d5ba515397c6",
+          "crc_verified": true,
+          "firmware_revision": "0.47.17-control-cache-idle-preview",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -3,
+            "heartbeat_us": 430124508
+          },
+          "measurement_duration_us": 30000915,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 117,
+            "max_us": 4436,
+            "reported_mean_us": 867.293,
+            "sum_us": null,
+            "mean_us": 867.293
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_4_520287544.rwlog",
+          "sha256": "03b4f985b023e21951357ed9bd993cdf584e542e7f5bee8d3d73c2d529da5054",
+          "crc_verified": true,
+          "firmware_revision": "0.47.17-control-cache-idle-preview",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -4,
+            "heartbeat_us": 568512681
+          },
+          "measurement_duration_us": 30001660,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 115,
+            "max_us": 5183,
+            "reported_mean_us": 869.077,
+            "sum_us": null,
+            "mean_us": 869.077
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_5_640764418.rwlog",
+          "sha256": "09a756837bcb61d46e07bf0c9b2624f6c465fa1fc02872470e8e315c100f7409",
+          "crc_verified": true,
+          "firmware_revision": "0.47.17-control-cache-idle-preview",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -3,
+            "heartbeat_us": 687330602
+          },
+          "measurement_duration_us": 29999674,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12139,
+            "over_budget": 70,
+            "max_us": 5030,
+            "reported_mean_us": 860.825,
+            "sum_us": null,
+            "mean_us": 860.825
+          }
+        }
+      ]
+    },
+    {
+      "version": "0.47.18",
+      "aggregate": {
+        "runs": 5,
+        "count": 60713,
+        "over_budget": 533,
+        "max_us": 5582,
+        "mean_us": 970.6893893564804,
+        "sum_us": null,
+        "mean_basis": "count-weighted firmware means rounded to 0.001 us"
+      },
+      "runs": [
+        {
+          "source": "energy_control_autonomous_run_1_33194198.rwlog",
+          "sha256": "174b2e709c98ea2ec1eccc1306afc3ef2fdb0ea8c8542728b64ad0e474e98820",
+          "crc_verified": true,
+          "firmware_revision": "0.47.18-direct-q-inverse",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -4,
+            "heartbeat_us": 78216816
+          },
+          "measurement_duration_us": 30000883,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12144,
+            "over_budget": 114,
+            "max_us": 5109,
+            "reported_mean_us": 989.61,
+            "sum_us": null,
+            "mean_us": 989.61
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_1_35277958.rwlog",
+          "sha256": "86a6cfcbc34efad90b57b76b0cd1071377fd8c616842b005ebeb6dd45781a853",
+          "crc_verified": true,
+          "firmware_revision": "0.47.18-direct-q-inverse",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 0,
+            "heartbeat_us": 80229871
+          },
+          "measurement_duration_us": 29999077,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12144,
+            "over_budget": 74,
+            "max_us": 4183,
+            "reported_mean_us": 889.153,
+            "sum_us": null,
+            "mean_us": 889.153
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_2_121289825.rwlog",
+          "sha256": "cf2fd08f6bec233081cb607349449a2d5ad4d5c80af6e7cc16064e02f14756ed",
+          "crc_verified": true,
+          "firmware_revision": "0.47.18-direct-q-inverse",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 2,
+            "heartbeat_us": 167487298
+          },
+          "measurement_duration_us": 30000955,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12143,
+            "over_budget": 110,
+            "max_us": 5582,
+            "reported_mean_us": 991.444,
+            "sum_us": null,
+            "mean_us": 991.444
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_3_218642103.rwlog",
+          "sha256": "b4be379f9fb34ac63251063e1862e2a28f0a1cf3f4155ac62c0e6f3437ea43de",
+          "crc_verified": true,
+          "firmware_revision": "0.47.18-direct-q-inverse",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 4,
+            "heartbeat_us": 262287986
+          },
+          "measurement_duration_us": 29998231,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 107,
+            "max_us": 4146,
+            "reported_mean_us": 990.559,
+            "sum_us": null,
+            "mean_us": 990.559
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_4_328637132.rwlog",
+          "sha256": "fa0589a39ef66999c7f07e30e66f04442edc3d6a4d35a6f8792cf0d4f48c07af",
+          "crc_verified": true,
+          "firmware_revision": "0.47.18-direct-q-inverse",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -3,
+            "heartbeat_us": 389633026
+          },
+          "measurement_duration_us": 30001924,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 128,
+            "max_us": 4831,
+            "reported_mean_us": 992.693,
+            "sum_us": null,
+            "mean_us": 992.693
+          }
+        }
+      ]
+    },
+    {
+      "version": "0.47.19",
+      "aggregate": {
+        "runs": 5,
+        "count": 60710,
+        "over_budget": 124,
+        "max_us": 3623,
+        "mean_us": 870.3955855707462,
+        "sum_us": 52841716,
+        "mean_basis": "sum_us / count"
+      },
+      "runs": [
+        {
+          "source": "energy_control_autonomous_run_1_36490177.rwlog",
+          "sha256": "00c31f12f4d67010ed4cc33835cc86ea50907a0e6be92ad367db5aadabd7dce5",
+          "crc_verified": true,
+          "firmware_revision": "0.47.19-interrupt-imu",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 1,
+            "heartbeat_us": 80297021
+          },
+          "measurement_duration_us": 29999943,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12144,
+            "over_budget": 27,
+            "max_us": 3280,
+            "reported_mean_us": 925.945,
+            "sum_us": 11244682,
+            "mean_us": 925.945487483531
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_1_64151753.rwlog",
+          "sha256": "094a87926074fc1a69841263d7c373964258e7202983b72b3622071b5a35c97c",
+          "crc_verified": true,
+          "firmware_revision": "0.47.19-interrupt-imu",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -2,
+            "heartbeat_us": 113446783
+          },
+          "measurement_duration_us": 29999564,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12143,
+            "over_budget": 23,
+            "max_us": 3432,
+            "reported_mean_us": 858.142,
+            "sum_us": 10420424,
+            "mean_us": 858.1424689121304
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_2_166370865.rwlog",
+          "sha256": "ce002df261fd0ba762067bcbd508548c5e5f43b5f7debbffca05b520c7a712f4",
+          "crc_verified": true,
+          "firmware_revision": "0.47.19-interrupt-imu",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 3,
+            "heartbeat_us": 210303497
+          },
+          "measurement_duration_us": 29999924,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12142,
+            "over_budget": 27,
+            "max_us": 3378,
+            "reported_mean_us": 857.122,
+            "sum_us": 10407180,
+            "mean_us": 857.1223851095372
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_3_294812672.rwlog",
+          "sha256": "124bc14b49746e0ddf735f3eb2a86aae5e7de54a4a315857a6c01bef5f0a2e1e",
+          "crc_verified": true,
+          "firmware_revision": "0.47.19-interrupt-imu",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -2,
+            "heartbeat_us": 345172728
+          },
+          "measurement_duration_us": 30000632,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 23,
+            "max_us": 3203,
+            "reported_mean_us": 855.039,
+            "sum_us": 10381024,
+            "mean_us": 855.0386294374433
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_4_387127557.rwlog",
+          "sha256": "07869563d4fe5606c831774d83d8182b24977d1c4e1e58603a50b5198ccb2dd0",
+          "crc_verified": true,
+          "firmware_revision": "0.47.19-interrupt-imu",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 2,
+            "heartbeat_us": 430948477
+          },
+          "measurement_duration_us": 29999665,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12140,
+            "over_budget": 24,
+            "max_us": 3623,
+            "reported_mean_us": 855.717,
+            "sum_us": 10388406,
+            "mean_us": 855.7171334431631
+          }
+        }
+      ]
+    },
+    {
+      "version": "0.47.20",
+      "aggregate": {
+        "runs": 5,
+        "count": 60711,
+        "over_budget": 9,
+        "max_us": 3475,
+        "mean_us": 568.3689611437795,
+        "sum_us": 34506248,
+        "mean_basis": "sum_us / count"
+      },
+      "runs": [
+        {
+          "source": "energy_control_autonomous_run_1_40277787.rwlog",
+          "sha256": "d4994f33e43fd6fd385f42d35ad1218f3bc9c883fcaebebc80d8ee298eb566dd",
+          "crc_verified": true,
+          "firmware_revision": "0.47.20-hot-update",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -1,
+            "heartbeat_us": 83083324
+          },
+          "measurement_duration_us": 30000051,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12144,
+            "over_budget": 2,
+            "max_us": 3035,
+            "reported_mean_us": 568.649,
+            "sum_us": 6905677,
+            "mean_us": 568.649291831357
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_2_136787590.rwlog",
+          "sha256": "039b726391427f66a742499ccc0556de43f7d4e2642e355e1de826f718cd5959",
+          "crc_verified": true,
+          "firmware_revision": "0.47.20-hot-update",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 0,
+            "heartbeat_us": 182053682
+          },
+          "measurement_duration_us": 30000604,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12143,
+            "over_budget": 2,
+            "max_us": 3475,
+            "reported_mean_us": 569.524,
+            "sum_us": 6915728,
+            "mean_us": 569.5238408959895
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_3_219839898.rwlog",
+          "sha256": "6377a6a0b69af413a88628ff783df0376aeae49e2ae04a23d7edfc046df54f1d",
+          "crc_verified": true,
+          "firmware_revision": "0.47.20-hot-update",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 0,
+            "heartbeat_us": 263093846
+          },
+          "measurement_duration_us": 30000677,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12142,
+            "over_budget": 4,
+            "max_us": 2822,
+            "reported_mean_us": 568.319,
+            "sum_us": 6900529,
+            "mean_us": 568.3189754570911
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_4_306207845.rwlog",
+          "sha256": "d61779d4d001cf8afc559df58b360d0672071e26e74a2142cc50b5cc708ecae7",
+          "crc_verified": true,
+          "firmware_revision": "0.47.20-hot-update",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 0,
+            "heartbeat_us": 348805941
+          },
+          "measurement_duration_us": 29999683,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 1,
+            "max_us": 2696,
+            "reported_mean_us": 568.282,
+            "sum_us": 6899508,
+            "mean_us": 568.2816901408451
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_5_407850975.rwlog",
+          "sha256": "acb5d58a7d69440201cab815fba130c5c4e215ae1d0e0025bd89e45d59cab579",
+          "crc_verified": true,
+          "firmware_revision": "0.47.20-hot-update",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 0,
+            "heartbeat_us": 455913017
+          },
+          "measurement_duration_us": 30000696,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 0,
+            "max_us": 2448,
+            "reported_mean_us": 567.071,
+            "sum_us": 6884806,
+            "mean_us": 567.0707519973643
+          }
+        }
+      ]
+    },
+    {
+      "version": "0.47.22",
+      "aggregate": {
+        "runs": 5,
+        "count": 60709,
+        "over_budget": 0,
+        "max_us": 2325,
+        "mean_us": 483.67793902057355,
+        "sum_us": 29363604,
+        "mean_basis": "sum_us / count"
+      },
+      "runs": [
+        {
+          "source": "energy_control_autonomous_run_1_48342399.rwlog",
+          "sha256": "2c3e261ab805015c76b726794d555106cd06bef7e6adb6b3aeb4ab31b0b92906",
+          "crc_verified": true,
+          "firmware_revision": "0.47.22-fore-aft-stop",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 2,
+            "heartbeat_us": 150575425
+          },
+          "measurement_duration_us": 30000223,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12145,
+            "over_budget": 0,
+            "max_us": 1892,
+            "reported_mean_us": 442.877,
+            "sum_us": 5378736,
+            "mean_us": 442.8765747221079
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_1_45071050.rwlog",
+          "sha256": "d17baac0226be05af05b4aad972868c48f3cb395f9d35d98574d17c77c203542",
+          "crc_verified": true,
+          "firmware_revision": "0.47.22-fore-aft-stop",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 0,
+            "heartbeat_us": 107286675
+          },
+          "measurement_duration_us": 29999719,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 0,
+            "max_us": 2325,
+            "reported_mean_us": 447.903,
+            "sum_us": 5437994,
+            "mean_us": 447.9033028580842
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_2_206087654.rwlog",
+          "sha256": "bf28aa3601d2ed9592a58ab99a45aff2a87a2da24d137093396b7504fa0ff293",
+          "crc_verified": true,
+          "firmware_revision": "0.47.22-fore-aft-stop",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 2,
+            "heartbeat_us": 265673210
+          },
+          "measurement_duration_us": 29999789,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 0,
+            "max_us": 2212,
+            "reported_mean_us": 499.179,
+            "sum_us": 6060531,
+            "mean_us": 499.1788979490981
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_3_333181864.rwlog",
+          "sha256": "9f750425435b7c50233a435490c15783cf7b96d8a1bcc00b091b2fe027729490",
+          "crc_verified": true,
+          "firmware_revision": "0.47.22-fore-aft-stop",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 3,
+            "heartbeat_us": 387125981
+          },
+          "measurement_duration_us": 29999949,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 0,
+            "max_us": 2159,
+            "reported_mean_us": 513.861,
+            "sum_us": 6238781,
+            "mean_us": 513.8605551437279
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_4_431749926.rwlog",
+          "sha256": "b938622850d072899981f7a469c10a9c012c1a94261238d5ec4f14d44420a691",
+          "crc_verified": true,
+          "firmware_revision": "0.47.22-fore-aft-stop",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 0,
+            "heartbeat_us": 483640520
+          },
+          "measurement_duration_us": 29999889,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 0,
+            "max_us": 2012,
+            "reported_mean_us": 514.584,
+            "sum_us": 6247562,
+            "mean_us": 514.5838069351784
+          }
+        }
+      ]
+    },
+    {
+      "version": "0.47.23",
+      "aggregate": {
+        "runs": 5,
+        "count": 60708,
+        "over_budget": 4,
+        "max_us": 2969,
+        "mean_us": 516.1000856559267,
+        "sum_us": 31331404,
+        "mean_basis": "sum_us / count"
+      },
+      "runs": [
+        {
+          "source": "energy_control_autonomous_run_1_40339057.rwlog",
+          "sha256": "b103a65ed5aea824dc79d5e12676d98387170ab5cf8dd08b42982e80cb719f9b",
+          "crc_verified": true,
+          "firmware_revision": "0.47.23-wifi-kept-on",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 1,
+            "heartbeat_us": 88104176
+          },
+          "measurement_duration_us": 29999870,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12144,
+            "over_budget": 0,
+            "max_us": 2336,
+            "reported_mean_us": 517.228,
+            "sum_us": 6281217,
+            "mean_us": 517.2280138339921
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_2_268272045.rwlog",
+          "sha256": "423a5cdaa4037c49d1b8742d2f687a6d58eedf126cbd04613b2560093667be7a",
+          "crc_verified": true,
+          "firmware_revision": "0.47.23-wifi-kept-on",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -1,
+            "heartbeat_us": 317152900
+          },
+          "measurement_duration_us": 29999520,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12142,
+            "over_budget": 4,
+            "max_us": 2969,
+            "reported_mean_us": 517.745,
+            "sum_us": 6286459,
+            "mean_us": 517.7449349365837
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_3_357063776.rwlog",
+          "sha256": "bf9100af36edb9af892d87c17af6c64c7ba50d154a9cdca5e496cc8ff92e53d3",
+          "crc_verified": true,
+          "firmware_revision": "0.47.23-wifi-kept-on",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 1,
+            "heartbeat_us": 411798156
+          },
+          "measurement_duration_us": 29999675,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 0,
+            "max_us": 2477,
+            "reported_mean_us": 515.919,
+            "sum_us": 6263769,
+            "mean_us": 515.9187052137386
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_4_476320614.rwlog",
+          "sha256": "4157e6bef7deae6f79de2b6afa1fea31811e4a059b53e656bbf45d7e3ab58dc6",
+          "crc_verified": true,
+          "firmware_revision": "0.47.23-wifi-kept-on",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 0,
+            "heartbeat_us": 525229158
+          },
+          "measurement_duration_us": 29999672,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 0,
+            "max_us": 2412,
+            "reported_mean_us": 515.201,
+            "sum_us": 6255052,
+            "mean_us": 515.2007248167366
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_5_599287788.rwlog",
+          "sha256": "01ab6d6c9bf3478e05e37dcf167f258deee9bff106f00e0bf1a8ac7358b26634",
+          "crc_verified": true,
+          "firmware_revision": "0.47.23-wifi-kept-on",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 1,
+            "heartbeat_us": 648076579
+          },
+          "measurement_duration_us": 29999780,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12140,
+            "over_budget": 0,
+            "max_us": 2113,
+            "reported_mean_us": 514.407,
+            "sum_us": 6244907,
+            "mean_us": 514.4074958813839
+          }
+        }
+      ]
+    },
+    {
+      "version": "0.47.24",
+      "aggregate": {
+        "runs": 5,
+        "count": 60709,
+        "over_budget": 3,
+        "max_us": 3192,
+        "mean_us": 529.6743316476964,
+        "sum_us": 32155999,
+        "mean_basis": "sum_us / count"
+      },
+      "runs": [
+        {
+          "source": "energy_control_autonomous_run_1_47179362.rwlog",
+          "sha256": "e873f337454a1f4b9ce91a89f489df501c2ac0587fc92cb1322bc29613b74cee",
+          "crc_verified": true,
+          "firmware_revision": "0.47.24-core-isolation",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -2,
+            "heartbeat_us": 97367519
+          },
+          "measurement_duration_us": 29999695,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12144,
+            "over_budget": 0,
+            "max_us": 2430,
+            "reported_mean_us": 530.643,
+            "sum_us": 6444126,
+            "mean_us": 530.6427865612649
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_2_187886690.rwlog",
+          "sha256": "bfea293e5b73d93b78306a312cedf5f9f8a0c5323463af677aac104503129d5f",
+          "crc_verified": true,
+          "firmware_revision": "0.47.24-core-isolation",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 1,
+            "heartbeat_us": 279027341
+          },
+          "measurement_duration_us": 29999861,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12142,
+            "over_budget": 0,
+            "max_us": 2391,
+            "reported_mean_us": 529.158,
+            "sum_us": 6425034,
+            "mean_us": 529.1577993740734
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_3_312305756.rwlog",
+          "sha256": "6e0e717cae18dc212dfccd6bf1e0d121f36ad7464b78f3fa3e5ae4d414d6253e",
+          "crc_verified": true,
+          "firmware_revision": "0.47.24-core-isolation",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -4,
+            "heartbeat_us": 361619304
+          },
+          "measurement_duration_us": 29999914,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 1,
+            "max_us": 2504,
+            "reported_mean_us": 529.936,
+            "sum_us": 6433956,
+            "mean_us": 529.9362490733877
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_4_425245498.rwlog",
+          "sha256": "fae9b5d5c1176d65ae9a87c802a4666749b15b0936d63bce23eb34749bef4692",
+          "crc_verified": true,
+          "firmware_revision": "0.47.24-core-isolation",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 0,
+            "heartbeat_us": 474120361
+          },
+          "measurement_duration_us": 29999826,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 2,
+            "max_us": 3192,
+            "reported_mean_us": 529.083,
+            "sum_us": 6423599,
+            "mean_us": 529.0831891936414
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_5_528823834.rwlog",
+          "sha256": "f03ec1a0bac816628efa02f0e1945fa0239d12afcd7f75c718477cc7158a4b25",
+          "crc_verified": true,
+          "firmware_revision": "0.47.24-core-isolation",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 1,
+            "heartbeat_us": 577433513
+          },
+          "measurement_duration_us": 29999678,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 0,
+            "max_us": 2047,
+            "reported_mean_us": 529.551,
+            "sum_us": 6429284,
+            "mean_us": 529.5514372786427
+          }
+        }
+      ]
+    },
+    {
+      "version": "0.47.25",
+      "aggregate": {
+        "runs": 5,
+        "count": 60708,
+        "over_budget": 0,
+        "max_us": 1939,
+        "mean_us": 280.13546814258416,
+        "sum_us": 17006464,
+        "mean_basis": "sum_us / count"
+      },
+      "runs": [
+        {
+          "source": "energy_control_autonomous_run_1_45023275.rwlog",
+          "sha256": "3a20cf19bd8a1fcd9647e2f6429b0a9045ec2bdee36b2d1ba70bceee04c5f9a5",
+          "crc_verified": true,
+          "firmware_revision": "0.47.25-motion-acquisition-iram",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 2,
+            "heartbeat_us": 94771409
+          },
+          "measurement_duration_us": 30000542,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12145,
+            "over_budget": 0,
+            "max_us": 1304,
+            "reported_mean_us": 280.525,
+            "sum_us": 3406976,
+            "mean_us": 280.52498970769864
+          },
+          "foot_csv": {
+            "source": "energy_control_autonomous_run_1_45023275_foot.csv",
+            "sha256": "ffc37db7a5c5ccd7494e89e6088e05070d4f2d7447e0a4f8d802696b2108db07",
+            "all_fields_match_rwlog": true,
+            "rows": 400,
+            "columns": 37
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_2_208179084.rwlog",
+          "sha256": "fcd382d2d2fff493275f4dad46d3f163cb53cf5ff7ebc3d0357b3d9fd6b0f51e",
+          "crc_verified": true,
+          "firmware_revision": "0.47.25-motion-acquisition-iram",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 1,
+            "heartbeat_us": 256344256
+          },
+          "measurement_duration_us": 29998869,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 0,
+            "max_us": 1251,
+            "reported_mean_us": 279.509,
+            "sum_us": 3393520,
+            "mean_us": 279.5091013919776
+          },
+          "foot_csv": {
+            "source": "energy_control_autonomous_run_2_208179084_foot.csv",
+            "sha256": "8657b43c2acb064655169e155ad62206130b515152c97415b5f5ee928f580269",
+            "all_fields_match_rwlog": true,
+            "rows": 397,
+            "columns": 37
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_3_296389308.rwlog",
+          "sha256": "31af8205d8a7e252d1e9cd7961c5bfc7b3ccc7d2eeebc38ae802de7b7cdeefac",
+          "crc_verified": true,
+          "firmware_revision": "0.47.25-motion-acquisition-iram",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 2,
+            "heartbeat_us": 349735487
+          },
+          "measurement_duration_us": 29998879,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 0,
+            "max_us": 1338,
+            "reported_mean_us": 281.126,
+            "sum_us": 3413147,
+            "mean_us": 281.1256898113829
+          },
+          "foot_csv": {
+            "source": "energy_control_autonomous_run_3_296389308_foot.csv",
+            "sha256": "bbff188c1ac5b52cb85219ab66fbd2c95e44e8a23bacddfd2cd0c3dc7b770436",
+            "all_fields_match_rwlog": true,
+            "rows": 400,
+            "columns": 37
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_4_396189453.rwlog",
+          "sha256": "963b2688b66e72a2a3ee3b63b894ffee0fa50a4819cb78466d3e24927195b622",
+          "crc_verified": true,
+          "firmware_revision": "0.47.25-motion-acquisition-iram",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": 1,
+            "heartbeat_us": 444193330
+          },
+          "measurement_duration_us": 30000541,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12141,
+            "over_budget": 0,
+            "max_us": 1239,
+            "reported_mean_us": 280.535,
+            "sum_us": 3405975,
+            "mean_us": 280.53496417099086
+          },
+          "foot_csv": {
+            "source": "energy_control_autonomous_run_4_396189453_foot.csv",
+            "sha256": "b515785a3ab4d8bb51dba735dfdcaf785f0c116fed4511fb12b999e07ba7ccfa",
+            "all_fields_match_rwlog": true,
+            "rows": 399,
+            "columns": 37
+          }
+        },
+        {
+          "source": "energy_control_autonomous_run_5_489609171.rwlog",
+          "sha256": "dd7eb8a695930a0f262fe05d24b1a80c06b2d9da857dc8b14ed4c7318d9e9be0",
+          "crc_verified": true,
+          "firmware_revision": "0.47.25-motion-acquisition-iram",
+          "terminal_state": {
+            "state_id": 4,
+            "state": "FINISHED",
+            "last_error": "",
+            "motor_cmd_mA": 0,
+            "actual_current_mA": -1,
+            "heartbeat_us": 538621996
+          },
+          "measurement_duration_us": 29999877,
+          "settings": {
+            "autonomous_duration_ms": 30000,
+            "energy_control_autonomous_target_peak_deg": 8.0,
+            "autonomous_timing_compensation_us": 3000
+          },
+          "completion": {
+            "count": 12140,
+            "over_budget": 0,
+            "max_us": 1939,
+            "reported_mean_us": 278.982,
+            "sum_us": 3386846,
+            "mean_us": 278.9823723228995
+          },
+          "foot_csv": {
+            "source": "energy_control_autonomous_run_5_489609171_foot.csv",
+            "sha256": "28111bd24d2a1145c9d86dd44b283c559a985f1836ef8082b2fc817d308fb2f2",
+            "all_fields_match_rwlog": true,
+            "rows": 400,
+            "columns": 37
+          }
+        }
+      ]
+    }
+  ],
+  "latest_integrity": {
+    "acquisition": {
+      "captured": 60707,
+      "delivered": 60706,
+      "queue_drops": 0,
+      "delivery_sequence_gaps": 0,
+      "over_4ms": 0,
+      "over_5ms": 0,
+      "over_10ms": 0,
+      "polls": 150000,
+      "coalesced_wakes": 0,
+      "max_interval_us": 3431,
+      "max_queue_high_water": 1,
+      "faults": 0
+    },
+    "polling": {
+      "forced_yields": 0,
+      "driver_calls": 150000,
+      "driver_failures": 0,
+      "poll_work_over_budget": 0,
+      "host_gyro_interval_over_budget": 28585
+    },
+    "foot": {
+      "total_rows": 1996,
+      "running_rows": 1499,
+      "right_running_valid": 1470,
+      "left_running_valid": 1495,
+      "right_running_out_of_range": 0,
+      "left_running_out_of_range": 0,
+      "right_out_of_range": 0,
+      "left_out_of_range": 0,
+      "overflow": 0,
+      "right_running_invalid_reasons": {
+        "bad_shape": 7,
+        "ambiguous": 22
+      },
+      "right_valid_percent": 98.0653769179453,
+      "left_running_invalid_reasons": {
+        "bad_shape": 4
+      },
+      "left_valid_percent": 99.73315543695797,
+      "max_interval_us": 200007,
+      "intervals_over_150ms": 2
+    },
+    "log_checks": {
+      "crc_ok": true,
+      "all_foot_csv_fields_match": true,
+      "matched_rows": 1996,
+      "columns": 37,
+      "metadata_truncated": false,
+      "solver_overwritten": 0
+    },
+    "mekf": {
+      "all_adopted": true,
+      "all_recorded_attitudes_finite": true,
+      "running_recorded_rows": 15096
+    },
+    "solver": {
+      "solver_us": {
+        "count": 351,
+        "mean": 53.04843304843305,
+        "median": 50.0,
+        "min": 47.0,
+        "max": 369.0,
+        "p95": 59.5,
+        "p99": 78.5
+      },
+      "decision_us": {
+        "count": 351,
+        "mean": 198.81766381766383,
+        "median": 170.0,
+        "min": 154.0,
+        "max": 527.0,
+        "p95": 282.0,
+        "p99": 458.0
+      },
+      "failures": 0
+    },
+    "cohorts": [
+      {
+        "pulse_active": false,
+        "accel_fresh": false,
+        "count": 26014,
+        "over": 0,
+        "max_us": 1210,
+        "mean_us": 254.18739102021988
+      },
+      {
+        "pulse_active": false,
+        "accel_fresh": true,
+        "count": 26004,
+        "over": 0,
+        "max_us": 1939,
+        "mean_us": 289.1168570219966
+      },
+      {
+        "pulse_active": true,
+        "accel_fresh": false,
+        "count": 4339,
+        "over": 0,
+        "max_us": 1043,
+        "mean_us": 316.1189414611662
+      },
+      {
+        "pulse_active": true,
+        "accel_fresh": true,
+        "count": 4351,
+        "over": 0,
+        "max_us": 1338,
+        "mean_us": 345.7120045966445
+      }
+    ]
+  },
+  "latest_current_timing_since_boot": {
+    "scope": "since_boot_pulse_audit_only_not_per_run",
+    "budget_us": 2000,
+    "read_count": 13844,
+    "read_over_budget": 0,
+    "read_max_us": 1590,
+    "interval_count": 13488,
+    "interval_over_budget": 2662,
+    "interval_max_us": 3528
+  },
+  "limitations": [
+    "Different numbers of runs and uncontrolled physical/electrical conditions preclude assigning every change to a single cause.",
+    "Poll/I2C wall overlap is not pure CPU interference.",
+    "Acquisition/delivery/completion counts have different state-transition boundaries.",
+    "Current timing is cumulative since boot and must not be summed across logs.",
+    "Five-run success is not a worst-case bound or an independent attitude/foot-angle accuracy validation."
+  ]
+}
