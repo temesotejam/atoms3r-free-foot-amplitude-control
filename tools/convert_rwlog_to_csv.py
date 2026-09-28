@@ -2,6 +2,7 @@
 import argparse
 import csv
 import json
+import math
 import struct
 import sys
 import zlib
@@ -35,6 +36,7 @@ SAMPLE_FORMAT_V49 = SAMPLE_FORMAT_V48
 SAMPLE_FORMAT_V50 = SAMPLE_FORMAT_V49
 # v51 changes Autonomous amplitude/rate semantics, not the binary sample layout.
 SAMPLE_FORMAT_V51 = SAMPLE_FORMAT_V50
+SAMPLE_FORMAT_V52 = SAMPLE_FORMAT_V51 + "II8B"
 HEADER_FIELDS = [
     "magic",
     "format_version",
@@ -283,6 +285,8 @@ CSV_COLUMNS_V48 = CSV_COLUMNS_V47 + [
 CSV_COLUMNS_V49 = CSV_COLUMNS_V48
 CSV_COLUMNS_V50 = CSV_COLUMNS_V49
 CSV_COLUMNS_V51 = CSV_COLUMNS_V50
+MAG_COLUMNS_V52 = ['mag_sample_us', 'mag_sequence', 'mag_raw_x', 'mag_raw_y', 'mag_raw_z', 'mag_rhall', 'mag_factory_ok', 'mag_value_valid', 'mag_body_x_uT', 'mag_body_y_uT', 'mag_body_z_uT', 'mag_norm_uT']
+CSV_COLUMNS_V52 = CSV_COLUMNS_V51 + MAG_COLUMNS_V52
 CSV_COLUMNS_V33 = CSV_COLUMNS_COMMON_PREFIX + [
     "trial_predicted_beta_min", "beta_recovery_tau_s", "beta_model_vbat_mV", "predicted_i_goal_mA", "predicted_peak_current_mA", "beta_model_vbat_status",
     "beta_ceiling_fixed", "beta_ceiling_dynamic_hold073", "beta_ceiling_dynamic_hold120", "beta_ceiling_dynamic_hold170",
@@ -295,6 +299,8 @@ CSV_COLUMNS_V33 = CSV_COLUMNS_COMMON_PREFIX + [
     "beta_phase_state", "beta_phase_progress", "beta_phase_peak_angle_deg", "beta_phase_angle_deg", "beta_phase_ceiling",
 ]
 def csv_columns_for_version(format_version: int) -> list[str]:
+    if format_version >= 52:
+        return CSV_COLUMNS_V52
     if format_version >= 50:
         return CSV_COLUMNS_V50
     if format_version >= 49:
@@ -331,6 +337,8 @@ def csv_columns_for_version(format_version: int) -> list[str]:
 
 
 def sample_format_for_version(format_version: int) -> str:
+    if format_version >= 52:
+        return SAMPLE_FORMAT_V52
     if format_version >= 50:
         return SAMPLE_FORMAT_V50
     if format_version >= 49:
@@ -732,7 +740,42 @@ def convert_sample_v48(values):
     return row
 
 
-def convert_sample(values, format_version: int):
+def magnetic_values(aux, trim, sequence):
+    # Bosch BMM150 float equations; factory sensitivity/temperature compensation.
+    # No hard/soft-iron calibration or heading fusion is implied.
+    p = bytes(aux)
+    x = int.from_bytes(p[0:2], "little", signed=True) >> 3
+    y = int.from_bytes(p[2:4], "little", signed=True) >> 3
+    z = int.from_bytes(p[4:6], "little", signed=True) >> 1
+    h = int.from_bytes(p[6:8], "little") >> 2
+    keys = ("x1", "y1", "x2", "y2", "xy1", "xy2", "z1", "z2", "z3", "z4", "xyz1")
+    ok = isinstance(trim, dict) and all(isinstance(trim.get(k), (int, float)) and math.isfinite(trim[k]) for k in keys)
+    ok = bool(ok and trim['z1'] and trim['z2'] and trim['xyz1'])
+    result = [x, y, z, h, int(ok), 0, "", "", "", ""]
+    if not ok or not sequence or not h or x == -4096 or y == -4096 or z == -16384:
+        return result
+    t = trim
+    a = t['xyz1'] * 16384.0 / h - 16384.0
+    b = t['xy2'] * a*a / 268435456.0 + a*t['xy1']/16384.0 + 256.0
+    den = t['z2'] + t['z1']*h/32768.0
+    if abs(den) < 1e-6:
+        return result
+    X = (x*b*(t['x2']+160)/8192.0 + t['x1']*8)/16.0
+    Y = (y*b*(t['y2']+160)/8192.0 + t['y1']*8)/16.0
+    Z = ((z-t['z4'])*131072.0 - t['z3']*(h-t['xyz1']))/(den*4)/16.0
+    norm = math.sqrt(X*X+Y*Y+Z*Z)
+    if all(math.isfinite(v) for v in (X,Y,Z,norm)):
+        result[5:] = [1] + [f"{v:.6f}" for v in (X,Y,Z,norm)]
+    return result
+
+
+def convert_sample(values, format_version: int, mag_trim=None):
+    if format_version >= 52:
+        row = convert_sample_v48(values[:119])
+        sample_us, sequence = values[119:121]
+        fields = [sample_us, sequence] + magnetic_values(values[121:129], mag_trim, sequence)
+        row.update(zip(MAG_COLUMNS_V52, fields))
+        return row
     if format_version >= 50:
         return convert_sample_v48(values)
     if format_version >= 49:
@@ -1052,8 +1095,8 @@ def write_foot_frames(metadata: dict, out_dir: Path) -> int:
 def convert(path: Path, out_dir: Path) -> None:
     data = path.read_bytes()
     header = parse_header(data)
-    if header["format_version"] not in (23, 24, 25, 26, 27, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51):
-        raise ValueError(f"this converter expects rwlog format v23-v27, v29-v51, got v{header['format_version']}")
+    if header["format_version"] not in (23, 24, 25, 26, 27, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52):
+        raise ValueError(f"this converter expects rwlog format v23-v27, v29-v52, got v{header['format_version']}")
     sample_format = sample_format_for_version(header["format_version"])
     if header["log_sample_size"] != struct.calcsize(sample_format):
         raise ValueError("unexpected sample size")
@@ -1092,7 +1135,7 @@ def convert(path: Path, out_dir: Path) -> None:
         for i in range(header["sample_count"]):
             offset = sample_offset + i * sample_size
             values = struct.unpack_from(sample_format, data, offset)
-            writer.writerow(convert_sample(values, header["format_version"]))
+            writer.writerow(convert_sample(values, header["format_version"], metadata.get("magnetometer", {}).get("factory_trim")))
 
     print(f"format_version={header['format_version']}")
     print(f"samples={header['sample_count']}")
@@ -1115,7 +1158,7 @@ def convert(path: Path, out_dir: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Convert supported RWLOG v23-v51 files to CSV, including control and diagnostic metadata events.")
+    parser = argparse.ArgumentParser(description="Convert supported RWLOG v23-v52 files to CSV, including control and diagnostic metadata events.")
     parser.add_argument("rwlog", type=Path)
     parser.add_argument("--out", type=Path, default=Path("converted_dynamic_beta_hold73_tau73_compare"))
     args = parser.parse_args()

@@ -4,7 +4,7 @@ static const char RUNTIME_HTML[] PROGMEM = R"FREEFOOT(<!doctype html><html lang=
 <style>
 :root{font-family:system-ui,sans-serif;color:#1d293d;background:#eef2f5;font-size:16px}*{box-sizing:border-box}body{max-width:950px;margin:auto;padding:20px}h1{font-size:1.65rem;margin-bottom:4px}h2{font-size:1.08rem}p{line-height:1.6}.muted{color:#546477;font-size:.88rem}.card{background:white;border-radius:14px;padding:20px;margin:16px 0;border:1px solid #d9e1e8}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.value{font-size:2rem;font-variant-numeric:tabular-nums;margin:4px 0}.label{font-size:.85rem;color:#546477}button{padding:13px 18px;border:0;border-radius:8px;background:#174b8e;color:white;font:inherit;cursor:pointer;margin:4px 4px 4px 0}button:disabled{opacity:.4;cursor:default}#stop{background:#b62032}#clear,#cancel{background:#58677a}code,pre{font-family:ui-monospace,monospace}pre{white-space:pre-wrap;font-size:.78rem;overflow-wrap:anywhere}#connection{font-weight:600}progress{width:100%;height:24px}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px 4px;border-bottom:1px solid #e1e6eb}canvas{width:100%;height:120px;background:#f3f6fa;border-radius:8px}#message{min-height:26px;color:#9c2636}a{color:#174b8e}
 </style>
-<h1>AtomS3R Free-foot</h1><div class="muted">0.47.26 · 目標角8° / 10° / 12° · Wi-Fi維持・運転中Web休止 · 足角度はMEKF基準の暫定校正・観測用</div>
+<h1>AtomS3R Free-foot</h1><div class="muted">0.47.27 · 地磁気観測追加 · 目標角8° / 10° / 12° · Wi-Fi維持・運転中Web休止 · 足角度はMEKF基準の暫定校正・観測用</div>
 <p id="connection">接続を確認中…</p>
 <section class="card"><div class="grid"><div><div class="label">状態</div><div class="value" id="state">—</div></div><div><div class="label">残り時間</div><div class="value" id="remaining">—</div></div><div><div class="label">胴体の左右揺動 · MEKF</div><div class="value" id="pitch">—</div></div><div><div class="label">指令 / 実測電流</div><div class="value" style="font-size:1.5rem" id="current">—</div></div></div>
 <p id="guide">起動後は静止させてください。LEDが点灯したら直立させ、左右マーカーが見える状態で2秒以上静止します。</p>
@@ -18,6 +18,7 @@ static const char RUNTIME_HTML[] PROGMEM = R"FREEFOOT(<!doctype html><html lang=
 <canvas id="markers" width="640" height="120" aria-label="マーカー検出位置。上段が右足、下段が左足。"></canvas>
 <p class="muted" id="foot-status">ゼロ点は起動ごとに1回だけ確定します。</p><p class="muted">角度の正方向はマーカーが左へ動く方向です。検出失敗・古い画像・設定範囲外を区別して表示し、その状態もログに保存します。候補を区別できないときは角度を無効にします。足を地面に固定して胴体を前後に傾けると、この相対角は変わります。</p><details><summary>検出画像を確認</summary><p class="muted">待機中に更新される1枚の画像です。測定完了後は測定前の画像を保持します。ログ保存後に「次の測定へ」進むと画像更新を再開します。線は検出に使った帯、丸は選択位置、黄色は未確定の位置・別候補です。</p><button id="preview" disabled>検出画像を取得</button><button id="preview-save" disabled>画像付き診断を保存</button><p class="muted" id="preview-status">画像はまだ取得していません。</p><canvas id="preview-image" width="640" height="480" style="height:auto;display:none" aria-label="カメラ画像と同じフレームの検出位置"></canvas></details></section>
 <section class="card"><h2>前後傾斜と足角度の比較</h2>
+<p id="magnetic-status" class="muted">地磁気を確認しています。</p>
 <p id="mekf-axes" class="muted">MEKFの更新を待っています。</p>
 <p>両足を地面に固定して、胴体と両足が直立した姿勢を基準にします。基準の後、胴体を前後の片方向へ約5°・10°・15°・20°と傾け、10°・直立へ戻す順に、設定範囲内で記録してください。各姿勢で約3秒間静止します。</p>
 <button id="pose-base" disabled>直立基準を取得</button><button id="pose-add" disabled>この姿勢を追加</button><button id="pose-cancel" disabled>姿勢取得を中止</button><button id="pose-save" disabled>比較JSONを保存</button><button id="pose-reset" disabled>保存後に比較をやり直す</button>
@@ -210,6 +211,7 @@ function renderOffline() {
   for (const id of ['pitch', 'current', 'right', 'left', 'fps']) $(id).textContent = '—';
   $('guide').textContent = '本体で制御・観測・記録を行います。開始5秒＋測定30秒＋終了5秒が予定時間です。前後90°以上の傾斜でSTOPします。横倒しは姿勢STOPの対象にしません。表示時間はPC側の目安で、実際の進行・終了を確認した値ではありません。';
   $('foot-status').textContent = '足角度の画面更新を停止。本体内の記録は継続します。';
+  if ($('magnetic-status')) $('magnetic-status').textContent = '運転中の地磁気はログに記録しています。';
   $('mekf-axes').textContent = '運転中の姿勢表示を停止しています。';
   controls();
 }
@@ -280,6 +282,12 @@ function render(s) {
   else $('guide').textContent = s.ready ? '直立姿勢を保ち、測定を開始してください。' : 'IMUの初期化・静止確認を待っています。';
   $('diagnostic-view').textContent = JSON.stringify(s, null, 2);
   if ($('usb-diag')) $('usb-diag').checked = s.usb_diagnostics === true;
+  if ($('magnetic-status')) {
+    const m = s.magnetic;
+    $('magnetic-status').textContent = !m?.factory_ok ? '地磁気：補正値を取得できません。診断JSONを保存してください。'
+      : !m.fresh || !m.valid ? '地磁気：有効な測定値を待っています。'
+      : `地磁気 X ${format(m.body_uT?.[0], 1)} / Y ${format(m.body_uT?.[1], 1)} / Z ${format(m.body_uT?.[2], 1)} µT · 強さ ${format(m.norm_uT, 1)} µT（観測用）`;
+  }
   $('mekf-axes').textContent = s.mekf?.valid && s.mekf.fresh
     ? `前後 roll ${format(s.mekf.roll_deg)}° · 左右 pitch ${format(s.mekf.pitch_deg)}° · yaw ${format(s.mekf.yaw_deg)}°`
     : 'MEKFの更新を待っています。';

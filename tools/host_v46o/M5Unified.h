@@ -9,6 +9,7 @@ struct HostDevice {
   uint8_t getAddress() const { return 0x68; }
   uint8_t acc=0xa8,gyr=0xe9,status=1,power=0x0e;
   uint8_t readRegister8(uint8_t a){switch(a){case 0x21:return status;case 0x7d:return power;case 0x40:return acc;case 0x42:return gyr;default:return 0;}}
+  bool readRegister(uint8_t a,uint8_t* p,size_t n){for(size_t i=0;i<n;++i)p[i]=readRegister8(a+i);return true;}
   bool writeRegister8(uint8_t a,uint8_t v){if(a==0x40)acc=v;if(a==0x42)gyr=v;return true;}
 };
 struct HostImu {

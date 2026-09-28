@@ -9,7 +9,9 @@ import convert_rwlog_to_csv as converter
 
 
 def write_fixture(path: Path, version: int) -> None:
-    if version == 51:
+    if version == 52:
+        sample_format = converter.SAMPLE_FORMAT_V52
+    elif version == 51:
         sample_format = converter.SAMPLE_FORMAT_V51
     elif version == 50:
         sample_format = converter.SAMPLE_FORMAT_V50
@@ -41,6 +43,8 @@ def write_fixture(path: Path, version: int) -> None:
     if version >= 48:
         values[116:118] = [450, 1450]
         values[118] = 444444
+    if version >= 52:
+        values[119:] = [123456, 55, 224, 252, 64, 6, 168, 253, 21, 106]
     sample = struct.pack(sample_format, *values)
     metadata = b"{}"
     header_size = struct.calcsize(converter.HEADER_FORMAT)
@@ -70,6 +74,11 @@ def check(version: int) -> None:
         with (output / "timeseries.csv").open(newline="", encoding="utf-8") as f:
             row = next(csv.DictReader(f))
         assert row["physical_roll_abs_deg"] == "12.340"
+        if version >= 52:
+            assert header["log_sample_size"] == 274
+            assert row["mag_sample_us"] == "123456" and row["mag_sequence"] == "55"
+            assert row["mag_raw_x"] == "-100" and row["mag_rhall"] == "6789"
+            assert row["mag_factory_ok"] == "0" and row["mag_value_valid"] == "0" and row["mag_norm_uT"] == ""
         if version >= 45:
             assert row["roller_current_sequence"] == "42"
         if version >= 46:
@@ -111,4 +120,5 @@ if __name__ == "__main__":
     check(49)
     check(50)
     check(51)
-    print("RWLOG v44-v51 compatibility including MEKF amplitude semantics passed")
+    check(52)
+    print("RWLOG v44-v52 compatibility including MEKF amplitude semantics passed")

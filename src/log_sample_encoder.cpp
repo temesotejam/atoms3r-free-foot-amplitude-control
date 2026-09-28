@@ -109,6 +109,9 @@ void encodeLogSample(LogSample& row, const ExperimentStatus& status,
       log_quantization::scaledI16(status.mekf_detector_zero_predicted_abs_deg, 100.0f);
   row.mekf_detector_zero_sample_us = status.mekf_detector_zero_sample_us;
   // V46aa control-zero log end
+  const auto& m = status.magnetic;
+  row.mag_sample_us=m.sample_us; row.mag_sequence=m.sequence;
+  memcpy(row.mag_aux, m.aux, sizeof(row.mag_aux));
   row.led_state = status.led_state ? 1 : 0;
   row.sync_event_id = status.sync_event_id;
   row.log_active =

@@ -313,6 +313,7 @@ void ExperimentRunner::updateFilterSeries(const ImuReading& r) {
     status_.mekf_accel_mag_error_g = d.accel_magnitude_error_g;
     status_.mekf_accel_used = accel_is_new_for_filter && d.accel_used;
   }
+  status_.magnetic = r.magnetic; // Observation only; never updates MEKF or control.
   control_latency::mark(control_latency::Mekf);
   if (!v46_mekf_dynamic_compare && accel_is_new_for_filter) {
     filter_beta1_raw_.updateIMU(r.gx_dps, r.gy_dps, r.gz_dps, r.ax_g, r.ay_g, r.az_g);

@@ -175,8 +175,8 @@ int main() {
     const auto roller_before = roller;
     host_us = now_us + 50000;
     encodeLogSample(result, status, roller, now_us, test_ms, start_us, ceilings);
-    if (std::memcmp(&old, &result, sizeof(result))) {
-      for (size_t byte = 0; byte < sizeof(result); ++byte)
+    if (std::memcmp(&old, &result, offsetof(LogSample, mag_sample_us))) {
+      for (size_t byte = 0; byte < offsetof(LogSample, mag_sample_us); ++byte)
         if (reinterpret_cast<const uint8_t*>(&old)[byte] !=
             reinterpret_cast<const uint8_t*>(&result)[byte])
           std::cerr << "case=" << i << " byte=" << byte << "\n";

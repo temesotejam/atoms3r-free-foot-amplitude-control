@@ -160,8 +160,11 @@ struct LogSample {
   int16_t mekf_detector_zero_predicted_abs_cdeg;
   uint32_t mekf_detector_zero_sample_us;
   // RWLOG v48 end
+  // RWLOG v52: BMM150 observation and magnetic field only.
+  uint32_t mag_sample_us, mag_sequence;
+  uint8_t mag_aux[8];
 };
 #pragma pack(pop)
 
 static_assert(sizeof(RwLogFileHeader) == 110, "RwLogFileHeader binary size changed");
-static_assert(sizeof(LogSample) == 258, "LogSample binary size changed");
+static_assert(sizeof(LogSample) == 274, "LogSample binary size changed");

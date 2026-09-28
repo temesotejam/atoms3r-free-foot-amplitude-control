@@ -74,6 +74,7 @@ function renderOffline() {
   for (const id of ['pitch', 'current', 'right', 'left', 'fps']) $(id).textContent = '—';
   $('guide').textContent = '本体で制御・観測・記録を行います。開始5秒＋測定30秒＋終了5秒が予定時間です。前後90°以上の傾斜でSTOPします。横倒しは姿勢STOPの対象にしません。表示時間はPC側の目安で、実際の進行・終了を確認した値ではありません。';
   $('foot-status').textContent = '足角度の画面更新を停止。本体内の記録は継続します。';
+  if ($('magnetic-status')) $('magnetic-status').textContent = '運転中の地磁気はログに記録しています。';
   $('mekf-axes').textContent = '運転中の姿勢表示を停止しています。';
   controls();
 }
@@ -144,6 +145,12 @@ function render(s) {
   else $('guide').textContent = s.ready ? '直立姿勢を保ち、測定を開始してください。' : 'IMUの初期化・静止確認を待っています。';
   $('diagnostic-view').textContent = JSON.stringify(s, null, 2);
   if ($('usb-diag')) $('usb-diag').checked = s.usb_diagnostics === true;
+  if ($('magnetic-status')) {
+    const m = s.magnetic;
+    $('magnetic-status').textContent = !m?.factory_ok ? '地磁気：補正値を取得できません。診断JSONを保存してください。'
+      : !m.fresh || !m.valid ? '地磁気：有効な測定値を待っています。'
+      : `地磁気 X ${format(m.body_uT?.[0], 1)} / Y ${format(m.body_uT?.[1], 1)} / Z ${format(m.body_uT?.[2], 1)} µT · 強さ ${format(m.norm_uT, 1)} µT（観測用）`;
+  }
   $('mekf-axes').textContent = s.mekf?.valid && s.mekf.fresh
     ? `前後 roll ${format(s.mekf.roll_deg)}° · 左右 pitch ${format(s.mekf.pitch_deg)}° · yaw ${format(s.mekf.yaw_deg)}°`
     : 'MEKFの更新を待っています。';

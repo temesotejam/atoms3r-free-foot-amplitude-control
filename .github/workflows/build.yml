@@ -48,7 +48,7 @@ jobs:
           cp bmi270-build-patch.json madgwick-build-patch.json dist/
           python "$HOME/.platformio/packages/tool-esptoolpy/esptool.py" --chip esp32s3 merge_bin -o dist/merged-firmware.bin 0x0000 dist/bootloader.bin 0x8000 dist/partitions.bin 0xe000 dist/boot_app0.bin 0x10000 dist/firmware.bin
           printf '%s\n' "$GITHUB_SHA" > dist/build-sha.txt
-          printf '%s\n' 'Free-foot Runtime V2 0.47.26 target selection 8/10/12deg before START; atomic target/start command; target fixed within run and logged; 8deg-only previous-peak correction retained; motion and acquisition IRAM/O2; unchanged arithmetic and deadline; Core1 hardware IMU timer; Core0 camera lifecycle and Wi-Fi events; Wi-Fi AP retained; HTTP paused during run; fore/aft-only 90deg STOP; opt-in USB diagnostics; sealed RWLOG/foot frames survive HTTP restart; unchanged control math/MEKF/3ms/300mA/100ms; 0.47.26 hardware timing and 10/12deg behavior validation pending' > dist/FLASH_LAYOUT.txt
+          printf '%s\n' 'Free-foot Runtime V2 0.47.27 BMM150 raw observation in normal 30s workflow; existing AUX reads only; raw bytes plus timestamp/sequence; no magnetic floating-point work in control task; factory trim at boot; compensation in HTTP/offline export; no heading fusion; RWLOG v52 adds 16 bytes preserving 258-byte prefix; unchanged MEKF/control/8-10-12 target selection/3ms/300mA/100ms/deadline; new hardware timing pending normal run' > dist/FLASH_LAYOUT.txt
           (cd dist && sha256sum *.bin > SHA256SUMS.txt)
           git diff --exit-code
       - uses: actions/upload-artifact@v4

@@ -1,6 +1,7 @@
 #pragma once
 #include "log_types.h"
 #include "mekf_attitude_diagnostics.h"
+#include "bmm150_observation.h"
 
 struct ExperimentStatus {
   ExperimentState state = ExperimentState::STARTUP_GYRO_CALIB;
@@ -42,6 +43,7 @@ struct ExperimentStatus {
   float gyro_bias_pitch_dps = 0.0f;
   // V46 adopted attitude and online comparison diagnostics.
   MekfAttitudeSnapshot mekf_attitude;
+  bmm150_observation::RawReading magnetic;
   float pitch_mekf_deg = 0.0f;              // run-relative control/detector angle when applicable
   float pitch_mekf_abs_deg = 0.0f;          // posterior physical/video body-frame pitch
   float pitch_mekf_predicted_abs_deg = 0.0f; // one-step-ahead control-time pitch

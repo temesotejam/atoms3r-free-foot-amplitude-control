@@ -1,3 +1,4 @@
+#include "bmm150_observation.h"
 #include "psram_logger.h"
 #include "imu_manager.h"
 extern ImuManager imu;
@@ -15,7 +16,7 @@ extern FootObserver feet;
 
 #include "config.h"
 
-static constexpr uint16_t RWLOG_FORMAT_VERSION = 51;
+static constexpr uint16_t RWLOG_FORMAT_VERSION = 52;
 static constexpr uint32_t RWLOG_FLAG_CRC32 = 1U << 0;
 namespace {
 String jsonFloatOrNull(float value, unsigned int decimals) {
@@ -580,6 +581,20 @@ PsramString PsramLogger::buildMetadataJson() const {
   json += "\"autonomous_timing_prediction_formula\":\"theta_control=theta_posterior_measurement_relative+(gy_dps-mekf_bias_y_dps)*mekf_gyro_y_scale*(autonomous_timing_compensation_us*1e-6)\",";
   json += "\"mekf_prediction_role\":\"legacy_quaternion_forward_prediction_disabled_during_autonomous;retained_only_for_non_autonomous_legacy_modes\",";
   json += "\"madgwick_dynamic_abs_reference\":\"continuous_bias_corrected_dynamic_hold073_filter;online_comparison_only\",";
+  const auto& mag_trim = bmm150_observation::startupTrimStorage();
+  json += "\"magnetometer\":{\"revision\":\"bmm150_observation_04727\",\"role\":\"raw_observation_only_no_fusion\",\"units\":\"uT_after_factory_compensation\",\"frame\":\"robot_MEKF_body_xyz\",\"installation_calibrated\":false,\"sample_timestamp\":\"host_AUX_read_not_BMM150_conversion_time\",\"runtime_work\":\"copy_existing_AUX_bytes_only_no_float_math_no_added_I2C\",\"factory_trim\":{";
+  json += "\"x1\":" + String(mag_trim.x1);
+  json += ",\"y1\":" + String(mag_trim.y1);
+  json += ",\"x2\":" + String(mag_trim.x2);
+  json += ",\"y2\":" + String(mag_trim.y2);
+  json += ",\"xy1\":" + String(mag_trim.xy1);
+  json += ",\"xy2\":" + String(mag_trim.xy2);
+  json += ",\"z1\":" + String(mag_trim.z1);
+  json += ",\"z2\":" + String(mag_trim.z2);
+  json += ",\"z3\":" + String(mag_trim.z3);
+  json += ",\"z4\":" + String(mag_trim.z4);
+  json += ",\"xyz1\":" + String(mag_trim.xyz1);
+  json += "}},";
   json += "\"mekf_accel_rejection\":\"adaptive_R_from_accel_norm_and_predicted_gravity_direction;skip_below_min_confidence\",";
   json += "\"mekf_accel_mag_full_g\":" + String(Config::MEKF_ACCEL_MAG_FULL_G, 4) + ",";
   json += "\"mekf_accel_mag_reject_g\":" + String(Config::MEKF_ACCEL_MAG_REJECT_G, 4) + ",";
@@ -1687,7 +1702,7 @@ PsramString PsramLogger::buildMetadataJson() const {
   json += "\"pitch_mekf_start_sync_relative_deg\",\"pitch_mekf_measurement_relative_deg\",\"pitch_mekf_trial_relative_deg\",";
   json += "\"mekf_start_sync_zero_abs_deg\",\"mekf_measurement_zero_abs_deg\",\"mekf_trial_zero_abs_deg\",";
   json += "\"mekf_start_sync_zero_sample_us\",\"mekf_measurement_zero_sample_us\",\"mekf_trial_zero_sample_us\",";
-  json += "\"pitch_mekf_detector_relative_deg\",\"mekf_detector_zero_predicted_abs_deg\",\"mekf_detector_zero_sample_us\"]}";
+  json += "\"pitch_mekf_detector_relative_deg\",\"mekf_detector_zero_predicted_abs_deg\",\"mekf_detector_zero_sample_us\",\"mag_sample_us\",\"mag_sequence\",\"mag_aux_0\",\"mag_aux_1\",\"mag_aux_2\",\"mag_aux_3\",\"mag_aux_4\",\"mag_aux_5\",\"mag_aux_6\",\"mag_aux_7\"]}";
   json += ",";
   feet.appendMetadata(json);
   const String final_size_key = ",\"metadata_json_final_bytes\":";

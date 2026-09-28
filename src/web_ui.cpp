@@ -1,3 +1,4 @@
+#include "magnetic_observation_json.h"
 #include "web_ui.h"
 #include "config.h"
 #include "runtime_web.h"
@@ -176,6 +177,7 @@ void WebUi::status() {
   json += ",\"remaining_ms\":" + String(s.remaining_ms) + ",\"elapsed_ms\":" + String(s.measure_elapsed_ms);
   json += ",\"pitch_deg\":" + num(s.pitch_deg) + ",\"rate_dps\":" + num(s.rate_dps);
   json += ",\"mekf\":" + mekfAttitudeJson(s.mekf_attitude, micros(), s.imu_ok);
+  json += ",\"magnetic\":" + magneticObservationJson(s.magnetic, micros());
   json += ",\"target_deg\":" + num(s.target_deg);
   json += ",\"motor_mA\":" + String(s.motor_cmd_mA) + ",\"actual_mA\":" + String(s.actual_current_mA);
   json += ",\"battery_mV\":" + String(s.battery_mV);
@@ -334,6 +336,7 @@ void WebUi::previewCapture() {
   json += ",\"range\":" + footRangeDiagnosticsJson();
   json += ",\"calibration\":" + footCalibrationDiagnosticsJson();
   json += ",\"mekf\":" + mekfAttitudeJson(p.mekf_attitude, micros(), p.imu_ok);
+  json += ",\"magnetic\":" + magneticObservationJson(p.magnetic, micros());
   json += ",\"mekf_time_semantics\":\"control_snapshot_at_frame_delivery_not_exposure\"";
   json += ",\"right\":" + previewMarkerJson(p.right) + ",\"left\":" + previewMarkerJson(p.left) + "}";
   server_->sendHeader("Cache-Control", "no-store"); server_->send(200, "application/json", json);

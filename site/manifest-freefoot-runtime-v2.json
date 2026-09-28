@@ -1,6 +1,6 @@
 {
   "name": "AtomS3R Free-foot Runtime V2",
-  "version": "0.47.26-target-selection",
+  "version": "0.47.27-magnetometer-observation",
   "builds": [
     {
       "chipFamily": "ESP32-S3",

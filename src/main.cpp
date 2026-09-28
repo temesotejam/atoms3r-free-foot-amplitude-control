@@ -50,6 +50,7 @@ static void captureRunState(void*, RunControlSnapshot& out) {
   out.remaining_ms = st.remaining_ms; out.battery_mV = st.roller_battery_mV;
   out.pitch_deg = st.pitch_mekf_deg; out.rate_dps = st.physical_roll_rate_dps;
   out.mekf_attitude = st.mekf_attitude;
+  out.magnetic = st.magnetic;
   out.target_deg = runner.energyControlAutonomousTargetPeakDeg();
   out.led_state = st.led_state; out.sync_event_id = st.sync_event_id;
   out.upright_stable = upright_stable; out.upright_epoch = upright_epoch;
