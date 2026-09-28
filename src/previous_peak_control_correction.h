@@ -21,21 +21,23 @@ struct Result {
   bool clamped = false;
 };
 inline Result evaluate(float base_free_peak_deg, float previous_peak_deg, int8_t next_side,
-                       float target_peak_deg, uint32_t t_test_ms) {
+                       float selected_mean_target_deg, uint32_t t_test_ms) {
   Result r;
   r.corrected_free_peak_deg = base_free_peak_deg;
   if (!Config::ENERGY_CONTROL_AUTONOMOUS_PREVIOUS_PEAK_CONTROL_ENABLED) {
     r.reason = PREV_REASON_DISABLED; return r;
   }
   if (!std::isfinite(base_free_peak_deg) || !std::isfinite(previous_peak_deg) ||
-      !std::isfinite(target_peak_deg) || base_free_peak_deg < 0.0f ||
+      !std::isfinite(selected_mean_target_deg) || base_free_peak_deg < 0.0f ||
       previous_peak_deg < 0.0f || (next_side != 1 && next_side != -1)) {
     r.corrected_free_peak_deg = NAN; r.reason = PREV_REASON_INVALID_INPUT; return r;
   }
   if (t_test_ms < Config::ENERGY_CONTROL_AUTONOMOUS_PREVIOUS_PEAK_ENABLE_AFTER_MS) {
     r.reason = PREV_REASON_BEFORE_ENABLE_TIME; return r;
   }
-  if (std::fabs(target_peak_deg - Config::ENERGY_CONTROL_AUTONOMOUS_PREVIOUS_PEAK_TARGET_DEG) >
+  // Qualify the calibrated operating regime using the user's mean target.
+  // A transient side setpoint must not toggle this residual model on/off.
+  if (std::fabs(selected_mean_target_deg - Config::ENERGY_CONTROL_AUTONOMOUS_PREVIOUS_PEAK_TARGET_DEG) >
       Config::ENERGY_CONTROL_AUTONOMOUS_PREVIOUS_PEAK_TARGET_TOLERANCE_DEG) {
     r.reason = PREV_REASON_TARGET_UNSUPPORTED; return r;
   }

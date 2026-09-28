@@ -75,7 +75,7 @@ function renderOffline() {
   $('guide').textContent = '本体で制御・観測・記録を行います。開始5秒＋測定30秒＋終了5秒が予定時間です。前後90°以上の傾斜でSTOPします。横倒しは姿勢STOPの対象にしません。表示時間はPC側の目安で、実際の進行・終了を確認した値ではありません。';
   $('foot-status').textContent = '足角度の画面更新を停止。本体内の記録は継続します。';
   $('mekf-axes').textContent = '運転中の姿勢表示を停止しています。';
-  if ($('steering-status')) $('steering-status').textContent = '旋回補正と記録を本体で継続しています。';
+  if ($('steering-status')) $('steering-status').textContent = '本体で左右目標の応答確認と記録を継続します。yaw自動補正は休止中です。';
   controls();
 }
 const format = (n, digits = 2) => Number.isFinite(n) ? n.toFixed(digits) : '—';
@@ -147,9 +147,15 @@ function render(s) {
   if ($('usb-diag')) $('usb-diag').checked = s.usb_diagnostics === true;
   if ($('steering-status')) {
     const y=s.steering;
-    $('steering-status').textContent = y?.gyro_valid
-      ? `ジャイロ方位 ${format(y.gyro_heading_deg)}° · 旋回速度 ${format(y.cycle_yaw_rate_dps)}°/s · 目標 ${format(y.target_plus_deg,2)}° / ${format(y.target_minus_deg,2)}°`
-      : y?.reason === 3 ? 'ジャイロ異常のため旋回補正を保持しました。' : '測定開始10秒後から旋回を補正します。';
+    const phases={0:'1往復の観測待ち',1:'同じ目標で観測',5:'＋側を大きくする区間',6:'−側を大きくする区間',7:'同じ目標へ戻す区間'};
+    if (!s.running && !terminal) {
+      const nextRun=Number.isInteger(s.run_id) ? (s.run_id+1)%65536 || 1 : 1;
+      $('steering-status').textContent=`次は${nextRun%2 ? '＋側→−側' : '−側→＋側'}の順で目標差を付けます。0–10秒は同じ目標、10–18秒と18–26秒は逆向きに±0.2°、26秒から元へ戻します。yaw自動補正は休止します。`;
+    } else if (y?.reason===3 || y?.gyro_valid===false) {
+      $('steering-status').textContent='ジャイロまたは周期データが無効のため目標差の変更を保持しました。ログで確認してください。';
+    } else {
+      $('steering-status').textContent=`${phases[y?.reason] ?? '応答確認'} · ジャイロ方位 ${format(y?.gyro_heading_deg)}° · 旋回速度 ${format(y?.cycle_yaw_rate_dps)}°/s · ＋側目標 ${format(y?.target_plus_deg,2)}° / −側目標 ${format(y?.target_minus_deg,2)}° · yaw自動補正は休止`;
+    }
   }
   $('mekf-axes').textContent = s.mekf?.valid && s.mekf.fresh
     ? `前後 roll ${format(s.mekf.roll_deg)}° · 左右 pitch ${format(s.mekf.pitch_deg)}°`

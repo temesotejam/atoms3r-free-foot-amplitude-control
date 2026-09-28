@@ -176,7 +176,8 @@ void WebUi::status() {
   json += ",\"remaining_ms\":" + String(s.remaining_ms) + ",\"elapsed_ms\":" + String(s.measure_elapsed_ms);
   json += ",\"pitch_deg\":" + num(s.pitch_deg) + ",\"rate_dps\":" + num(s.rate_dps);
   json += ",\"mekf\":" + mekfAttitudeJson(s.mekf_attitude, micros(), s.imu_ok);
-  json += ",\"steering\":{\"gyro_heading_deg\":" + num(s.steering.yaw_deg);
+  json += ",\"steering\":{\"profile\":\"bounded_response_check\",\"feedback_enabled\":false,\"gyro_heading_deg\":" + num(s.steering.yaw_deg);
+  json += ",\"first_delta_sign\":" + String(steering::responseFirstSign(s.run_id));
   json += ",\"gyro_valid\":" + String(s.steering.gyro_valid ? "true" : "false");
   json += ",\"delta_deg\":" + num(s.steering.delta_deg);
   json += ",\"target_plus_deg\":" + num(s.target_deg + s.steering.delta_deg);

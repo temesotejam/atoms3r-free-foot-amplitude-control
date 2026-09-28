@@ -1,3 +1,11 @@
+# 2026-09-28 / 0.47.29
+
+- Qualify the 8-degree previous-peak model by the selected mean target, preserving time/support/coefficients.
+- Pause automatic yaw feedback for a bounded +/-0.2-degree response sequence inside the usual 30 seconds.
+- Reverse sequence order on consecutive runs; keep 0.08 degree/cycle slew, gyro health and latched command targets.
+- Record the profile and schedule in stopped-export metadata; keep RWLOG v53/112 bytes and timing/sensor/transport paths.
+- Add production-path regression coverage for side targets, mean-target qualification, latching, reversed order, faults and UI.
+
 ## 2026-09-28 — 0.47.28 gyro steering / compact RWLOG
 
 - User authorized cycle-yaw plus measured sway-asymmetry feedback and removal of unused MEKF yaw/magnetic logs.

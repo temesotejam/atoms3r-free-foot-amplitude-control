@@ -40,6 +40,7 @@ cpp=r'''
 static unsigned commands=0,stops=0,zero_events=0,peak_events=0,outputs=0,rejected=0;
 static bool roller_ok=true,write_ok=true,quiet=false;
 static PsramLogger::EnergyControlAutonomousPeakEvent last_peak;
+static PsramLogger::EnergyControlAutonomousZeroCrossEvent last_zero;
 template<class T> void emit(const T& v){if(quiet)return;assert(std::fwrite(&v,sizeof(v),1,stdout)==1);}
 void emit(float v){uint32_t b;if(std::isnan(v))b=0x7fc00000U;else std::memcpy(&b,&v,4);emit(b);}
 '''
@@ -55,7 +56,7 @@ RollerTelemetry Roller485Manager::telemetrySnapshot()const{
   t.current_valid=t.speed_valid=true;t.current_sample_time_us=host_us-700;t.speed_sample_time_us=host_us-1200;return t;
 }
 void PsramLogger::addEnergyControlAutonomousPeakEvent(const EnergyControlAutonomousPeakEvent& e){++peak_events;last_peak=e;emit(e);}
-void PsramLogger::addEnergyControlAutonomousZeroCrossEvent(const EnergyControlAutonomousZeroCrossEvent& e){++zero_events;outputs+=e.output_executed;rejected+=!e.valid;emit(e);}
+void PsramLogger::addEnergyControlAutonomousZeroCrossEvent(const EnergyControlAutonomousZeroCrossEvent& e){last_zero=e;++zero_events;outputs+=e.output_executed;rejected+=!e.valid;emit(e);}
 void PsramLogger::addTimingProbeEvent(const TimingProbeEvent& e){emit(e);}
 void ExperimentRunner::requestEmergencyStop(const char*){status_.emergency_stop=true;stopMotor();}
 void state(const ExperimentRunner& r){
@@ -172,6 +173,39 @@ int main(){
  assert(last_peak.pending_command_matched && last_peak.target_peak_deg==chosen);
  assert(last_peak.peak_error_deg==chosen-9);
  std::fprintf(stderr,"Production steering target -> bounded pulse -> latched response error PASS\n");
+ // Regression: shifting an 8-degree side target must not silently disable
+ // the existing previous-peak residual model. Exercise the production path.
+ for(float mean : {8.f,10.f,12.f})for(uint16_t run : {uint16_t(1),uint16_t(2)})
+ for(int side : {-1,1})for(unsigned time : {15000U,24000U}) {
+   ExperimentRunner p;setup(p,log,imu,roller);roller_ok=write_ok=true;
+   p.energy_control_autonomous_target_peak_deg_=mean;
+   p.steering_.reset(steering::Mode::ResponseCheck,run);
+   p.steering_.peak(-1,mean,0,0,false,false);
+   for(unsigned ms=1000;ms<=time;ms+=1000) {
+     p.steering_.peak(1,mean,ms*.001f-.5f,ms-500,false,false);
+     p.steering_.peak(-1,mean,ms*.001f,ms,false,false);
+   }
+   const float delta=p.steering_.state().delta_deg;
+   assert(fabsf(delta)==.2f);
+   p.energy_control_autonomous_last_peak_amplitude_deg_=8;
+   p.energy_control_autonomous_last_peak_side_=-side;
+   p.energy_control_autonomous_last_peak_ms_=time-500;
+   host_us=(time+p.run_start_ms_)*1000U;
+   p.updateEnergyControlAutonomousAtZeroCross(time,side*60.f,-side*.1f,side*.1f,.5f,float(time));
+   assert(last_zero.valid && last_zero.physical_next_peak_side==side);
+   assert(last_zero.target_peak_deg==mean+side*delta);
+   const float residual=last_zero.free_next_peak_amplitude_deg-last_zero.rate_baseline_peak_deg;
+   const float expected=mean==8 ? (side>0?.591392151f:-.157912422f) : 0.f;
+   assert(fabsf(residual-expected)<1e-5f);
+   assert(last_zero.pulse_width_ms<=100 && abs(last_zero.command_current_mA)<=300);
+   const float issued=last_zero.target_peak_deg;
+   p.steering_.reset();p.status_.pulse_active=false;
+   p.energy_control_autonomous_phase_=Phase::ENERGY_CONTROL;
+   p.energy_control_autonomous_half_cycle_state_=Half::WAIT_PEAK;
+   assert(p.recordEnergyControlAutonomousPeak(time+300,side,mean,side*mean));
+   assert(last_peak.pending_command_matched && last_peak.target_peak_deg==issued);
+ }
+ std::fprintf(stderr,"Production 8-degree mean gate with both response signs/sides; 10/12 bypass; bounded output and command latching PASS\n");
 #endif
 
  std::fprintf(stderr,"20000 decision states + 32000 sequential samples; outputs=%u rejected=%u peaks=%u\n",outputs,rejected,peak_events);

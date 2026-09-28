@@ -11,6 +11,9 @@ constexpr float kStepDeg = 0.08f;
 constexpr float kYawGain = 0.12f; // desired peak difference / net yaw angle
 constexpr float kTrackGain = 0.15f; // side target / peak-difference error per cycle
 constexpr float kSmooth = 0.35f;
+constexpr float kResponseDeltaDeg = 0.20f;
+enum class Mode : uint8_t { Feedback=0, ResponseCheck=1 };
+inline int responseFirstSign(uint16_t run_id) { return run_id == 0 || (run_id & 1U) ? 1 : -1; }
 inline float clamp(float x, float lo, float hi) { return fmaxf(lo, fminf(hi, x)); }
 
 // Independent body-to-world quaternion. Acceleration is used only at reset;
@@ -61,7 +64,10 @@ class GyroHeading {
   bool valid_=false,have_rate_=false;
 };
 
-enum class Reason : uint8_t { Waiting=0, Settling=1, Active=2, Invalid=3, Saturated=4 };
+enum class Reason : uint8_t {
+  Waiting=0, Settling=1, Active=2, Invalid=3, Saturated=4,
+  ResponsePositive=5, ResponseNegative=6, ResponseReturn=7
+};
 struct Snapshot {
   float yaw_deg=NAN, delta_deg=0, actual_difference_deg=NAN;
   float desired_difference_deg=NAN, cycle_yaw_rate_dps=NAN;
@@ -74,7 +80,9 @@ struct Snapshot {
 // measured A+ - A-. A nonzero difference is allowed when it produces zero yaw.
 class Controller {
  public:
-  void reset() { *this=Controller{}; }
+  void reset(Mode mode=Mode::Feedback, uint16_t run_id=1) {
+    *this=Controller{}; mode_=mode; first_sign_=responseFirstSign(run_id);
+  }
   const Snapshot& state() const { return s_; }
   float target(float mean, int side) const { return mean+(side>0?s_.delta_deg:-s_.delta_deg); }
   void peak(int side, float amplitude, float yaw, uint32_t ms, bool upper, bool lower) {
@@ -109,6 +117,18 @@ class Controller {
     s_.cycle_yaw_rate_dps=filtered_?s_.cycle_yaw_rate_dps+kSmooth*(rate-s_.cycle_yaw_rate_dps):rate;
     s_.actual_difference_deg=filtered_?s_.actual_difference_deg+kSmooth*(difference-s_.actual_difference_deg):difference;
     filtered_=true;
+    if (mode_==Mode::ResponseCheck) {
+      // A bounded, predetermined input separates actuator response from yaw
+      // feedback. Change only on a valid full cycle; keep the existing slew.
+      const float requested = ms<kSettleMs || ms>=26000 ? 0.0f :
+          (ms<18000 ? first_sign_ : -first_sign_)*kResponseDeltaDeg;
+      s_.delta_deg=clamp(s_.delta_deg+clamp(requested-s_.delta_deg,-kStepDeg,kStepDeg),
+                         -kResponseDeltaDeg,kResponseDeltaDeg);
+      s_.desired_difference_deg=NAN; // no closed-loop D reference in this mode
+      s_.reason=ms<kSettleMs ? Reason::Settling : ms>=26000 ? Reason::ResponseReturn :
+          requested>0 ? Reason::ResponsePositive : Reason::ResponseNegative;
+      return;
+    }
     if (ms<kSettleMs || !std::isfinite(s_.desired_difference_deg)) {
       s_.desired_difference_deg=s_.actual_difference_deg;
       s_.reason=Reason::Settling; return;
@@ -138,5 +158,7 @@ class Controller {
   uint32_t boundary_ms_=0,plus_ms_=0;
   int previous_side_=0;
   bool boundary_=false,filtered_=false,plus_upper_=false,plus_lower_=false;
+  Mode mode_=Mode::Feedback;
+  int first_sign_=1;
 };
 }

@@ -1189,7 +1189,7 @@ void ExperimentRunner::recordV59StateGateEvent(uint32_t crossing_ms, float hprev
 }
 
 void ExperimentRunner::beginStartSync(uint32_t now_ms) {
-  steering_.reset();
+  steering_.reset(steering::Mode::ResponseCheck, status_.run_id);
   steering_candidate_yaw_ = NAN;
   steering_pending_target_deg_ = NAN;
   const auto& gyro_start = imu_->reading();
@@ -2877,11 +2877,12 @@ void ExperimentRunner::updateEnergyControlAutonomousAtZeroCross(uint32_t t_test_
   event.rate_baseline_reason = static_cast<uint8_t>(baseline.reason);
   // V46al-R2 previous-peak active control begin
   // Keep the stable V46ak RWLOG event layout unchanged. The correction is fully
-  // reconstructible offline from the already-logged previous peak, side,
-  // target and zero-cross time, so no additional event fields are stored.
+  // reconstructible from the previous peak, side, selected mean target and
+  // zero-cross time. Steering must not toggle model eligibility; the actual
+  // side target remains the input to the solver and the latched peak error.
   const auto previous_peak_result = previous_peak_control::evaluate(
       baseline.adjusted_deg, event.previous_peak_amplitude_deg,
-      event.physical_next_peak_side, event.target_peak_deg, t_test_ms);
+      event.physical_next_peak_side, energy_control_autonomous_target_peak_deg_, t_test_ms);
   event.free_next_peak_amplitude_deg = previous_peak_result.corrected_free_peak_deg;
   // V46al-R2 previous-peak active control end
   const uint32_t v46l_free_model_us = static_cast<uint32_t>(micros() - v46l_free_model_t0_us);
@@ -5869,8 +5870,6 @@ const char* ExperimentRunner::stateName() const {
   }
   return "UNKNOWN";
 }
-
-
 
 
 

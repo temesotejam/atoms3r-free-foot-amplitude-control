@@ -4,14 +4,14 @@ static const char RUNTIME_HTML[] PROGMEM = R"FREEFOOT(<!doctype html><html lang=
 <style>
 :root{font-family:system-ui,sans-serif;color:#1d293d;background:#eef2f5;font-size:16px}*{box-sizing:border-box}body{max-width:950px;margin:auto;padding:20px}h1{font-size:1.65rem;margin-bottom:4px}h2{font-size:1.08rem}p{line-height:1.6}.muted{color:#546477;font-size:.88rem}.card{background:white;border-radius:14px;padding:20px;margin:16px 0;border:1px solid #d9e1e8}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.value{font-size:2rem;font-variant-numeric:tabular-nums;margin:4px 0}.label{font-size:.85rem;color:#546477}button{padding:13px 18px;border:0;border-radius:8px;background:#174b8e;color:white;font:inherit;cursor:pointer;margin:4px 4px 4px 0}button:disabled{opacity:.4;cursor:default}#stop{background:#b62032}#clear,#cancel{background:#58677a}code,pre{font-family:ui-monospace,monospace}pre{white-space:pre-wrap;font-size:.78rem;overflow-wrap:anywhere}#connection{font-weight:600}progress{width:100%;height:24px}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px 4px;border-bottom:1px solid #e1e6eb}canvas{width:100%;height:120px;background:#f3f6fa;border-radius:8px}#message{min-height:26px;color:#9c2636}a{color:#174b8e}
 </style>
-<h1>AtomS3R Free-foot</h1><div class="muted">0.47.28 · ジャイロ旋回フィードバック · 目標角8° / 10° / 12° · Wi-Fi維持・運転中Web休止 · 足角度はMEKF基準の暫定校正・観測用</div>
+<h1>AtomS3R Free-foot</h1><div class="muted">0.47.29 · 左右目標と旋回の応答確認 · 目標角8° / 10° / 12° · Wi-Fi維持・運転中Web休止 · 足角度はMEKF基準の暫定校正・観測用</div>
 <p id="connection">接続を確認中…</p>
 <section class="card"><div class="grid"><div><div class="label">状態</div><div class="value" id="state">—</div></div><div><div class="label">残り時間</div><div class="value" id="remaining">—</div></div><div><div class="label">胴体の左右揺動 · MEKF</div><div class="value" id="pitch">—</div></div><div><div class="label">指令 / 実測電流</div><div class="value" style="font-size:1.5rem" id="current">—</div></div></div>
 <p id="guide">起動後は静止させてください。LEDが点灯したら直立させ、左右マーカーが見える状態で2秒以上静止します。</p>
 <p><label for="target">目標角（平均片側振幅） </label><select id="target" disabled aria-describedby="target-help" style="font:inherit;padding:10px 14px;border:1px solid #aab8c6;border-radius:8px;background:white"><option value="8" selected>8°</option><option value="10">10°</option><option value="12">12°</option></select></p>
-<p class="muted" id="target-help">測定開始時のゼロ点からの平均目標角です。開始10秒後から、旋回に応じて左右を最大±1°調整します。</p>
+<p class="muted" id="target-help">測定開始時のゼロ点からの平均目標角です。今回はyaw自動補正を休止し、同じ30秒の中で左右目標を±0.2°ずつ変えて応答を記録します。最初は10°で続けて2回測定してください。</p>
 <p class="muted" id="run-target" role="status">目標角は測定開始時に適用します。</p>
-<p id="steering-status" class="muted">測定開始10秒後から旋回を補正します。</p>
+<p id="steering-status" class="muted">0–10秒は同じ目標、10–18秒と18–26秒は逆向きの目標差、26秒から同じ目標へ戻します。変化は1往復0.08°以内です。連続するRunで正負の順番を入れ替えます。</p>
 <button id="start" disabled>30秒測定を開始</button><button id="reconnect" style="display:none">終了・Web復帰を確認</button><button id="clear" disabled>ログを消去・次の測定へ</button>
 <div id="message" role="status"></div><p class="muted">開始・終了のLED同期はそれぞれ5秒。制御は既存のAutonomous、固定3ms補償、300mA / 最大100msパルスです。</p></section>
 <p class="muted">運転中もWi-Fiを維持し、Web更新を休止して本体で制御・観測・記録します。前後90°以上の傾斜で停止します。横倒しは姿勢STOPの対象にしません。姿勢を戻しても再始動しません。Wi-Fi接続と画面を保ったままお待ちください。終了後にWeb表示が復帰したらログを保存してください。Web復帰だけではログは消えません。本体の電源断・再起動では未取得のログが失われます。</p>
@@ -207,7 +207,7 @@ function renderOffline() {
   $('guide').textContent = '本体で制御・観測・記録を行います。開始5秒＋測定30秒＋終了5秒が予定時間です。前後90°以上の傾斜でSTOPします。横倒しは姿勢STOPの対象にしません。表示時間はPC側の目安で、実際の進行・終了を確認した値ではありません。';
   $('foot-status').textContent = '足角度の画面更新を停止。本体内の記録は継続します。';
   $('mekf-axes').textContent = '運転中の姿勢表示を停止しています。';
-  if ($('steering-status')) $('steering-status').textContent = '旋回補正と記録を本体で継続しています。';
+  if ($('steering-status')) $('steering-status').textContent = '本体で左右目標の応答確認と記録を継続します。yaw自動補正は休止中です。';
   controls();
 }
 const format = (n, digits = 2) => Number.isFinite(n) ? n.toFixed(digits) : '—';
@@ -279,9 +279,15 @@ function render(s) {
   if ($('usb-diag')) $('usb-diag').checked = s.usb_diagnostics === true;
   if ($('steering-status')) {
     const y=s.steering;
-    $('steering-status').textContent = y?.gyro_valid
-      ? `ジャイロ方位 ${format(y.gyro_heading_deg)}° · 旋回速度 ${format(y.cycle_yaw_rate_dps)}°/s · 目標 ${format(y.target_plus_deg,2)}° / ${format(y.target_minus_deg,2)}°`
-      : y?.reason === 3 ? 'ジャイロ異常のため旋回補正を保持しました。' : '測定開始10秒後から旋回を補正します。';
+    const phases={0:'1往復の観測待ち',1:'同じ目標で観測',5:'＋側を大きくする区間',6:'−側を大きくする区間',7:'同じ目標へ戻す区間'};
+    if (!s.running && !terminal) {
+      const nextRun=Number.isInteger(s.run_id) ? (s.run_id+1)%65536 || 1 : 1;
+      $('steering-status').textContent=`次は${nextRun%2 ? '＋側→−側' : '−側→＋側'}の順で目標差を付けます。0–10秒は同じ目標、10–18秒と18–26秒は逆向きに±0.2°、26秒から元へ戻します。yaw自動補正は休止します。`;
+    } else if (y?.reason===3 || y?.gyro_valid===false) {
+      $('steering-status').textContent='ジャイロまたは周期データが無効のため目標差の変更を保持しました。ログで確認してください。';
+    } else {
+      $('steering-status').textContent=`${phases[y?.reason] ?? '応答確認'} · ジャイロ方位 ${format(y?.gyro_heading_deg)}° · 旋回速度 ${format(y?.cycle_yaw_rate_dps)}°/s · ＋側目標 ${format(y?.target_plus_deg,2)}° / −側目標 ${format(y?.target_minus_deg,2)}° · yaw自動補正は休止`;
+    }
   }
   $('mekf-axes').textContent = s.mekf?.valid && s.mekf.fresh
     ? `前後 roll ${format(s.mekf.roll_deg)}° · 左右 pitch ${format(s.mekf.pitch_deg)}°`

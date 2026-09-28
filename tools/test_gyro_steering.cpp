@@ -73,5 +73,47 @@ int main() {
   c.peak(1,10,2,13500,false,false);
   c.peak(-1,10,2,18000,false,false); // missing cycle: reacquire, hold correction
   assert(c.state().cycles==1 && c.state().delta_deg==0);
+  // The ordinary-run response check is a prescribed input, independent of
+  // measured yaw / asymmetry. Reverse its order across consecutive runs.
+  for (uint16_t run : {uint16_t(1),uint16_t(2),uint16_t(65535)}) {
+    Controller a,b;
+    a.reset(Mode::ResponseCheck,run);b.reset(Mode::ResponseCheck,run);
+    a.peak(-1,10,0,0,false,false);b.peak(-1,11,0,0,false,false);
+    float previous=0;
+    const float sign=responseFirstSign(run);
+    for(unsigned cycle=1;cycle<=30;++cycle) {
+      const uint32_t ms=cycle*1000;
+      a.peak(1,10,3*cycle-1.5f,ms-500,true,true);
+      b.peak(1,9,-4.f*cycle+2.f,ms-500,false,false);
+      a.peak(-1,10,3*cycle,ms,true,true);
+      b.peak(-1,11,-4.f*cycle,ms,false,false);
+      const float d=a.state().delta_deg;
+      assert(d==b.state().delta_deg);
+      assert(fabsf(d)<=.2f && fabsf(d-previous)<=.080001f);
+      assert(std::isnan(a.state().desired_difference_deg));
+      for(float mean : {8.f,10.f,12.f})
+        assert(fabsf((a.target(mean,1)+a.target(mean,-1))/2-mean)<1e-6f);
+      if(ms<10000) assert(d==0 && a.state().reason==Reason::Settling);
+      if(ms==10000) assert(fabsf(d-.08f*sign)<1e-6f);
+      if(ms>=12000 && ms<18000) assert(fabsf(d-.2f*sign)<1e-6f);
+      if(ms==18000) assert(fabsf(d-.12f*sign)<1e-6f);
+      if(ms>=22000 && ms<26000) assert(fabsf(d+.2f*sign)<1e-6f);
+      if(ms>=28000) assert(d==0 && a.state().reason==Reason::ResponseReturn);
+      if(ms>=10000 && ms<26000) {
+        const auto positive=ms<18000 ? sign>0 : sign<0;
+        assert(a.state().reason==(positive?Reason::ResponsePositive:Reason::ResponseNegative));
+      }
+      previous=d;
+    }
+  }
+  Controller probe;probe.reset(Mode::ResponseCheck,1);
+  probe.peak(-1,10,0,11000,false,false);
+  probe.peak(1,10,1,11500,false,false);probe.peak(-1,10,2,12000,false,false);
+  const float before_fault=probe.state().delta_deg;
+  probe.peak(1,10,NAN,12500,false,false);probe.peak(-1,10,NAN,13000,false,false);
+  assert(probe.state().delta_deg==before_fault && probe.state().reason==Reason::Invalid);
+  probe.reset(Mode::ResponseCheck,2);
+  assert(probe.state().delta_deg==0 && probe.state().cycles==0);
+  puts("Prescribed response schedule, reversed order, yaw independence, preserved mean/slew/bounds, return and invalid-data hold PASS");
   puts("Independent 3D gyro, zero-yaw sway, wrap/gap faults, both steering signs, mean/step bounds, nonzero straight asymmetry and saturation/reversal PASS");
 }
