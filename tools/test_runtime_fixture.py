@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate real C++ maximum-capacity serialization and corrupted-file handling."""
 from pathlib import Path
-import csv, json, struct, tempfile
+import csv, json, struct, tempfile, shutil, subprocess, sys
 import convert_rwlog_to_csv as converter
 work=json.loads(Path('/tmp/control-work-fixture.json').read_text())
 assert work['pulse_on']['log_row']==dict(count=1,max_us=251,sum_us=251,mean_us=251)
@@ -118,6 +118,10 @@ assert metadata['foot_frames'][1]['right_reason'] == 'low_contrast'
 assert metadata['foot_frames'][1]['right_deg'] is None
 with tempfile.TemporaryDirectory() as tmp:
     output = Path(tmp)/'converted'
+    # The converter remains usable as one downloaded Python file.
+    standalone=Path(tmp)/'standalone_converter.py'
+    shutil.copyfile('tools/convert_rwlog_to_csv.py', standalone)
+    subprocess.run([sys.executable,str(standalone),str(source),'--out',str(Path(tmp)/'standalone')],check=True)
     converter.convert(source, output)
     with (output/'timeseries.csv').open() as stream:
         samples=list(csv.DictReader(stream))
