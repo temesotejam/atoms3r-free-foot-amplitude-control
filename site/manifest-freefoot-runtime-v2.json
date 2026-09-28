@@ -1,6 +1,6 @@
 {
   "name": "AtomS3R Free-foot Runtime V2",
-  "version": "0.47.27-magnetometer-observation",
+  "version": "0.47.28-gyro-steering",
   "builds": [
     {
       "chipFamily": "ESP32-S3",

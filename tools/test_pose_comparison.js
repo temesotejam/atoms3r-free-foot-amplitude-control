@@ -38,22 +38,23 @@ assert.throws(()=>P.compare(base,base),/条件/);
 const range=series(-20,20,20000000);range[1].right_in_range=false;
 assert(P.compare(base,P.summarize(range)).flags.includes('outside_range'));
 const rotated=series(-20,20,20000000);rotated.forEach(m=>m.mekf.quaternion=qFromEuler(-20,3,8));
-assert.deepStrictEqual(P.compare(base,P.summarize(rotated)).flags,['yaw_changed','sideways_changed']);
+assert.deepStrictEqual(P.compare(base,P.summarize(rotated)).flags,['sideways_changed']);
 // Yaw wrapping and the two equivalent quaternion signs cannot become a 360-degree motion.
 const wrap=series();wrap.forEach((m,i)=>m.mekf.quaternion=qFromEuler(0,0,i%2?179.8:-179.8));
-assert(P.summarize(wrap).spread.yaw_deg<.5);
+assert(!('yaw_deg' in P.summarize(wrap)));
+assert(Math.abs(P.summarize(wrap).roll_deg)<1e-9);
 const sign=series();sign[2].mekf.quaternion={w:-1,x:0,y:0,z:0};assert.strictEqual(P.summarize(sign).roll_deg,0);
 const drift=series();drift.forEach((m,i)=>m.mekf.quaternion=qFromEuler(0,0,i*.7));
-const driftBase=P.summarize(drift,true);assert(driftBase.spread.yaw_deg>2.7);
-assert(P.compare(driftBase,pose).flags.includes('yaw_unstable')); // Keep stationary heading-drift evidence.
+const driftBase=P.summarize(drift,true);assert(!('yaw_deg' in driftBase));
+assert(P.compare(driftBase,pose).planar_check); // Heading does not enter tilt validation.
 // Actual 0.47.5 endpoint values; no claim these supplied files were multi-frame holds.
 const b={...base,...P.orientation({w:.999103,x:.016590,y:.004115,z:-.038735}),right_deg:-.0884,left_deg:-.0062};
 const p={...pose,...P.orientation({w:.986237,x:-.161376,y:.002497,z:.035901}),right_deg:21.5289,left_deg:21.0602};
 const observed=P.compare(b,p);
 assert(Math.abs(observed.right_residual_deg-1.183247)<.001);
 assert(Math.abs(observed.left_residual_deg-.632347)<.001);
-assert(observed.flags.includes('yaw_changed'));
-console.log('Static-pose geometry, observed endpoints, movement/stale/reboot/zero/duplicate rejection and yaw flags PASS');
+assert(!('yaw_deg' in observed.delta));
+console.log('Static-pose geometry, observed endpoints, movement/stale/reboot/zero/duplicate rejection with heading excluded PASS');
 
 // Exercise the real browser capture: failed samples/CRC/cancel never replace a
 // saved baseline; all five metadata samples and the final image stay matched.

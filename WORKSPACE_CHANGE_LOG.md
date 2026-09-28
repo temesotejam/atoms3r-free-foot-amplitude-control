@@ -1,3 +1,12 @@
+## 2026-09-28 — 0.47.28 gyro steering / compact RWLOG
+
+- User authorized cycle-yaw plus measured sway-asymmetry feedback and removal of unused MEKF yaw/magnetic logs.
+- Added independent fixed-startup-bias quaternion gyro heading. Retained MEKF sway estimation and actuator limits.
+- Symmetric target correction starts after 10s; bounded ±1°, at most 0.08° per cycle, target latched until peak response.
+- RWLOG v53 is 112 bytes/sample; lossless column tables for foot/events; removed inactive metadata and magnetic observation additions.
+- Preserved historical converters, actual-current/timing diagnostics, foot precision and normal offline HTTP workflow.
+- Frozen stable repositories were not changed. Physical steering and deadline validation require the next normal run.
+
 ﻿
 ## 2026-09-03 14:15:00 +09:00 | started
 

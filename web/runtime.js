@@ -74,8 +74,8 @@ function renderOffline() {
   for (const id of ['pitch', 'current', 'right', 'left', 'fps']) $(id).textContent = '—';
   $('guide').textContent = '本体で制御・観測・記録を行います。開始5秒＋測定30秒＋終了5秒が予定時間です。前後90°以上の傾斜でSTOPします。横倒しは姿勢STOPの対象にしません。表示時間はPC側の目安で、実際の進行・終了を確認した値ではありません。';
   $('foot-status').textContent = '足角度の画面更新を停止。本体内の記録は継続します。';
-  if ($('magnetic-status')) $('magnetic-status').textContent = '運転中の地磁気はログに記録しています。';
   $('mekf-axes').textContent = '運転中の姿勢表示を停止しています。';
+  if ($('steering-status')) $('steering-status').textContent = '旋回補正と記録を本体で継続しています。';
   controls();
 }
 const format = (n, digits = 2) => Number.isFinite(n) ? n.toFixed(digits) : '—';
@@ -145,14 +145,14 @@ function render(s) {
   else $('guide').textContent = s.ready ? '直立姿勢を保ち、測定を開始してください。' : 'IMUの初期化・静止確認を待っています。';
   $('diagnostic-view').textContent = JSON.stringify(s, null, 2);
   if ($('usb-diag')) $('usb-diag').checked = s.usb_diagnostics === true;
-  if ($('magnetic-status')) {
-    const m = s.magnetic;
-    $('magnetic-status').textContent = !m?.factory_ok ? '地磁気：補正値を取得できません。診断JSONを保存してください。'
-      : !m.fresh || !m.valid ? '地磁気：有効な測定値を待っています。'
-      : `地磁気 X ${format(m.body_uT?.[0], 1)} / Y ${format(m.body_uT?.[1], 1)} / Z ${format(m.body_uT?.[2], 1)} µT · 強さ ${format(m.norm_uT, 1)} µT（観測用）`;
+  if ($('steering-status')) {
+    const y=s.steering;
+    $('steering-status').textContent = y?.gyro_valid
+      ? `ジャイロ方位 ${format(y.gyro_heading_deg)}° · 旋回速度 ${format(y.cycle_yaw_rate_dps)}°/s · 目標 ${format(y.target_plus_deg,2)}° / ${format(y.target_minus_deg,2)}°`
+      : y?.reason === 3 ? 'ジャイロ異常のため旋回補正を保持しました。' : '測定開始10秒後から旋回を補正します。';
   }
   $('mekf-axes').textContent = s.mekf?.valid && s.mekf.fresh
-    ? `前後 roll ${format(s.mekf.roll_deg)}° · 左右 pitch ${format(s.mekf.pitch_deg)}° · yaw ${format(s.mekf.yaw_deg)}°`
+    ? `前後 roll ${format(s.mekf.roll_deg)}° · 左右 pitch ${format(s.mekf.pitch_deg)}°`
     : 'MEKFの更新を待っています。';
   drawMarkers(f); controls();
 }
@@ -293,6 +293,15 @@ function saveBlob(blob, name) {
   const url = URL.createObjectURL(blob), a = document.createElement('a');
   a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
+function expandFootTable(value) {
+  if (value == null || Array.isArray(value)) return value;
+  const {fields, rows} = value;
+  if (!Array.isArray(fields) || !fields.every(f => typeof f === 'string') ||
+      new Set(fields).size !== fields.length || !Array.isArray(rows) ||
+      rows.some(row => !Array.isArray(row) || row.length !== fields.length))
+    throw new Error('足角度テーブルの形式が不正です');
+  return rows.map(row => Object.fromEntries(fields.map((field,i) => [field,row[i]])));
+}
 async function download() {
   transferRunning = true; cancelTransfer = false; controls();
   try {
@@ -333,7 +342,7 @@ async function download() {
     const headerSize = v.getUint16(10, true), metadataLength = v.getUint32(24, true);
     if (headerSize !== 110 || metadataLength > file.length - headerSize - 4) throw new Error('RWLOGヘッダー不一致');
     const metadata = JSON.parse(new TextDecoder().decode(file.subarray(headerSize, headerSize + metadataLength)));
-    completedFoot = metadata.foot_frames ?? null; completedFile = file; completedName = m.filename;
+    completedFoot = expandFootTable(metadata.foot_frames ?? null); completedFile = file; completedName = m.filename;
     saveBlob(new Blob([file], {type: 'application/octet-stream'}), m.filename);
     $('transfer').textContent = `CRC検証完了 · ${m.bytes} bytes · 足角度 ${completedFoot?.length ?? 0}行`;
   } catch (error) {
@@ -423,11 +432,11 @@ function renderPoses() {
   const rows = [{label:'直立基準',comparison:null},...poseSession.poses];
   for (const [i,row] of rows.entries()) {
     const c = row.comparison, tr = document.createElement('tr');
-    const notes = {yaw_changed:'yaw変化大',yaw_unstable:'静止中のyaw変化',sideways_changed:'左右傾斜あり',outside_range:'設定範囲外',large_tilt:'傾斜大'};
+    const notes = {sideways_changed:'左右傾斜あり',outside_range:'設定範囲外',large_tilt:'傾斜大'};
     for (const value of [row.label || `姿勢 ${i}`,
-      ...[c?.delta.roll_deg,c?.right_residual_deg,c?.left_residual_deg,c?.delta.yaw_deg].map(v => c ? format(v) + '°' : '0.00°'),
+      ...[c?.delta.roll_deg,c?.right_residual_deg,c?.left_residual_deg].map(v => c ? format(v) + '°' : '0.00°'),
       c ? (c.planar_check ? '比較用' : '参考：' + c.flags.map(f => notes[f]).join('・'))
-        : (poseSession.baseline.summary.spread.yaw_deg>PoseComparison.limits.max_yaw_spread_deg ? '基準：静止中のyaw変化' : '基準')]) {
+        : '基準']) {
       const td = document.createElement('td'); td.textContent = value; tr.appendChild(td);
     }
     tbody.appendChild(tr);

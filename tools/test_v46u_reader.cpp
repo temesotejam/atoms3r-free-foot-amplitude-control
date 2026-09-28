@@ -34,8 +34,6 @@ int main(){
     assert(updated(a,x)==legacy(b,y));assert(memcmp(&x,&y,sizeof(x))==0);
     assert(a.reads.front().first==3);assert(a.reads.size()<=3);
     assert(bmi270_timing::lastRead().failures==0);
-    assert(bmi270_timing::lastRead().aux_read==bool(k&1));
-    if(k&1) assert(memcmp(bmi270_timing::lastRead().aux,a.mem.data()+4,8)==0);
     if(k==2)assert(a.reads[1]==std::make_pair(0x12,6));
     if(k==4)assert(a.reads[1]==std::make_pair(0x0c,6));
     if(k==6)assert(a.reads[1]==std::make_pair(0x0c,12));

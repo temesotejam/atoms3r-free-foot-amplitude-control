@@ -15,8 +15,6 @@ struct LastRead {
   uint16_t data_bytes = 0;
   uint8_t ready = 0, returned = 0, failures = 0;
   bool called = false;
-  uint8_t aux[8] = {};
-  bool aux_read = false;
 };
 inline LastRead& lastRead() { static LastRead r; return r; }
 inline int16_t signed16(const uint8_t* p) {
@@ -60,7 +58,6 @@ uint8_t readRaw(Raw* data, Read read, Clock clock) {
   if (status & 0x20U) {
     trace.data_bytes += 8;
     if (read(0x04, buf, 8)) {
-      memcpy(trace.aux, buf, 8); trace.aux_read = true;
       data->mag.x = signed16(buf) >> 2;
       data->mag.y = signed16(buf + 2) >> 2;
       data->mag.z = signed16(buf + 4) & 0xfffe;

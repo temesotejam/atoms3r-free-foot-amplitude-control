@@ -67,8 +67,9 @@ g++ -std=c++17 -O2 -Wall -Wextra -Werror -Isrc tools/test_v46u_reader.cpp -o /tm
 /tmp/test_selective_reader
 python3 tools/test_deferred_comparison.py
 
-g++ -std=c++17 -O2 -Wall -Wextra -Werror -Isrc tools/test_bmm150_compensation.cpp -o /tmp/test_bmm150_compensation
-/tmp/test_bmm150_compensation
-g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o -Isrc tools/test_magnetic_observation.cpp src/log_sample_encoder.cpp src/log_quantization.cpp -o /tmp/test_magnetic_observation
-/tmp/test_magnetic_observation
 python3 tools/test_bmm150_csv.py
+
+g++ -std=c++17 -O2 -Wall -Wextra -Werror -Isrc tools/test_gyro_steering.cpp -o /tmp/test_gyro_steering
+/tmp/test_gyro_steering
+g++ -std=c++17 -O2 -Wall -Wextra -Werror -Itools/host_v46o -Isrc tools/test_compact_json_table.cpp -o /tmp/test_compact_json_table
+/tmp/test_compact_json_table

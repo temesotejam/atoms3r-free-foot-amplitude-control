@@ -1,4 +1,5 @@
 #include <cassert>
+#include "fixtures/log_sample_legacy.h"
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -6,7 +7,7 @@
 #include <limits>
 #include "../src/log_sample_encoder.h"
 
-LogSample previousLogSample04712(const ExperimentStatus&, const RollerTelemetry&,
+LegacyLogSample previousLogSample04712(const ExperimentStatus&, const RollerTelemetry&,
     uint32_t, uint32_t, uint32_t, uint32_t, const float*);
 int main() {
   uint32_t seed = 53979692;
@@ -175,13 +176,48 @@ int main() {
     const auto roller_before = roller;
     host_us = now_us + 50000;
     encodeLogSample(result, status, roller, now_us, test_ms, start_us, ceilings);
-    if (std::memcmp(&old, &result, offsetof(LogSample, mag_sample_us))) {
-      for (size_t byte = 0; byte < offsetof(LogSample, mag_sample_us); ++byte)
-        if (reinterpret_cast<const uint8_t*>(&old)[byte] !=
-            reinterpret_cast<const uint8_t*>(&result)[byte])
-          std::cerr << "case=" << i << " byte=" << byte << "\n";
-      assert(false);
-    }
+    assert(old.time_us == result.time_us);
+    assert(old.t_test_ms == result.t_test_ms);
+    assert(old.state_id == result.state_id);
+    assert(old.pulse_id == result.pulse_id);
+    assert(old.pulse_active == result.pulse_active);
+    assert(old.pulse_direction == result.pulse_direction);
+    assert(old.motor_cmd_mA == result.motor_cmd_mA);
+    assert(old.pulse_width_ms_setting == result.pulse_width_ms_setting);
+    assert(old.gyro_bias_x_cdps == result.gyro_bias_x_cdps);
+    assert(old.gyro_bias_y_cdps == result.gyro_bias_y_cdps);
+    assert(old.gyro_bias_z_cdps == result.gyro_bias_z_cdps);
+    assert(old.ax_mg == result.ax_mg);
+    assert(old.ay_mg == result.ay_mg);
+    assert(old.az_mg == result.az_mg);
+    assert(old.gx_cdps == result.gx_cdps);
+    assert(old.gy_cdps == result.gy_cdps);
+    assert(old.gz_cdps == result.gz_cdps);
+    assert(old.acc_norm_mg == result.acc_norm_mg);
+    assert(old.roller_actual_current_mA == result.roller_actual_current_mA);
+    assert(old.roller_battery_mV == result.roller_battery_mV);
+    assert(old.led_state == result.led_state);
+    assert(old.sync_event_id == result.sync_event_id);
+    assert(old.physical_roll_abs_cdeg == result.physical_roll_abs_cdeg);
+    assert(old.roller_current_sample_time_us == result.roller_current_sample_time_us);
+    assert(old.roller_current_sequence == result.roller_current_sequence);
+    assert(old.roller_q_meas_observed_mAms == result.roller_q_meas_observed_mAms);
+    assert(old.pulse_q_target_mAms == result.pulse_q_target_mAms);
+    assert(old.pulse_q_pred_mAms == result.pulse_q_pred_mAms);
+    assert(old.roller_current_valid == result.roller_current_valid);
+    assert(old.roller_q_meas_observed_valid == result.roller_q_meas_observed_valid);
+    assert(old.pitch_mekf_abs_cdeg == result.pitch_mekf_abs_cdeg);
+    assert(old.pitch_mekf_measurement_relative_cdeg == result.pitch_mekf_measurement_relative_cdeg);
+    assert(old.pitch_mekf_detector_relative_cdeg == result.pitch_mekf_detector_relative_cdeg);
+    assert(old.mekf_bias_x_cdps == result.mekf_bias_x_cdps);
+    assert(old.mekf_bias_y_cdps == result.mekf_bias_y_cdps);
+    assert(old.mekf_bias_z_cdps == result.mekf_bias_z_cdps);
+    assert(old.mekf_accel_confidence_x10000 == result.mekf_accel_confidence_x10000);
+    assert(old.mekf_accel_residual_cdeg == result.mekf_accel_residual_cdeg);
+    assert(old.mekf_accel_mag_error_mg == result.mekf_accel_mag_error_mg);
+    assert(old.imu_update_dt_us == result.imu_update_dt_us);
+    assert(old.imu_sample_age_us == result.imu_sample_age_us);
+    assert(old.mekf_accel_used == result.mekf_accel_used);
     // Compare encoded fields again after encoding to avoid padding comparisons.
     const auto untouched_status = previousLogSample04712(status, roller_before,
         now_us, now_ms, start_us, start_ms, ceilings);
@@ -192,5 +228,5 @@ int main() {
     ++checked;
   }
   std::cout << "Packed RWLOG rows equal frozen 0.47.12: " << checked
-            << " cases, all 258 bytes; states/sync/wrap/nonfinite/saturation preserved PASS\n";
+            << " cases, all retained fields; states/sync/wrap/nonfinite/saturation preserved PASS\n";
 }

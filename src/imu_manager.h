@@ -12,11 +12,9 @@
 #include "imu_startup_boundary.h"
 #include "imu_poll_profile.h"
 #include "realtime_code.h"
-#include "bmm150_observation.h"
 
 struct ImuReading {
   bool imu_ok = false;
-  bmm150_observation::RawReading magnetic;
   // Legacy API fields; ExperimentRunner owns the attitude estimators.
   float pitch_deg = 0.0f;
   float pitch_fixed_beta_deg = 0.0f;
@@ -110,7 +108,6 @@ class ImuManager {
 
   // After begin(), the producer exclusively owns capture_ and M5.Imu.
   // The permanent control task exclusively owns reading_, beta context and last_error_.
-  bmm150_observation::Trim magnetic_trim_; // immutable after startup
   ImuReading reading_;
   ImuReading capture_;
   bool imu_present_ = false;

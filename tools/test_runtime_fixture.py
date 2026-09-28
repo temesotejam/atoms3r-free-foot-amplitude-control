@@ -19,7 +19,8 @@ assert diagnostics['invalid']['roll_deg'] is None and diagnostics['invalid']['qu
 for axis, attitude in enumerate(diagnostics['axes']):
     assert attitude['valid'] and attitude['fresh'] and attitude['age_us'] == 2500
     assert attitude['sample_us'] == 1000000
-    for index, key in enumerate(('roll_deg','pitch_deg','yaw_deg')):
+    assert 'yaw_deg' not in attitude
+    for index, key in enumerate(('roll_deg','pitch_deg')):
         assert abs(attitude[key] - (20 if axis == index else 0)) < 0.001
     assert attitude['estimate'] == 'posterior' and attitude['euler_order'] == 'ZYX'
 assert diagnostics['stale']['valid'] and not diagnostics['stale']['fresh']
@@ -66,10 +67,10 @@ for side in ('right','left'):
 source = Path('/tmp/runtime-fixture.rwlog')
 data = source.read_bytes()
 header = converter.parse_header(data)
-metadata = json.loads(data[110:110+header['metadata_json_size']], parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
+metadata = converter.expand_tables(json.loads(data[110:110+header['metadata_json_size']], parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value))))
 assert metadata['metadata_json_final_bytes'] == header['metadata_json_size']
 assert not metadata['metadata_event_detail_truncated']
-assert metadata['firmware_revision']=='0.47.27-magnetometer-observation'
+assert metadata['firmware_revision']=='0.47.28-gyro-steering'
 latency=metadata['control_latency']
 assert latency['revision']=='control_latency_04724'
 details=latency['overrun_detail']
@@ -118,6 +119,16 @@ assert metadata['foot_frames'][1]['right_deg'] is None
 with tempfile.TemporaryDirectory() as tmp:
     output = Path(tmp)/'converted'
     converter.convert(source, output)
+    with (output/'timeseries.csv').open() as stream:
+        samples=list(csv.DictReader(stream))
+    assert float(samples[0]['gyro_heading_deg']) == 721.23
+    assert float(samples[0]['steering_delta_deg']) == .25
+    assert float(samples[0]['steering_actual_difference_deg']) == -1
+    assert samples[0]['gyro_heading_valid'] == '1'
+    assert metadata['steering']['delta_limit_deg'] == 1
+    assert metadata['steering']['delta_step_limit_deg_per_cycle'] == .08
+    assert header['metadata_json_size'] < metadata['metadata_json_budget_bytes']*.8
+
     assert len((output/'foot_angles.csv').read_text().splitlines()) == 769
     with (output/'foot_angles.csv').open() as stream:
         rows=list(csv.DictReader(stream))
@@ -140,4 +151,6 @@ with tempfile.TemporaryDirectory() as tmp:
         assert 'CRC' in str(error)
 print('maximum RWLOG JSON, complete event/foot counts, CSV and corrupt-file refusal PASS')
 
-assert metadata["columns"]["timeseries"][-len(converter.MAG_COLUMNS_V52):] == converter.MAG_COLUMNS_V52
+assert metadata["columns"]["timeseries"] == converter.CSV_COLUMNS_V53
+assert header["format_version"] == 53 and header["log_sample_size"] == 112
+assert "magnetometer" not in metadata

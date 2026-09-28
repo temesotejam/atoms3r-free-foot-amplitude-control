@@ -69,6 +69,8 @@ int main(int argc,char** argv){
   assert(PsramLogger::eventStorageBytes()==190144);
   logger.startRun(1,123456,300,100,1000,false,0,800,0,false,NAN,false,0,false,true);
   LogSample row{};row.motor_cmd_mA=300;row.roller_actual_current_mA=270;
+  row.gyro_heading_cdeg=72123;row.steering_delta_cdeg=25;
+  row.steering_actual_difference_cdeg=-100;row.gyro_heading_valid=1;row.steering_cycles=30;
   assert(logger.addSample(row));assert(!logger.rwlogDownloadable());
   for(unsigned i=0;i<256;++i){
     PsramLogger::EnergyControlAutonomousPeakEvent p{};p.peak_amplitude_deg=8;

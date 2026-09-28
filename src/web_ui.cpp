@@ -1,4 +1,3 @@
-#include "magnetic_observation_json.h"
 #include "web_ui.h"
 #include "config.h"
 #include "runtime_web.h"
@@ -177,7 +176,15 @@ void WebUi::status() {
   json += ",\"remaining_ms\":" + String(s.remaining_ms) + ",\"elapsed_ms\":" + String(s.measure_elapsed_ms);
   json += ",\"pitch_deg\":" + num(s.pitch_deg) + ",\"rate_dps\":" + num(s.rate_dps);
   json += ",\"mekf\":" + mekfAttitudeJson(s.mekf_attitude, micros(), s.imu_ok);
-  json += ",\"magnetic\":" + magneticObservationJson(s.magnetic, micros());
+  json += ",\"steering\":{\"gyro_heading_deg\":" + num(s.steering.yaw_deg);
+  json += ",\"gyro_valid\":" + String(s.steering.gyro_valid ? "true" : "false");
+  json += ",\"delta_deg\":" + num(s.steering.delta_deg);
+  json += ",\"target_plus_deg\":" + num(s.target_deg + s.steering.delta_deg);
+  json += ",\"target_minus_deg\":" + num(s.target_deg - s.steering.delta_deg);
+  json += ",\"actual_difference_deg\":" + num(s.steering.actual_difference_deg);
+  json += ",\"cycle_yaw_rate_dps\":" + num(s.steering.cycle_yaw_rate_dps);
+  json += ",\"cycles\":" + String(s.steering.cycles);
+  json += ",\"reason\":" + String(static_cast<uint8_t>(s.steering.reason)) + "}";
   json += ",\"target_deg\":" + num(s.target_deg);
   json += ",\"motor_mA\":" + String(s.motor_cmd_mA) + ",\"actual_mA\":" + String(s.actual_current_mA);
   json += ",\"battery_mV\":" + String(s.battery_mV);

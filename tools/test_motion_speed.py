@@ -38,8 +38,9 @@ cpp=r'''
 #include "experiment_runner.h"
 #undef private
 static unsigned commands=0,stops=0,zero_events=0,peak_events=0,outputs=0,rejected=0;
-static bool roller_ok=true,write_ok=true;
-template<class T> void emit(const T& v){assert(std::fwrite(&v,sizeof(v),1,stdout)==1);}
+static bool roller_ok=true,write_ok=true,quiet=false;
+static PsramLogger::EnergyControlAutonomousPeakEvent last_peak;
+template<class T> void emit(const T& v){if(quiet)return;assert(std::fwrite(&v,sizeof(v),1,stdout)==1);}
 void emit(float v){uint32_t b;if(std::isnan(v))b=0x7fc00000U;else std::memcpy(&b,&v,4);emit(b);}
 '''
 for name in ['EnergyControlAutonomousPeakEvent','EnergyControlAutonomousZeroCrossEvent','TimingProbeEvent']:
@@ -53,7 +54,7 @@ RollerTelemetry Roller485Manager::telemetrySnapshot()const{
   RollerTelemetry t;t.battery_mV=7660;t.actual_current_mA=12;t.speed_rpm=-12.5f;
   t.current_valid=t.speed_valid=true;t.current_sample_time_us=host_us-700;t.speed_sample_time_us=host_us-1200;return t;
 }
-void PsramLogger::addEnergyControlAutonomousPeakEvent(const EnergyControlAutonomousPeakEvent& e){++peak_events;emit(e);}
+void PsramLogger::addEnergyControlAutonomousPeakEvent(const EnergyControlAutonomousPeakEvent& e){++peak_events;last_peak=e;emit(e);}
 void PsramLogger::addEnergyControlAutonomousZeroCrossEvent(const EnergyControlAutonomousZeroCrossEvent& e){++zero_events;outputs+=e.output_executed;rejected+=!e.valid;emit(e);}
 void PsramLogger::addTimingProbeEvent(const TimingProbeEvent& e){emit(e);}
 void ExperimentRunner::requestEmergencyStop(const char*){status_.emergency_stop=true;stopMotor();}
@@ -139,6 +140,40 @@ int main(){
   r.maybeFinalizeTimingProbe();
  }
  assert(outputs>100 && rejected>100 && peak_events>10 && commands>100 && stops>100);
+#ifdef STEERING_INTEGRATION
+ quiet=true;
+ ExperimentRunner steered;setup(steered,log,imu,roller);roller_ok=write_ok=true;
+ steered.energy_control_autonomous_target_peak_deg_=10;
+ // Establish nonzero steering through the actual cycle controller.
+ for(unsigned i=0;i<20;++i){
+   steered.steering_.peak(1,9,float(i)*2,i*1000+500,false,false);
+   steered.steering_.peak(-1,11,float(i)*2+1,i*1000+1000,false,false);
+ }
+ assert(steered.steering_.state().delta_deg>0);
+ steered.energy_control_autonomous_last_peak_valid_=true;
+ steered.energy_control_autonomous_last_peak_amplitude_deg_=10;
+ steered.energy_control_autonomous_last_peak_side_=-1;
+ steered.energy_control_autonomous_last_peak_ms_=12500;
+ steered.energy_control_autonomous_last_accepted_zero_cross_valid_=false;
+ steered.energy_control_autonomous_zero_cross_consumed_for_peak_=false;
+ steered.energy_control_autonomous_phase_=Phase::ENERGY_CONTROL;
+ steered.energy_control_autonomous_half_cycle_state_=Half::WAIT_ZERO_CROSS;
+ steered.updateEnergyControlAutonomousAtZeroCross(13000,60,-.1f,.1f,.5f,13000.f);
+ assert(steered.energy_control_autonomous_pending_peak_);
+ const float chosen=steered.steering_pending_target_deg_;
+ assert(chosen>10 && chosen<=11);
+ assert(steered.status_.pulse_width_ms_setting<=100);
+ // A later outer update cannot reinterpret the target of an issued command.
+ steered.steering_.reset();
+ steered.status_.pulse_active=false;
+ steered.energy_control_autonomous_phase_=Phase::ENERGY_CONTROL;
+ steered.energy_control_autonomous_half_cycle_state_=Half::WAIT_PEAK;
+ assert(steered.recordEnergyControlAutonomousPeak(13500,1,9,9));
+ assert(last_peak.pending_command_matched && last_peak.target_peak_deg==chosen);
+ assert(last_peak.peak_error_deg==chosen-9);
+ std::fprintf(stderr,"Production steering target -> bounded pulse -> latched response error PASS\n");
+#endif
+
  std::fprintf(stderr,"20000 decision states + 32000 sequential samples; outputs=%u rejected=%u peaks=%u\n",outputs,rejected,peak_events);
 }
 '''
@@ -158,6 +193,7 @@ with tempfile.TemporaryDirectory(prefix='motion-speed-') as tmp:
                  '-I'+str(p),'-I'+str(ROOT/'tools/host_v46o'),'-I'+str(ROOT/'src'),str(p/'test.cpp'),
                  str(ROOT/'src/mekf6.cpp'),str(ROOT/'src/control_latency.cpp'),
                  str(ROOT/'tools/fixtures/adafruit_ahrs_2_4_0/Adafruit_AHRS_Madgwick.cpp'),
+                 *(['-DSTEERING_INTEGRATION=1'] if mode!='reference' else []),
                  '-o',str(p/'test')]
         subprocess.run(command,check=True)
         results.append(subprocess.check_output([str(p/'test')]))

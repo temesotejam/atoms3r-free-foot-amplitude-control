@@ -1,3 +1,4 @@
+#include "compact_json_table.h"
 #include "foot_observer.h"
 #include "foot_range_diagnostics.h"
 #include "foot_calibration_diagnostics.h"
@@ -201,11 +202,12 @@ void FootObserver::appendMetadata(PsramString& json) const {
   json += ",\"left_deg_per_px\":" + String(appcfg::kFootAngleBDegPerPx, 9) + ",";
   json += "\"right_support_x\":[" + number(appcfg::kFootAngleAMinCalXPx) + "," + number(appcfg::kFootAngleAMaxCalXPx) + "]";
   json += ",\"left_support_x\":[" + number(appcfg::kFootAngleBMinCalXPx) + "," + number(appcfg::kFootAngleBMaxCalXPx) + "]";
-  json += ",\"range\":" + footRangeDiagnosticsJson() + "},\"foot_frames\":[";
+  json += ",\"range\":" + footRangeDiagnosticsJson() + "},\"foot_frames\":";
+  CompactJsonTable<PsramString> table(json);
   for (uint32_t i = 0; i < s.count; ++i) {
     // Recording is sealed before export begins and clear/start are excluded.
     const auto& f = frames_[i];
-    if (i) json += ",";
+    String row;
     char buf[480];
     snprintf(buf, sizeof(buf),
         "{\"sequence\":%lu,\"run_id\":%u,\"frame_us\":%llu,\"delivered_us\":%llu,"
@@ -219,18 +221,19 @@ void FootObserver::appendMetadata(PsramString& json) const {
         f.timestamp_valid ? "true" : "false", f.frame_valid ? "true" : "false", f.zero_ready ? "true" : "false",
         f.right_valid ? "true" : "false", f.left_valid ? "true" : "false",
         f.right_in_range ? "true" : "false", f.left_in_range ? "true" : "false");
-    json += buf;
-    json += ",\"right_x\":" + number(f.right_x) + ",\"left_x\":" + number(f.left_x);
-    json += ",\"right_deg\":" + number(f.right_deg) + ",\"left_deg\":" + number(f.left_deg);
-    json += ",\"right_contrast\":" + number(f.right_contrast) + ",\"left_contrast\":" + number(f.left_contrast);
-    json += ",\"right_scan_y\":" + number(f.right_scan_y) + ",\"left_scan_y\":" + number(f.left_scan_y);
-    json += ",\"right_weight\":" + number(f.right_weight) + ",\"left_weight\":" + number(f.left_weight);
-    json += ",\"right_reason\":\"" + String(markerDetectionReasonName(f.right_reason)) + "\"";
-    json += ",\"left_reason\":\"" + String(markerDetectionReasonName(f.left_reason)) + "\"";
-    json += ",\"right_templates\":" + String(f.right_templates) + ",\"left_templates\":" + String(f.left_templates);
-    json += ",\"right_candidates\":" + String(f.right_candidates) + ",\"left_candidates\":" + String(f.left_candidates);
-    json += ",\"right_ambiguity\":" + number(f.right_ambiguity) + ",\"left_ambiguity\":" + number(f.left_ambiguity);
-    json += ",\"zero_reason\":\"" + String(footZeroReasonName(f.zero_reason)) + "\"}";
+    row += buf;
+    row += ",\"right_x\":" + number(f.right_x) + ",\"left_x\":" + number(f.left_x);
+    row += ",\"right_deg\":" + number(f.right_deg) + ",\"left_deg\":" + number(f.left_deg);
+    row += ",\"right_contrast\":" + number(f.right_contrast) + ",\"left_contrast\":" + number(f.left_contrast);
+    row += ",\"right_scan_y\":" + number(f.right_scan_y) + ",\"left_scan_y\":" + number(f.left_scan_y);
+    row += ",\"right_weight\":" + number(f.right_weight) + ",\"left_weight\":" + number(f.left_weight);
+    row += ",\"right_reason\":\"" + String(markerDetectionReasonName(f.right_reason)) + "\"";
+    row += ",\"left_reason\":\"" + String(markerDetectionReasonName(f.left_reason)) + "\"";
+    row += ",\"right_templates\":" + String(f.right_templates) + ",\"left_templates\":" + String(f.left_templates);
+    row += ",\"right_candidates\":" + String(f.right_candidates) + ",\"left_candidates\":" + String(f.left_candidates);
+    row += ",\"right_ambiguity\":" + number(f.right_ambiguity) + ",\"left_ambiguity\":" + number(f.left_ambiguity);
+    row += ",\"zero_reason\":\"" + String(footZeroReasonName(f.zero_reason)) + "\"}";
+    if (!table.append(row)) { json.fail(); return; }
   }
-  json += "]";
+  if (!table.finish()) json.fail();
 }

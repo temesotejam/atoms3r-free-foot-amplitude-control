@@ -4,7 +4,7 @@ const PoseComparison = (() => {
   const limits = Object.freeze({samples:5, interval_ms:800, min_span_us:2500000,
     max_span_us:12000000, max_age_ms:300, max_sensor_age_us:300000,
     max_gyro_dps:2, max_accel_error_g:0.08, max_tilt_spread_deg:0.8,
-    max_yaw_spread_deg:1.5, max_marker_spread_px:3, max_poses:12, max_trace:600});
+    max_marker_spread_px:3, max_poses:12, max_trace:600});
   const wrap = x => ((x + 180) % 360 + 360) % 360 - 180;
   const mean = a => a.reduce((s,x) => s + x, 0) / a.length;
   const vector = v => Array.isArray(v) && v.length === 3 && v.every(Number.isFinite);
@@ -16,8 +16,7 @@ const PoseComparison = (() => {
     const up = [2*(x*z-w*y), 2*(y*z+w*x), 1-2*(x*x+y*y)];
     const deg = 180 / Math.PI;
     return {roll_deg:Math.atan2(up[1],up[2])*deg,
-      pitch_deg:Math.atan2(-up[0],Math.hypot(up[1],up[2]))*deg,
-      yaw_deg:Math.atan2(2*(w*z+x*y),1-2*(y*y+z*z))*deg};
+      pitch_deg:Math.atan2(-up[0],Math.hypot(up[1],up[2]))*deg};
   }
   function sameSession(a,b) {
     return a.boot_id === b.boot_id && a.run_id === b.run_id && a.revision === b.revision &&
@@ -65,15 +64,13 @@ const PoseComparison = (() => {
       right_in_range:frames.every(m => m.right_in_range === true),
       left_in_range:frames.every(m => m.left_in_range === true), spread:{}};
     for (const [key,values,maxSpread] of [
-      ...['roll_deg','pitch_deg','yaw_deg'].map(key => [key,
+      ...['roll_deg','pitch_deg'].map(key => [key,
         angles.map(a => angles[0][key] + wrap(a[key]-angles[0][key])),
-        key === 'yaw_deg' ? limits.max_yaw_spread_deg : limits.max_tilt_spread_deg]),
+        limits.max_tilt_spread_deg]),
       ['right_x',frames.map(m => m.right.x),limits.max_marker_spread_px],
       ['left_x',frames.map(m => m.left.x),limits.max_marker_spread_px]]) {
       summary[key] = mean(values); summary.spread[key] = Math.max(...values) - Math.min(...values);
-      // Heading may drift even when the camera, feet and gravity tilt are still.
-      // Preserve that evidence; comparison flags it instead of blocking capture.
-      if (key !== 'yaw_deg' && summary.spread[key] > maxSpread) throw Error('姿勢または足の位置が動いています。静止させて再取得してください');
+      if ( summary.spread[key] > maxSpread) throw Error('姿勢または足の位置が動いています。静止させて再取得してください');
     }
     for (const side of ['right','left']) summary[side+'_deg'] = mean(frames.map(m => m[side+'_deg']));
     const accelRoll = frames.map(m => Math.atan2(m.mekf.inputs.accel_g[1],m.mekf.inputs.accel_g[2])*180/Math.PI);
@@ -87,11 +84,9 @@ const PoseComparison = (() => {
     if (!sameSession(base,pose) || pose.first_frame_us <= base.last_frame_us)
       throw Error('基準との取得条件が変わりました。記録を保存し、比較をやり直してください');
     const delta = {roll_deg:wrap(pose.roll_deg-base.roll_deg), pitch_deg:wrap(pose.pitch_deg-base.pitch_deg),
-      yaw_deg:wrap(pose.yaw_deg-base.yaw_deg), accel_roll_deg:wrap(pose.accel_roll_deg-base.accel_roll_deg),
+      accel_roll_deg:wrap(pose.accel_roll_deg-base.accel_roll_deg),
       right_deg:pose.right_deg-base.right_deg, left_deg:pose.left_deg-base.left_deg};
     const flags = [];
-    if (Math.abs(delta.yaw_deg)>3) flags.push('yaw_changed');
-    if (base.spread.yaw_deg>limits.max_yaw_spread_deg || pose.spread.yaw_deg>limits.max_yaw_spread_deg) flags.push('yaw_unstable');
     if (Math.abs(delta.pitch_deg)>2) flags.push('sideways_changed');
     if (!base.right_in_range || !pose.right_in_range || !base.left_in_range || !pose.left_in_range) flags.push('outside_range');
     if (Math.abs(delta.roll_deg)>30) flags.push('large_tilt');

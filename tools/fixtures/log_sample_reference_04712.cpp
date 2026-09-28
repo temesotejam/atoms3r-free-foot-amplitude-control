@@ -2,6 +2,7 @@
 // Adapted only to explicit inputs/clock/ceiling lookup and return-by-value.
 #include "../../src/log_sample_encoder.h"
 #include <cmath>
+#include "log_sample_legacy.h"
 namespace {
 // Independent pre-optimization wire conversion; ties away from zero.
 int16_t scaled(float v, float scale) {
@@ -15,11 +16,11 @@ int16_t centi(float v) { return scaled(v, 100.0f); }
 int16_t milli(float v) { return scaled(v, 1000.0f); }
 int16_t betaScaled(float v) { return scaled(v, 10000.0f); }
 }
-LogSample previousLogSample04712(const ExperimentStatus& status_,
+LegacyLogSample previousLogSample04712(const ExperimentStatus& status_,
     const RollerTelemetry& roller_telemetry, uint32_t now_us, uint32_t now_ms,
     uint32_t run_start_us_, uint32_t run_start_ms_, const float* ceilings) {
   const auto betaCeilingForStrategy = [&](uint8_t i) { return ceilings[i]; };
-  LogSample row{};
+  LegacyLogSample row{};
   row.time_us = static_cast<uint32_t>(now_us - run_start_us_);
   if (status_.sync_event_id == 2) {
     row.time_us = 0;

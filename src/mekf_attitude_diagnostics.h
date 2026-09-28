@@ -4,7 +4,7 @@
 
 // Copied by the exclusive control owner. HTTP never reads a live filter.
 // Preserve the complete unprojected posterior on every update. Only control
-// pitch is extracted here; HTTP derives roll/yaw from this copied quaternion.
+// pitch is extracted here; HTTP derives roll/pitch from this copied quaternion.
 // None of the run/display pitch zeros are subtracted.
 struct MekfAttitudeSnapshot {
   bool valid = false;
@@ -42,10 +42,8 @@ inline String mekfAttitudeJson(const MekfAttitudeSnapshot& s, uint32_t now_us, b
   json += ",\"age_us\":" + (s.valid ? String(age_us) : String("null"));
   json += ",\"estimate\":\"posterior\",\"frame\":\"mekf\",\"euler_order\":\"ZYX\"";
   json += ",\"roll_deg\":" + num(e.roll) + ",\"pitch_deg\":" + num(e.pitch);
-  json += ",\"yaw_deg\":" + num(e.yaw);
   json += ",\"quaternion\":{\"w\":" + num(s.quaternion.w) + ",\"x\":" + num(s.quaternion.x);
   json += ",\"y\":" + num(s.quaternion.y) + ",\"z\":" + num(s.quaternion.z) + "}";
-  json += ",\"yaw_reference\":\"gyro_integrated_since_filter_initialization\"";
   json += ",\"inputs\":{\"valid\":" + String(inputs_valid ? "true" : "false");
   json += ",\"frame\":\"mekf\",\"axis_order\":\"xyz\",\"accel_g\":" + vector(s.accel_g, 1.0f);
   json += ",\"gyro_dps\":" + vector(s.gyro_rad_s, mekf6::radToDeg(1.0f));

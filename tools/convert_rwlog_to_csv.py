@@ -9,6 +9,24 @@ import zlib
 from pathlib import Path
 
 
+from rwlog_v53_schema import FIELDS as FIELDS_V53
+SAMPLE_FORMAT_V53 = '<' + ''.join(f[0] for f in FIELDS_V53)
+CSV_COLUMNS_V53 = ['time_s'] + [f[1] for f in FIELDS_V53]
+
+
+def expand_tables(value):
+    """Expand v53 lossless column tables for existing analysis/CSV consumers."""
+    if isinstance(value, dict):
+        if set(value) == {'fields', 'rows'}:
+            fields, rows = value['fields'], value['rows']
+            if len(set(fields)) != len(fields) or any(len(row) != len(fields) for row in rows):
+                raise ValueError('Invalid compact table')
+            return [dict(zip(fields, map(expand_tables, row))) for row in rows]
+        return {key: expand_tables(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [expand_tables(item) for item in value]
+    return value
+
 HEADER_FORMAT = "<8sHHIQIIIIHHHHHHHHHIIIII8I"
 SAMPLE_FORMAT_V23_V24 = "<IIBIBbhhHHBBIIhHHhhH" + "h" * 21 + "BBB"
 SAMPLE_FORMAT_V25 = "<IIBIBbhhHHBBIIhHHhH" + "h" * 33 + "BBB"
@@ -299,6 +317,8 @@ CSV_COLUMNS_V33 = CSV_COLUMNS_COMMON_PREFIX + [
     "beta_phase_state", "beta_phase_progress", "beta_phase_peak_angle_deg", "beta_phase_angle_deg", "beta_phase_ceiling",
 ]
 def csv_columns_for_version(format_version: int) -> list[str]:
+    if format_version >= 53:
+        return CSV_COLUMNS_V53
     if format_version >= 52:
         return CSV_COLUMNS_V52
     if format_version >= 50:
@@ -337,6 +357,8 @@ def csv_columns_for_version(format_version: int) -> list[str]:
 
 
 def sample_format_for_version(format_version: int) -> str:
+    if format_version >= 53:
+        return SAMPLE_FORMAT_V53
     if format_version >= 52:
         return SAMPLE_FORMAT_V52
     if format_version >= 50:
@@ -770,6 +792,13 @@ def magnetic_values(aux, trim, sequence):
 
 
 def convert_sample(values, format_version: int, mag_trim=None):
+    if format_version == 53:
+        row = {}
+        for value, (fmt, name, scale) in zip(values, FIELDS_V53):
+            invalid = (fmt == 'h' and value == -32768) or (fmt == 'i' and value == -2147483648)
+            row[name] = '' if invalid else value / scale if scale != 1 else value
+        row['time_s'] = values[1] / 1000.0
+        return row
     if format_version >= 52:
         row = convert_sample_v48(values[:119])
         sample_us, sequence = values[119:121]
@@ -1095,8 +1124,8 @@ def write_foot_frames(metadata: dict, out_dir: Path) -> int:
 def convert(path: Path, out_dir: Path) -> None:
     data = path.read_bytes()
     header = parse_header(data)
-    if header["format_version"] not in (23, 24, 25, 26, 27, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52):
-        raise ValueError(f"this converter expects rwlog format v23-v27, v29-v52, got v{header['format_version']}")
+    if header["format_version"] not in (23, 24, 25, 26, 27, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53):
+        raise ValueError(f"this converter expects rwlog format v23-v27, v29-v53, got v{header['format_version']}")
     sample_format = sample_format_for_version(header["format_version"])
     if header["log_sample_size"] != struct.calcsize(sample_format):
         raise ValueError("unexpected sample size")
@@ -1113,7 +1142,7 @@ def convert(path: Path, out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     metadata_start = header["header_size"]
     metadata_end = metadata_start + header["metadata_json_size"]
-    metadata = json.loads(data[metadata_start:metadata_end].decode("utf-8"))
+    metadata = expand_tables(json.loads(data[metadata_start:metadata_end].decode("utf-8")))
     (out_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     foot_count = write_foot_frames(metadata, out_dir)
     e2_shadow_peak_count = write_e2_shadow_peaks(metadata, out_dir)
@@ -1158,7 +1187,7 @@ def convert(path: Path, out_dir: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Convert supported RWLOG v23-v52 files to CSV, including control and diagnostic metadata events.")
+    parser = argparse.ArgumentParser(description="Convert supported RWLOG v23-v53 files to CSV, including control and diagnostic metadata events.")
     parser.add_argument("rwlog", type=Path)
     parser.add_argument("--out", type=Path, default=Path("converted_dynamic_beta_hold73_tau73_compare"))
     args = parser.parse_args()

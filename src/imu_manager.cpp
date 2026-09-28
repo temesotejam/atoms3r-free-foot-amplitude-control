@@ -93,11 +93,6 @@ bool ImuManager::initializeSensorAttempt() {
       ((reading_.bmi270_acc_conf & 0x0Fu) == Config::BMI270_ACCEL_ODR_CODE) &&
       ((reading_.bmi270_gyr_conf & 0x0Fu) == Config::BMI270_GYRO_ODR_CODE);
   if (!reading_.rate_config_ok) { last_error_ = "bmi270_odr_config_failed"; return false; }
-  bool hub_restored = true;
-  bmm150_observation::readFactoryTrim(*dev, [](uint32_t ms) { delay(ms); },
-      magnetic_trim_, hub_restored);
-  if (!hub_restored) { last_error_ = "bmm150_aux_restore_failed"; return false; }
-  bmm150_observation::startupTrimStorage() = magnetic_trim_;
   reading_.imu_ok = true;
   reading_.last_update_ms = millis();
   capture_ = reading_;
@@ -285,13 +280,6 @@ void ImuManager::captureSensor() {
     prev_accel_update_us_ = sample_us;
     capture_.last_accel_update_us = sample_us;
     ++capture_.accel_sequence;
-  }
-  // The existing selective 8-byte AUX read already contains RHALL and DRDY.
-  // Count only actual BMM150 conversions, not repeated BMI270 hub snapshots.
-  if (driver.aux_read && (driver.aux[6] & 1u)) {
-    memcpy(capture_.magnetic.aux, driver.aux, 8);
-    ++capture_.magnetic.sequence;
-    capture_.magnetic.sample_us = sample_us;
   }
   if (gyro_new) {
     capture_.gx_dps = d.gyro.x; capture_.gy_dps = d.gyro.y; capture_.gz_dps = d.gyro.z;
@@ -619,7 +607,6 @@ String ImuManager::startupDiagnosticsJson() const {
   s += ",\"init_power_ctrl\":" + String(init_power_ctrl_);
   s += ",\"init_valid_accel\":" + String(init_valid_accel_);
   s += ",\"init_valid_gyro\":" + String(init_valid_gyro_);
-  s += ",\"mag_factory_trim_ok\":" + String(magnetic_trim_.valid() ? "true" : "false");
   s += ",\"imu_error\":\"" + String(last_error_) + "\"";
   s += ",\"guide_reason\":\"" + String(view.reason) + "\"";
   s += ",\"upright_confirmed\":" + String(view.confirmed ? "true" : "false");
