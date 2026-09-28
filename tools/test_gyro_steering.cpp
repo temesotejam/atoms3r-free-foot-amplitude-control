@@ -62,5 +62,16 @@ int main() {
   c.peak(-1,11,NAN,51000,false,false);
   assert(c.state().delta_deg==held && c.state().reason==Reason::Invalid);
   c.reset(); assert(c.state().delta_deg==0 && c.state().cycles==0);
+  c.peak(-1,10,0,11000,false,false);
+  c.peak(1,10,1,11500,false,false);
+  c.peak(1,10,1,11600,false,false); // duplicate positive peak invalidates this pair
+  c.peak(-1,10,2,12000,false,false);
+  assert(c.state().cycles==0 && c.state().delta_deg==0);
+  c.peak(1,10,2,12500,false,false);
+  c.peak(-1,10,2,13000,false,false);
+  assert(c.state().cycles==1 && c.state().delta_deg==0);
+  c.peak(1,10,2,13500,false,false);
+  c.peak(-1,10,2,18000,false,false); // missing cycle: reacquire, hold correction
+  assert(c.state().cycles==1 && c.state().delta_deg==0);
   puts("Independent 3D gyro, zero-yaw sway, wrap/gap faults, both steering signs, mean/step bounds, nonzero straight asymmetry and saturation/reversal PASS");
 }

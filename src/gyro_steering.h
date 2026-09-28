@@ -83,6 +83,10 @@ class Controller {
       s_.desired_difference_deg=NAN; s_.reason=Reason::Invalid; return;
     }
     if (side==1) {
+      if (boundary_ && previous_side_!= -1) {
+        boundary_=false; filtered_=false;
+        s_.desired_difference_deg=NAN; s_.reason=Reason::Invalid;
+      }
       plus_=amplitude; plus_upper_=upper; plus_lower_=lower;
       plus_ms_=ms; previous_side_=1; return;
     }
@@ -91,11 +95,15 @@ class Controller {
         uint32_t(plus_ms_-boundary_ms_)<dt_ms && dt_ms>=300 && dt_ms<=3000;
     const float rotation=yaw-boundary_yaw_;
     boundary_ms_=ms; boundary_yaw_=yaw; boundary_=true; previous_side_=-1;
-    if (!complete) { s_.reason=Reason::Waiting; return; }
+    if (!complete) {
+      filtered_=false; s_.desired_difference_deg=NAN;
+      s_.reason=Reason::Waiting; return;
+    }
     const float dt=dt_ms*.001f;
     const float rate=rotation/dt, difference=plus_-amplitude;
     if (fabsf(rate)>90 || fabsf(difference)>15) {
-      filtered_=false; s_.reason=Reason::Invalid; return;
+      filtered_=false; s_.desired_difference_deg=NAN;
+      s_.reason=Reason::Invalid; return;
     }
     ++s_.cycles;
     s_.cycle_yaw_rate_dps=filtered_?s_.cycle_yaw_rate_dps+kSmooth*(rate-s_.cycle_yaw_rate_dps):rate;
