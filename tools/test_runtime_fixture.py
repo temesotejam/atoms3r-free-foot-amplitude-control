@@ -139,3 +139,5 @@ with tempfile.TemporaryDirectory() as tmp:
     except ValueError as error:
         assert 'CRC' in str(error)
 print('maximum RWLOG JSON, complete event/foot counts, CSV and corrupt-file refusal PASS')
+
+assert metadata["columns"]["timeseries"][-len(converter.MAG_COLUMNS_V52):] == converter.MAG_COLUMNS_V52

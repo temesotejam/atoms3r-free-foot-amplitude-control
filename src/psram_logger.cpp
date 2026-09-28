@@ -1702,7 +1702,7 @@ PsramString PsramLogger::buildMetadataJson() const {
   json += "\"pitch_mekf_start_sync_relative_deg\",\"pitch_mekf_measurement_relative_deg\",\"pitch_mekf_trial_relative_deg\",";
   json += "\"mekf_start_sync_zero_abs_deg\",\"mekf_measurement_zero_abs_deg\",\"mekf_trial_zero_abs_deg\",";
   json += "\"mekf_start_sync_zero_sample_us\",\"mekf_measurement_zero_sample_us\",\"mekf_trial_zero_sample_us\",";
-  json += "\"pitch_mekf_detector_relative_deg\",\"mekf_detector_zero_predicted_abs_deg\",\"mekf_detector_zero_sample_us\",\"mag_sample_us\",\"mag_sequence\",\"mag_aux_0\",\"mag_aux_1\",\"mag_aux_2\",\"mag_aux_3\",\"mag_aux_4\",\"mag_aux_5\",\"mag_aux_6\",\"mag_aux_7\"]}";
+  json += "\"pitch_mekf_detector_relative_deg\",\"mekf_detector_zero_predicted_abs_deg\",\"mekf_detector_zero_sample_us\",\"mag_sample_us\",\"mag_sequence\",\"mag_raw_x\",\"mag_raw_y\",\"mag_raw_z\",\"mag_rhall\",\"mag_factory_ok\",\"mag_value_valid\",\"mag_body_x_uT\",\"mag_body_y_uT\",\"mag_body_z_uT\",\"mag_norm_uT\"]}";
   json += ",";
   feet.appendMetadata(json);
   const String final_size_key = ",\"metadata_json_final_bytes\":";
