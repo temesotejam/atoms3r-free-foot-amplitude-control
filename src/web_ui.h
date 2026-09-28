@@ -37,5 +37,6 @@ class WebUi {
   OfflineRunSession offline_;
   uint32_t offline_poll_ms_ = 0;
   uint32_t start_command_id_ = 0;
+  float start_target_deg_ = Config::ENERGY_CONTROL_AUTONOMOUS_DEFAULT_TARGET_PEAK_DEG;
   bool start_submitted_ = false, cancel_sent_ = false;
 };

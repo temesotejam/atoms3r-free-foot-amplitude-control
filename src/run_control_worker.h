@@ -9,6 +9,7 @@
 #include "mekf_attitude_diagnostics.h"
 #include "control_work_profile.h"
 #include "control_latency.h"
+#include "autonomous_target.h"
 
 // One permanent controller owner, including idle and calibration. HTTP sends
 // commands and consumes POD snapshots; it never calls the live runner/IMU.
@@ -88,20 +89,26 @@ class RunControlWorker {
     portEXIT_CRITICAL(&mux_);
     return result;
   }
-  bool request(Command command) {
+  bool request(Command command,
+               float target_deg = Config::ENERGY_CONTROL_AUTONOMOUS_DEFAULT_TARGET_PEAK_DEG) {
     if (!ready() || command == Command::None) return false;
+    if (command == Command::Start && !autonomous_target::selectable(target_deg)) return false;
     portENTER_CRITICAL(&mux_);
     const bool accepted = !command_state_.pending && !snapshot_.running && !stop_requested_;
     if (accepted) {
-      command_ = command; command_state_.pending = true; ++command_state_.submitted;
+      command_ = command; command_target_deg_ = target_deg;
+      command_state_.pending = true; ++command_state_.submitted;
     }
     portEXIT_CRITICAL(&mux_);
     return accepted;
   }
-  Command takeCommand() {
+  Command takeCommand(float* target_deg = nullptr) {
     portENTER_CRITICAL(&mux_);
     const Command command = stop_requested_ ? Command::None : command_;
-    if (command != Command::None) command_ = Command::None;
+    if (command != Command::None) {
+      if (target_deg) *target_deg = command_target_deg_;
+      command_ = Command::None;
+    }
     portEXIT_CRITICAL(&mux_);
     return command;
   }
@@ -301,6 +308,7 @@ class RunControlWorker {
   mutable portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
   bool active_ = false, stop_requested_ = false;
   Command command_ = Command::None;
+  float command_target_deg_ = Config::ENERGY_CONTROL_AUTONOMOUS_DEFAULT_TARGET_PEAK_DEG;
   CommandState command_state_;
   RunControlSnapshot snapshot_;
   Audit audit_;

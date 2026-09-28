@@ -4,10 +4,13 @@ static const char RUNTIME_HTML[] PROGMEM = R"FREEFOOT(<!doctype html><html lang=
 <style>
 :root{font-family:system-ui,sans-serif;color:#1d293d;background:#eef2f5;font-size:16px}*{box-sizing:border-box}body{max-width:950px;margin:auto;padding:20px}h1{font-size:1.65rem;margin-bottom:4px}h2{font-size:1.08rem}p{line-height:1.6}.muted{color:#546477;font-size:.88rem}.card{background:white;border-radius:14px;padding:20px;margin:16px 0;border:1px solid #d9e1e8}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.value{font-size:2rem;font-variant-numeric:tabular-nums;margin:4px 0}.label{font-size:.85rem;color:#546477}button{padding:13px 18px;border:0;border-radius:8px;background:#174b8e;color:white;font:inherit;cursor:pointer;margin:4px 4px 4px 0}button:disabled{opacity:.4;cursor:default}#stop{background:#b62032}#clear,#cancel{background:#58677a}code,pre{font-family:ui-monospace,monospace}pre{white-space:pre-wrap;font-size:.78rem;overflow-wrap:anywhere}#connection{font-weight:600}progress{width:100%;height:24px}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px 4px;border-bottom:1px solid #e1e6eb}canvas{width:100%;height:120px;background:#f3f6fa;border-radius:8px}#message{min-height:26px;color:#9c2636}a{color:#174b8e}
 </style>
-<h1>AtomS3R Free-foot</h1><div class="muted">0.47.25 · Wi-Fi維持・運転中Web休止・姿勢STOP · 足角度はMEKF基準の暫定校正・観測用</div>
+<h1>AtomS3R Free-foot</h1><div class="muted">0.47.26 · 目標角8° / 10° / 12° · Wi-Fi維持・運転中Web休止 · 足角度はMEKF基準の暫定校正・観測用</div>
 <p id="connection">接続を確認中…</p>
 <section class="card"><div class="grid"><div><div class="label">状態</div><div class="value" id="state">—</div></div><div><div class="label">残り時間</div><div class="value" id="remaining">—</div></div><div><div class="label">胴体の左右揺動 · MEKF</div><div class="value" id="pitch">—</div></div><div><div class="label">指令 / 実測電流</div><div class="value" style="font-size:1.5rem" id="current">—</div></div></div>
 <p id="guide">起動後は静止させてください。LEDが点灯したら直立させ、左右マーカーが見える状態で2秒以上静止します。</p>
+<p><label for="target">目標角（胴体の片側振幅） </label><select id="target" disabled aria-describedby="target-help" style="font:inherit;padding:10px 14px;border:1px solid #aab8c6;border-radius:8px;background:white"><option value="8" selected>8°</option><option value="10">10°</option><option value="12">12°</option></select></p>
+<p class="muted" id="target-help">測定開始時のゼロ点から、左右それぞれの目標ピーク角です。開始前に選択し、測定中は固定します。</p>
+<p class="muted" id="run-target" role="status">目標角は測定開始時に適用します。</p>
 <button id="start" disabled>30秒測定を開始</button><button id="reconnect" style="display:none">終了・Web復帰を確認</button><button id="clear" disabled>ログを消去・次の測定へ</button>
 <div id="message" role="status"></div><p class="muted">開始・終了のLED同期はそれぞれ5秒。制御は既存のAutonomous、固定3ms補償、300mA / 最大100msパルスです。</p></section>
 <p class="muted">運転中もWi-Fiを維持し、Web更新を休止して本体で制御・観測・記録します。前後90°以上の傾斜で停止します。横倒しは姿勢STOPの対象にしません。姿勢を戻しても再始動しません。Wi-Fi接続と画面を保ったままお待ちください。終了後にWeb表示が復帰したらログを保存してください。Web復帰だけではログは消えません。本体の電源断・再起動では未取得のログが失われます。</p>
@@ -140,6 +143,8 @@ let transferRunning = false, cancelTransfer = false, completedFile = null, compl
 let offlineMode = false, offlineUntil = 0;
 let offlineGeneration = 0;
 const offlineKey = 'freefoot-offline-run-until';
+const targetChoices = [8, 10, 12];
+let targetInitialized = false, targetBootId = null, requestedTargetDeg = null;
 const nap = ms => new Promise(resolve => setTimeout(resolve, ms));
 function crc32(data, crc = 0) {
   crc = ~crc;
@@ -166,6 +171,7 @@ function controls() {
   const busy = commandInFlight || previewRunning || poseRunning || !!latest?.command?.pending;
   const building = latest?.export_phase === 'building';
   $('start').disabled = !fresh || busy || transferRunning || !latest.ready || latest.running || latest.export_phase !== 'empty';
+  $('target').disabled = $('start').disabled;
   $('clear').disabled = !fresh || busy || transferRunning || building || latest.running || !['FINISHED', 'ESTOP'].includes(latest.state);
   $('download').disabled = !fresh || busy || transferRunning || !latest.downloadable || latest.running;
   $('cancel').disabled = !transferRunning;
@@ -197,6 +203,9 @@ function renderOffline() {
   const remaining = Math.max(0, Math.ceil((offlineUntil - Date.now()) / 1000));
   $('connection').textContent = remaining ? 'Web更新を休止中 · Wi-Fi接続を維持してください' : 'Webの復帰待ち · 自動再試行';
   $('state').textContent = 'Web休止中';
+  $('run-target').textContent = requestedTargetDeg === null
+    ? '測定目標はWeb復帰後に本体の結果で確認します。'
+    : `開始要求の目標：${requestedTargetDeg}°（本体の結果はWeb復帰後に確認）`;
   $('remaining').textContent = remaining ? `${remaining} s（Web復帰目安）` : '復帰待ち';
   for (const id of ['pitch', 'current', 'right', 'left', 'fps']) $(id).textContent = '—';
   $('guide').textContent = '本体で制御・観測・記録を行います。開始5秒＋測定30秒＋終了5秒が予定時間です。前後90°以上の傾斜でSTOPします。横倒しは姿勢STOPの対象にしません。表示時間はPC側の目安で、実際の進行・終了を確認した値ではありません。';
@@ -245,6 +254,15 @@ function render(s) {
   $('current').textContent = `${s.motor_mA} / ${s.actual_mA} mA`;
   const f = s.foot, stale = !Number.isFinite(f.age_ms) || f.age_ms < 0 || f.age_ms > 500;
   const terminal = ['FINISHED', 'ESTOP'].includes(s.state);
+  if (targetChoices.includes(s.target_deg)) {
+    if (!targetInitialized || targetBootId !== s.boot_id || s.running || terminal) {
+      $('target').value = String(s.target_deg);
+      targetInitialized = true; targetBootId = s.boot_id;
+    }
+  }
+  $('run-target').textContent = s.running || terminal
+    ? `今回の測定目標：${format(s.target_deg, 0)}°`
+    : '目標角は測定開始時に適用します。';
   $('right').textContent = f.right_valid && (!stale || terminal) ? format(f.right_deg) + '°' : '—';
   $('left').textContent = f.left_valid && (!stale || terminal) ? format(f.left_deg) + '°' : '—';
   $('fps').textContent = terminal ? '停止中' : `${format(stale ? 0 : f.fps, 1)} / 15 fps`;
@@ -315,10 +333,15 @@ async function poll() {
 }
 async function startOfflineRun() {
   if (commandInFlight || offlineMode) return;
-  commandInFlight = true; setOffline(45000); $('message').textContent = '開始要求を送信中…';
+  const target = Number($('target').value);
+  if (!targetChoices.includes(target)) {
+    $('message').textContent = '目標角を8°・10°・12°から選択してください。'; return;
+  }
+  requestedTargetDeg = target;
+  commandInFlight = true; setOffline(45000); $('message').textContent = `目標${target}°の開始要求を送信中…`;
   try {
-    await request('/start-energy-control-autonomous', {method:'POST', kind:'text'});
-    $('message').textContent = '開始要求を受け付けました。Web休止後に本体が開始条件を確認します。Wi-Fi接続と画面をそのまま保ってお待ちください。';
+    await request(`/start-energy-control-autonomous?target_deg=${target}`, {method:'POST', kind:'text'});
+    $('message').textContent = `目標${target}°の開始要求を受け付けました。Web休止後に本体が開始条件を確認します。Wi-Fi接続と画面をそのまま保ってお待ちください。`;
   } catch (error) {
     if (/^\d{3}:/.test(error.message)) { clearOffline(); await refresh(); }
     $('message').textContent = `開始結果の確認: ${error.message}。Web復帰後に本体の結果を確認します。`;

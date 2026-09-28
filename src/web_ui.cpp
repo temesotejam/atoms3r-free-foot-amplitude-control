@@ -91,7 +91,7 @@ bool WebUi::stopServer() {
 }
 bool WebUi::queueStart() {
   start_command_id_ = control_->commandState().submitted + 1;
-  start_submitted_ = control_->request(RunControlWorker::Command::Start);
+  start_submitted_ = control_->request(RunControlWorker::Command::Start, start_target_deg_);
   return start_submitted_;
 }
 OfflineRunSession::StartResult WebUi::startResult() const {
@@ -138,8 +138,14 @@ void WebUi::command(RunControlWorker::Command cmd) {
     server_->send(409, "text/plain", "export_preparing"); return;
   }
   if (cmd == RunControlWorker::Command::Start) {
+    float target_deg;
+    if (!server_->hasArg("target_deg") ||
+        !autonomous_target::parse(server_->arg("target_deg").c_str(), target_deg)) {
+      server_->send(400, "text/plain", "target_deg_8_10_12_required_reload_page"); return;
+    }
     const bool ok = offline_.queue(millis());
     if (ok) {
+      start_target_deg_ = target_deg;
       start_submitted_ = cancel_sent_ = false;
       RuntimeDiag::setRunActive(true);
     }

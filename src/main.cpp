@@ -97,7 +97,8 @@ static bool controlStep(void*) {
     upright_stable = stable;
   }
   RuntimeDiag::phase(RuntimeDiag::Lane::Control, RuntimeDiag::Phase::ControlCommand);
-  const auto command = run_control.takeCommand();
+  float start_target_deg = 0.0f;
+  const auto command = run_control.takeCommand(&start_target_deg);
   if (command == RunControlWorker::Command::Start) {
     bool ok = false;
     const char* error = "clear_previous_run_first";
@@ -106,7 +107,8 @@ static bool controlStep(void*) {
       else if (!imu.acquisitionHealthy() || imu.stale(millis())) error = "imu_not_healthy";
       else if (!feet.readyToStart()) error = "foot_camera_and_upright_zero_required";
       else {
-        ok = runner.startEnergyControlAutonomousCapture();
+        ok = runner.setEnergyControlAutonomousTarget(start_target_deg) &&
+            runner.startEnergyControlAutonomousCapture();
         error = ok ? "started" : runner.status().last_error;
         if (ok) {
           run_started = true;

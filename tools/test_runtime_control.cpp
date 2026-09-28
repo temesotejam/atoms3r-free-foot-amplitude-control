@@ -4,12 +4,13 @@
 #define private public
 #include "../src/run_control_worker.h"
 #undef private
-struct Model {bool running=false;unsigned steps=0;RunControlWorker* worker=nullptr;};
+struct Model {bool running=false;unsigned steps=0;float target=8;RunControlWorker* worker=nullptr;};
 static bool step(void* p) {
   auto& m=*static_cast<Model*>(p); ++m.steps;
   if(m.worker->takeStopRequest()) m.running=false;
-  const auto command=m.worker->takeCommand();
-  if(command==RunControlWorker::Command::Start){m.running=true;m.worker->beginRunAudit();m.worker->completeCommand(true,"started");
+  float target=0;
+  const auto command=m.worker->takeCommand(&target);
+  if(command==RunControlWorker::Command::Start){m.target=target;m.running=true;m.worker->beginRunAudit();m.worker->completeCommand(true,"started");
     assert(!m.worker->commandPublished(m.worker->commandState().completed));}
   if(command==RunControlWorker::Command::Clear){m.running=false;m.worker->completeCommand(true,"cleared");}
   if(m.running){const auto t=micros();host_us+=750;m.worker->recordStep(t,100,600,750);}
@@ -17,15 +18,31 @@ static bool step(void* p) {
 }
 static void capture(void* p,RunControlSnapshot& s) {
   s.running=static_cast<Model*>(p)->running;s.state_id=s.running?3:2;host_us+=100;
+  s.target_deg=static_cast<Model*>(p)->target;
 }
 int main(){
+  for(const char* bad : {"", "9", "0", "-10", "14", "10junk", "nan", "inf", "1e999", "1e-999"}) {
+    float target=12;
+    assert(!autonomous_target::parse(bad,target)&&target==12);
+  }
+  float parsed=8;
+  assert(!autonomous_target::parse(nullptr,parsed)&&parsed==8);
+  assert(autonomous_target::parse("8",parsed)&&parsed==8);
+  assert(autonomous_target::parse("10.0",parsed)&&parsed==10);
+  assert(autonomous_target::parse("12",parsed)&&parsed==12);
   RunControlWorker w;Model m;m.worker=&w;
   assert(!w.request(RunControlWorker::Command::Start));
   assert(w.begin(step,capture,&m));assert(!w.begin(step,capture,&m));
   w.oneStep();w.oneStep();assert(m.steps==2&&!w.active()); // permanent idle owner
-  assert(w.request(RunControlWorker::Command::Start));
+  assert(!w.request(RunControlWorker::Command::Start,9));
+  assert(!w.request(RunControlWorker::Command::Start,NAN));
+  assert(!w.request(RunControlWorker::Command::Start,INFINITY));
+  assert(!w.commandState().pending&&w.commandState().submitted==0);
+  assert(w.request(RunControlWorker::Command::Start,10));
+  assert(!w.request(RunControlWorker::Command::Start,12)); // cannot replace accepted target
   assert(!w.request(RunControlWorker::Command::Clear)); // pending start blocks clear
   w.oneStep();assert(w.active()&&w.commandState().ok);
+  assert(m.target==10&&w.snapshot().target_deg==10);
   assert(w.commandPublished(w.commandState().completed));
   assert(!w.request(RunControlWorker::Command::Start));
   assert(!w.request(RunControlWorker::Command::Clear));
@@ -37,8 +54,9 @@ int main(){
   for(int i=0;i<100;++i)w.oneStep();
   assert(w.healthSnapshot().steps==audit.steps); // idle cannot alter run deadlines
   assert(control_work::profile.stages[0][static_cast<uint8_t>(control_work::Stage::Owner)].count==profile_done.count);
-  assert(w.request(RunControlWorker::Command::Start));
+  assert(w.request(RunControlWorker::Command::Start,12));
   assert(w.requestStop());w.oneStep();assert(!w.active()&&!w.commandState().pending);
+  assert(m.target==10); // cancelled START never changes the applied target
   assert(!w.commandState().ok); // STOP cancels queued START
   assert(w.request(RunControlWorker::Command::Clear));w.oneStep();assert(!w.active());
   w.beginRunAudit();w.last_step_start_us_=UINT32_MAX-200;host_us=300;
@@ -63,6 +81,16 @@ int main(){
   w.beginRunAudit();
   assert(w.audit_.sample_completion.count==0);
   for(const auto& group:w.audit_.input_cohorts)for(const auto& c:group)assert(c.count==0&&c.sum==0);
+  for(float target : Config::ENERGY_CONTROL_AUTONOMOUS_TARGET_CHOICES_DEG) {
+    assert(w.request(RunControlWorker::Command::Start,target));
+    w.oneStep();assert(m.target==target&&w.snapshot().target_deg==target);
+    assert(!w.request(RunControlWorker::Command::Start,8)); // running target is fixed
+    assert(w.requestStop());w.oneStep();
+    assert(w.request(RunControlWorker::Command::Clear));w.oneStep();
+  }
+  assert(w.request(RunControlWorker::Command::Start));w.oneStep();
+  assert(m.target==Config::ENERGY_CONTROL_AUTONOMOUS_DEFAULT_TARGET_PEAK_DEG);
   std::cout<<"permanent owner, command exclusion, STOP precedence, sealed audit and wrap PASS\n";
   std::cout<<"Completion input cohorts partition totals, preserve strict budget/wrap/gates and reset PASS\n";
+  std::cout<<"8/10/12 target parsing, atomic command payload, rejected replacement, cancellation and readback PASS\n";
 }
