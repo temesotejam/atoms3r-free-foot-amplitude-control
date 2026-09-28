@@ -336,7 +336,6 @@ void WebUi::previewCapture() {
   json += ",\"range\":" + footRangeDiagnosticsJson();
   json += ",\"calibration\":" + footCalibrationDiagnosticsJson();
   json += ",\"mekf\":" + mekfAttitudeJson(p.mekf_attitude, micros(), p.imu_ok);
-  json += ",\"magnetic\":" + magneticObservationJson(p.magnetic, micros());
   json += ",\"mekf_time_semantics\":\"control_snapshot_at_frame_delivery_not_exposure\"";
   json += ",\"right\":" + previewMarkerJson(p.right) + ",\"left\":" + previewMarkerJson(p.left) + "}";
   server_->sendHeader("Cache-Control", "no-store"); server_->send(200, "application/json", json);
