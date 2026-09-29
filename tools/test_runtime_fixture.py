@@ -70,7 +70,7 @@ header = converter.parse_header(data)
 metadata = converter.expand_tables(json.loads(data[110:110+header['metadata_json_size']], parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value))))
 assert metadata['metadata_json_final_bytes'] == header['metadata_json_size']
 assert not metadata['metadata_event_detail_truncated']
-assert metadata['firmware_revision']=='0.47.29-steering-response'
+assert metadata['firmware_revision']=='0.47.30-amplitude-only'
 latency=metadata['control_latency']
 assert latency['revision']=='control_latency_04724'
 details=latency['overrun_detail']
@@ -125,19 +125,18 @@ with tempfile.TemporaryDirectory() as tmp:
     converter.convert(source, output)
     with (output/'timeseries.csv').open() as stream:
         samples=list(csv.DictReader(stream))
-    assert float(samples[0]['gyro_heading_deg']) == 721.23
-    assert float(samples[0]['steering_delta_deg']) == .2
-    assert float(samples[0]['steering_actual_difference_deg']) == -1
-    assert samples[0]['gyro_heading_valid'] == '1'
-    assert metadata['steering']['delta_limit_deg'] == .2
-    assert metadata['steering']['delta_step_limit_deg_per_cycle'] == .08
-    assert metadata['steering']['feedback_enabled'] is False
-    assert metadata['steering']['profile'] == 'bounded_response_check'
-    assert metadata['steering']['first_delta_sign'] == 1
-    assert metadata['steering']['response_schedule_ms'] == [
-        {'from':0,'until':10000,'sign':0},{'from':10000,'until':18000,'sign':1},
-        {'from':18000,'until':26000,'sign':-1},{'from':26000,'until':30000,'sign':0}]
-    assert metadata['steering']['reason_codes']['7'] == 'response_return_to_zero'
+    for name in ('gyro_heading_deg','steering_actual_difference_deg',
+                 'steering_desired_difference_deg','steering_cycle_yaw_rate_dps'):
+        assert samples[0][name] == ''
+    assert float(samples[0]['steering_delta_deg']) == 0
+    assert samples[0]['gyro_heading_valid'] == '0'
+    assert samples[0]['steering_cycles'] == '0'
+    assert samples[0]['steering_reason'] == '8'
+    for name in ('enabled','feedback_enabled','heading_enabled','response_check_enabled'):
+        assert metadata['steering'][name] is False
+    assert metadata['steering']['profile'] == 'disabled'
+    assert metadata['steering']['reason_codes']['8'] == 'disabled'
+    assert 'response_schedule_ms' not in metadata['steering']
     assert header['metadata_json_size'] < metadata['metadata_json_budget_bytes']*.8
 
     assert len((output/'foot_angles.csv').read_text().splitlines()) == 769

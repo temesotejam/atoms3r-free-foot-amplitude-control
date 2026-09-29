@@ -23,7 +23,7 @@ struct RunControlSnapshot {
   uint8_t led_state = 0, sync_event_id = 0;
   float pitch_deg = 0, rate_dps = 0, target_deg = 0;
   MekfAttitudeSnapshot mekf_attitude;
-  steering::Snapshot steering;
+  steering::Snapshot steering = steering::disabledSnapshot();
   float upright_error_deg = 180, accel_norm_g = 0, gyro_norm_dps = 0;
   uint32_t imu_sample_us = 0;
   bool running = false;

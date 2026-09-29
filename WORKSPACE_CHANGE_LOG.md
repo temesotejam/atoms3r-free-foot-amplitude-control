@@ -1,3 +1,12 @@
+# 2026-09-29 / 0.47.30
+
+- User requested temporarily stopping yaw work to adjust amplitude-control items next.
+- Disconnect the independent gyro heading and steering controller from the runner, including the response schedule.
+- Use the selected target for both physical sides and retain command-target latching and the 8-degree model gate.
+- Mark compatibility observations disabled/unavailable in RWLOG v53; remove heading and schedule display.
+- Keep amplitude estimator/model/gains, current/pulse limits, acquisition, foot tracking and download flow.
+- Hardware behavior and deadline validation remain for the next run.
+
 # 2026-09-28 / 0.47.29
 
 - Qualify the 8-degree previous-peak model by the selected mean target, preserving time/support/coefficients.

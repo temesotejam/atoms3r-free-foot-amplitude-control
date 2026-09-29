@@ -66,7 +66,7 @@ class GyroHeading {
 
 enum class Reason : uint8_t {
   Waiting=0, Settling=1, Active=2, Invalid=3, Saturated=4,
-  ResponsePositive=5, ResponseNegative=6, ResponseReturn=7
+  ResponsePositive=5, ResponseNegative=6, ResponseReturn=7, Disabled=8
 };
 struct Snapshot {
   float yaw_deg=NAN, delta_deg=0, actual_difference_deg=NAN;
@@ -75,6 +75,13 @@ struct Snapshot {
   bool gyro_valid=false;
   Reason reason=Reason::Waiting;
 };
+
+// Keep the v53 diagnostic layout without claiming an unmeasured zero heading.
+inline Snapshot disabledSnapshot() {
+  Snapshot s;
+  s.reason=Reason::Disabled;
+  return s;
+}
 
 // Outer yaw loop requests a peak difference; the inner loop compares it with
 // measured A+ - A-. A nonzero difference is allowed when it produces zero yaw.

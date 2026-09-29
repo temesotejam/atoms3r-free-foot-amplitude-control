@@ -43,7 +43,7 @@ struct ExperimentStatus {
   float gyro_bias_pitch_dps = 0.0f;
   // V46 adopted attitude and online comparison diagnostics.
   MekfAttitudeSnapshot mekf_attitude;
-  steering::Snapshot steering;
+  steering::Snapshot steering = steering::disabledSnapshot();
   float pitch_mekf_deg = 0.0f;              // run-relative control/detector angle when applicable
   float pitch_mekf_abs_deg = 0.0f;          // posterior physical/video body-frame pitch
   float pitch_mekf_predicted_abs_deg = 0.0f; // one-step-ahead control-time pitch

@@ -87,10 +87,7 @@ public:
   const char* presetName() const { return "MEKF_ADOPTED_DYNAMIC_BETA_COMPARE_V46"; }
 
 private:
-  steering::GyroHeading gyro_heading_;
-  steering::Controller steering_;
-  float steering_candidate_yaw_ = NAN;
-  float steering_pending_target_deg_ = NAN;
+  float energy_control_autonomous_pending_target_deg_ = NAN;
   void beginFilters();
   void RW_SPEED_CODE updateFilterSeries(const ImuReading& r);
   void RW_SPEED_CODE finishDeferredComparison();

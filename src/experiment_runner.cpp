@@ -313,13 +313,6 @@ void ExperimentRunner::updateFilterSeries(const ImuReading& r) {
     status_.mekf_accel_mag_error_g = d.accel_magnitude_error_g;
     status_.mekf_accel_used = accel_is_new_for_filter && d.accel_used;
   }
-  if (energy_control_autonomous_mode_ && running()) {
-    gyro_heading_.update(-(r.gx_dps-gx_bias), (r.gy_dps-gy_bias)*Config::MEKF_GYRO_Y_SCALE,
-                         -(r.gz_dps-gz_bias), r.last_gyro_update_us);
-    status_.steering.gyro_valid = gyro_heading_.valid();
-    status_.steering.yaw_deg = gyro_heading_.yaw();
-    if (!gyro_heading_.valid()) status_.steering.reason = steering::Reason::Invalid;
-  }
   control_latency::mark(control_latency::Mekf);
   if (!v46_mekf_dynamic_compare && accel_is_new_for_filter) {
     filter_beta1_raw_.updateIMU(r.gx_dps, r.gy_dps, r.gz_dps, r.ax_g, r.ay_g, r.az_g);
@@ -1189,15 +1182,9 @@ void ExperimentRunner::recordV59StateGateEvent(uint32_t crossing_ms, float hprev
 }
 
 void ExperimentRunner::beginStartSync(uint32_t now_ms) {
-  steering_.reset(steering::Mode::ResponseCheck, status_.run_id);
-  steering_candidate_yaw_ = NAN;
-  steering_pending_target_deg_ = NAN;
-  const auto& gyro_start = imu_->reading();
-  gyro_heading_.reset(-gyro_start.ax_g, gyro_start.ay_g, -gyro_start.az_g,
-                      gyro_start.last_gyro_update_us);
-  status_.steering = steering_.state();
-  status_.steering.yaw_deg = gyro_heading_.yaw();
-  status_.steering.gyro_valid = gyro_heading_.valid();
+  // 0.47.30: amplitude only. No heading integration or side-target schedule.
+  energy_control_autonomous_pending_target_deg_ = NAN;
+  status_.steering = steering::disabledSnapshot();
   tilt_guard_.reset();
   // V46z comparison-zero begin
   captureMekfComparisonZero(status_.mekf_start_sync_zero_abs_deg,
@@ -2606,8 +2593,8 @@ bool ExperimentRunner::recordEnergyControlAutonomousPeak(uint32_t peak_ms, int8_
   event.peak_amplitude_deg = amplitude_deg;
   event.detector_peak_angle_deg = detector_peak_angle_deg;
   event.target_peak_deg = energy_control_autonomous_pending_peak_ &&
-      physical_side == energy_control_autonomous_pending_next_side_ && isfinite(steering_pending_target_deg_)
-      ? steering_pending_target_deg_ : steering_.target(energy_control_autonomous_target_peak_deg_, physical_side);
+      physical_side == energy_control_autonomous_pending_next_side_ && isfinite(energy_control_autonomous_pending_target_deg_)
+      ? energy_control_autonomous_pending_target_deg_ : energy_control_autonomous_target_peak_deg_;
   event.peak_error_deg = event.target_peak_deg - event.peak_amplitude_deg;
   event.first_peak = first_peak;
   event.pending_command_matched = energy_control_autonomous_pending_peak_ &&
@@ -2636,11 +2623,6 @@ bool ExperimentRunner::recordEnergyControlAutonomousPeak(uint32_t peak_ms, int8_
   event.phase = static_cast<uint8_t>(energy_control_autonomous_phase_);
   event.integral_plus_mA_s = energy_control_autonomous_integral_plus_mA_s_;
   event.integral_minus_mA_s = energy_control_autonomous_integral_minus_mA_s_;
-  steering_.peak(physical_side, amplitude_deg, gyro_heading_.valid() ? steering_candidate_yaw_ : NAN, peak_ms,
-                 event.antiwindup_upper_hold, event.antiwindup_lower_hold);
-  status_.steering = steering_.state();
-  status_.steering.yaw_deg = gyro_heading_.yaw();
-  status_.steering.gyro_valid = gyro_heading_.valid();
   logger_->addEnergyControlAutonomousPeakEvent(event);
   return true;
 }
@@ -2732,7 +2714,6 @@ void ExperimentRunner::updateEnergyControlAutonomousPeakTracker(uint32_t now_ms,
     energy_control_autonomous_candidate_detector_peak_abs_deg_ = detector_abs_deg;
     energy_control_autonomous_candidate_peak_amplitude_deg_ = detector_abs_deg;
     energy_control_autonomous_candidate_peak_ms_ = t_test_ms;
-    steering_candidate_yaw_ = gyro_heading_.yaw();
     energy_control_autonomous_return_samples_ = 0;
     return;
   }
@@ -2741,7 +2722,6 @@ void ExperimentRunner::updateEnergyControlAutonomousPeakTracker(uint32_t now_ms,
     energy_control_autonomous_candidate_detector_peak_abs_deg_ = detector_abs_deg;
     energy_control_autonomous_candidate_peak_amplitude_deg_ = detector_abs_deg;
     energy_control_autonomous_candidate_peak_ms_ = t_test_ms;
-    steering_candidate_yaw_ = gyro_heading_.yaw();
     energy_control_autonomous_return_samples_ = 0;
     return;
   }
@@ -2859,7 +2839,7 @@ void ExperimentRunner::updateEnergyControlAutonomousAtZeroCross(uint32_t t_test_
   event.previous_peak_time_ms = energy_control_autonomous_last_peak_ms_;
   event.previous_peak_side = energy_control_autonomous_last_peak_side_;
   event.previous_peak_amplitude_deg = energy_control_autonomous_last_peak_amplitude_deg_;
-  event.target_peak_deg = steering_.target(energy_control_autonomous_target_peak_deg_, event.physical_next_peak_side);
+  event.target_peak_deg = energy_control_autonomous_target_peak_deg_;
   // V6 normal excitation: command in the current zero-cross motion direction.
   // Physical side remains the sole selector of the side-specific Q gain.
   event.q_command_direction = event.physical_next_peak_side;
@@ -3066,7 +3046,7 @@ void ExperimentRunner::updateEnergyControlAutonomousAtZeroCross(uint32_t t_test_
   event.solver_selected_integer_width_ms = selected_width_ms;
   energy_control_autonomous_pending_peak_ = true;
   energy_control_autonomous_pending_next_side_ = event.physical_next_peak_side;
-  steering_pending_target_deg_ = event.target_peak_deg;
+  energy_control_autonomous_pending_target_deg_ = event.target_peak_deg;
   energy_control_autonomous_pending_q_command_mA_s_ = selected_q_mA_s;
   energy_control_autonomous_pending_saturated_upper_ = event.q_saturated_upper;
   energy_control_autonomous_pending_saturated_lower_ = event.q_saturated_lower;

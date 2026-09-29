@@ -141,71 +141,39 @@ int main(){
   r.maybeFinalizeTimingProbe();
  }
  assert(outputs>100 && rejected>100 && peak_events>10 && commands>100 && stops>100);
-#ifdef STEERING_INTEGRATION
+#ifdef AMPLITUDE_ONLY_INTEGRATION
  quiet=true;
- ExperimentRunner steered;setup(steered,log,imu,roller);roller_ok=write_ok=true;
- steered.energy_control_autonomous_target_peak_deg_=10;
- // Establish nonzero steering through the actual cycle controller.
- for(unsigned i=0;i<20;++i){
-   steered.steering_.peak(1,9,float(i)*2,i*1000+500,false,false);
-   steered.steering_.peak(-1,11,float(i)*2+1,i*1000+1000,false,false);
- }
- assert(steered.steering_.state().delta_deg>0);
- steered.energy_control_autonomous_last_peak_valid_=true;
- steered.energy_control_autonomous_last_peak_amplitude_deg_=10;
- steered.energy_control_autonomous_last_peak_side_=-1;
- steered.energy_control_autonomous_last_peak_ms_=12500;
- steered.energy_control_autonomous_last_accepted_zero_cross_valid_=false;
- steered.energy_control_autonomous_zero_cross_consumed_for_peak_=false;
- steered.energy_control_autonomous_phase_=Phase::ENERGY_CONTROL;
- steered.energy_control_autonomous_half_cycle_state_=Half::WAIT_ZERO_CROSS;
- steered.updateEnergyControlAutonomousAtZeroCross(13000,60,-.1f,.1f,.5f,13000.f);
- assert(steered.energy_control_autonomous_pending_peak_);
- const float chosen=steered.steering_pending_target_deg_;
- assert(chosen>10 && chosen<=11);
- assert(steered.status_.pulse_width_ms_setting<=100);
- // A later outer update cannot reinterpret the target of an issued command.
- steered.steering_.reset();
- steered.status_.pulse_active=false;
- steered.energy_control_autonomous_phase_=Phase::ENERGY_CONTROL;
- steered.energy_control_autonomous_half_cycle_state_=Half::WAIT_PEAK;
- assert(steered.recordEnergyControlAutonomousPeak(13500,1,9,9));
- assert(last_peak.pending_command_matched && last_peak.target_peak_deg==chosen);
- assert(last_peak.peak_error_deg==chosen-9);
- std::fprintf(stderr,"Production steering target -> bounded pulse -> latched response error PASS\n");
- // Regression: shifting an 8-degree side target must not silently disable
- // the existing previous-peak residual model. Exercise the production path.
- for(float mean : {8.f,10.f,12.f})for(uint16_t run : {uint16_t(1),uint16_t(2)})
- for(int side : {-1,1})for(unsigned time : {15000U,24000U}) {
+ // Equal targets throughout every former response interval, on either side,
+ // independent of run parity. Exercise the production solver and peak update.
+ for(float mean : {8.f,10.f,12.f})for(uint16_t run : {uint16_t(1),uint16_t(2),uint16_t(65535)})
+ for(int side : {-1,1})for(unsigned time : {9000U,10000U,15000U,18000U,24000U,26000U,29900U}) {
    ExperimentRunner p;setup(p,log,imu,roller);roller_ok=write_ok=true;
+   p.status_.run_id=run;
    p.energy_control_autonomous_target_peak_deg_=mean;
-   p.steering_.reset(steering::Mode::ResponseCheck,run);
-   p.steering_.peak(-1,mean,0,0,false,false);
-   for(unsigned ms=1000;ms<=time;ms+=1000) {
-     p.steering_.peak(1,mean,ms*.001f-.5f,ms-500,false,false);
-     p.steering_.peak(-1,mean,ms*.001f,ms,false,false);
-   }
-   const float delta=p.steering_.state().delta_deg;
-   assert(fabsf(delta)==.2f);
    p.energy_control_autonomous_last_peak_amplitude_deg_=8;
    p.energy_control_autonomous_last_peak_side_=-side;
    p.energy_control_autonomous_last_peak_ms_=time-500;
    host_us=(time+p.run_start_ms_)*1000U;
    p.updateEnergyControlAutonomousAtZeroCross(time,side*60.f,-side*.1f,side*.1f,.5f,float(time));
    assert(last_zero.valid && last_zero.physical_next_peak_side==side);
-   assert(last_zero.target_peak_deg==mean+side*delta);
+   assert(last_zero.target_peak_deg==mean);
    const float residual=last_zero.free_next_peak_amplitude_deg-last_zero.rate_baseline_peak_deg;
-   const float expected=mean==8 ? (side>0?.591392151f:-.157912422f) : 0.f;
+   const float expected=mean==8 && time>=10000 ? (side>0?.591392151f:-.157912422f) : 0.f;
    assert(fabsf(residual-expected)<1e-5f);
    assert(last_zero.pulse_width_ms<=100 && abs(last_zero.command_current_mA)<=300);
-   const float issued=last_zero.target_peak_deg;
-   p.steering_.reset();p.status_.pulse_active=false;
+   assert(p.status_.steering.reason==steering::Reason::Disabled);
+   assert(!p.status_.steering.gyro_valid && std::isnan(p.status_.steering.yaw_deg));
+   assert(p.status_.steering.delta_deg==0 && p.status_.steering.cycles==0);
+   // An issued command's target remains latched for its later response peak.
+   p.energy_control_autonomous_target_peak_deg_=mean+1;
+   p.status_.pulse_active=false;
    p.energy_control_autonomous_phase_=Phase::ENERGY_CONTROL;
    p.energy_control_autonomous_half_cycle_state_=Half::WAIT_PEAK;
-   assert(p.recordEnergyControlAutonomousPeak(time+300,side,mean,side*mean));
-   assert(last_peak.pending_command_matched && last_peak.target_peak_deg==issued);
+   assert(p.recordEnergyControlAutonomousPeak(time+300,side,mean-.5f,side*(mean-.5f)));
+   assert(last_peak.pending_command_matched && last_peak.target_peak_deg==mean);
+   assert(last_peak.peak_error_deg==.5f);
  }
- std::fprintf(stderr,"Production 8-degree mean gate with both response signs/sides; 10/12 bypass; bounded output and command latching PASS\n");
+ std::fprintf(stderr,"Production equal targets for 8/10/12 across both sides/run orders/schedule boundaries; residual gate, bounded outputs and latching PASS\n");
 #endif
 
  std::fprintf(stderr,"20000 decision states + 32000 sequential samples; outputs=%u rejected=%u peaks=%u\n",outputs,rejected,peak_events);
@@ -227,7 +195,7 @@ with tempfile.TemporaryDirectory(prefix='motion-speed-') as tmp:
                  '-I'+str(p),'-I'+str(ROOT/'tools/host_v46o'),'-I'+str(ROOT/'src'),str(p/'test.cpp'),
                  str(ROOT/'src/mekf6.cpp'),str(ROOT/'src/control_latency.cpp'),
                  str(ROOT/'tools/fixtures/adafruit_ahrs_2_4_0/Adafruit_AHRS_Madgwick.cpp'),
-                 *(['-DSTEERING_INTEGRATION=1'] if mode!='reference' else []),
+                 *(['-DAMPLITUDE_ONLY_INTEGRATION=1'] if mode!='reference' else []),
                  '-o',str(p/'test')]
         subprocess.run(command,check=True)
         results.append(subprocess.check_output([str(p/'test')]))

@@ -176,6 +176,12 @@ int main() {
     const auto roller_before = roller;
     host_us = now_us + 50000;
     encodeLogSample(result, status, roller, now_us, test_ms, start_us, ceilings);
+    assert(result.gyro_heading_cdeg == LOG_NAN_I32 && !result.gyro_heading_valid);
+    assert(result.steering_delta_cdeg == 0 && result.steering_cycles == 0);
+    assert(result.steering_actual_difference_cdeg == LOG_NAN_I16);
+    assert(result.steering_desired_difference_cdeg == LOG_NAN_I16);
+    assert(result.steering_cycle_yaw_rate_cdps == LOG_NAN_I16);
+    assert(result.steering_reason == static_cast<uint8_t>(steering::Reason::Disabled));
     assert(old.time_us == result.time_us);
     assert(old.t_test_ms == result.t_test_ms);
     assert(old.state_id == result.state_id);

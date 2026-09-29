@@ -31,22 +31,10 @@ vm.runInContext(code,context);
   await vm.runInContext('refresh()',context);
   assert.strictEqual(element('connection').textContent,'接続中');
   assert.strictEqual(element('start').disabled,false);
-  valid.run_id=0;await vm.runInContext('refresh()',context);
-  assert.match(element('steering-status').textContent,/＋側→−側/);
-  valid.run_id=1;await vm.runInContext('refresh()',context);
-  assert.match(element('steering-status').textContent,/−側→＋側/);
-  valid.run_id=65535;await vm.runInContext('refresh()',context);
-  assert.match(element('steering-status').textContent,/＋側→−側/);
-  valid.state='FINISHED';valid.steering={gyro_valid:true,reason:5,gyro_heading_deg:3,
-    cycle_yaw_rate_dps:1,target_plus_deg:10.2,target_minus_deg:9.8};
-  await vm.runInContext('refresh()',context);
-  assert.match(element('steering-status').textContent,/＋側を大きくする区間/);
-  assert.match(element('steering-status').textContent,/＋側目標 10.20° \/ −側目標 9.80°/);
-  assert.match(element('steering-status').textContent,/yaw自動補正は休止/);
-  valid.steering.reason=3;await vm.runInContext('refresh()',context);
-  assert.match(element('steering-status').textContent,/周期データが無効/);
-  valid.state='READY_TO_MEASURE';valid.run_id=0;delete valid.steering;
-  await vm.runInContext('refresh()',context);
+  assert(!code.includes('steering-status'));
+  const html=fs.readFileSync('web/index.html','utf8');
+  assert.match(html,/左右とも選択した角度/);
+  assert.doesNotMatch(html,/±0.2|応答確認|ジャイロ方位/);
   assert.strictEqual(element('right').textContent,'8.00°'); // Tilting does not invalidate a locked zero.
   assert.strictEqual(element('left').textContent,'-6.00°');
   valid.foot.right_in_range=false;

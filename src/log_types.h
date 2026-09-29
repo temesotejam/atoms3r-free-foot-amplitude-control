@@ -51,7 +51,8 @@ struct RwLogFileHeader {
 
 #pragma pack(push, 1)
 struct LogSample {
-  // v53: only active sway, raw IMU, current and steering observations.
+  // v53: active sway, raw IMU, current; retain the 16-byte steering suffix.
+  // 0.47.30 leaves heading/differences unavailable, delta/cycles zero, reason 8.
   uint32_t time_us;
   uint32_t t_test_ms;
   uint8_t state_id;

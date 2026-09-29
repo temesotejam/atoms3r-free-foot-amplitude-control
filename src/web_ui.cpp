@@ -176,16 +176,7 @@ void WebUi::status() {
   json += ",\"remaining_ms\":" + String(s.remaining_ms) + ",\"elapsed_ms\":" + String(s.measure_elapsed_ms);
   json += ",\"pitch_deg\":" + num(s.pitch_deg) + ",\"rate_dps\":" + num(s.rate_dps);
   json += ",\"mekf\":" + mekfAttitudeJson(s.mekf_attitude, micros(), s.imu_ok);
-  json += ",\"steering\":{\"profile\":\"bounded_response_check\",\"feedback_enabled\":false,\"gyro_heading_deg\":" + num(s.steering.yaw_deg);
-  json += ",\"first_delta_sign\":" + String(steering::responseFirstSign(s.run_id));
-  json += ",\"gyro_valid\":" + String(s.steering.gyro_valid ? "true" : "false");
-  json += ",\"delta_deg\":" + num(s.steering.delta_deg);
-  json += ",\"target_plus_deg\":" + num(s.target_deg + s.steering.delta_deg);
-  json += ",\"target_minus_deg\":" + num(s.target_deg - s.steering.delta_deg);
-  json += ",\"actual_difference_deg\":" + num(s.steering.actual_difference_deg);
-  json += ",\"cycle_yaw_rate_dps\":" + num(s.steering.cycle_yaw_rate_dps);
-  json += ",\"cycles\":" + String(s.steering.cycles);
-  json += ",\"reason\":" + String(static_cast<uint8_t>(s.steering.reason)) + "}";
+  json += ",\"steering\":{\"profile\":\"disabled\",\"enabled\":false,\"feedback_enabled\":false,\"heading_enabled\":false,\"response_check_enabled\":false,\"delta_deg\":0}";
   json += ",\"target_deg\":" + num(s.target_deg);
   json += ",\"motor_mA\":" + String(s.motor_cmd_mA) + ",\"actual_mA\":" + String(s.actual_current_mA);
   json += ",\"battery_mV\":" + String(s.battery_mV);
