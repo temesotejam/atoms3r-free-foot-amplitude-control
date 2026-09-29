@@ -1,6 +1,6 @@
 {
   "name": "AtomS3R Free-foot Runtime V2",
-  "version": "0.47.30-amplitude-only",
+  "version": "0.47.31-amplitude-refit",
   "builds": [
     {
       "chipFamily": "ESP32-S3",

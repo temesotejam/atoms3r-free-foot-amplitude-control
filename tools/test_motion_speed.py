@@ -158,8 +158,7 @@ int main(){
    assert(last_zero.valid && last_zero.physical_next_peak_side==side);
    assert(last_zero.target_peak_deg==mean);
    const float residual=last_zero.free_next_peak_amplitude_deg-last_zero.rate_baseline_peak_deg;
-   const float expected=mean==8 && time>=10000 ? (side>0?.591392151f:-.157912422f) : 0.f;
-   assert(fabsf(residual-expected)<1e-5f);
+   assert(fabsf(residual)<1e-5f); // retired 8-degree residual must not be stacked
    assert(last_zero.pulse_width_ms<=100 && abs(last_zero.command_current_mA)<=300);
    assert(p.status_.steering.reason==steering::Reason::Disabled);
    assert(!p.status_.steering.gyro_valid && std::isnan(p.status_.steering.yaw_deg));
@@ -173,7 +172,7 @@ int main(){
    assert(last_peak.pending_command_matched && last_peak.target_peak_deg==mean);
    assert(last_peak.peak_error_deg==.5f);
  }
- std::fprintf(stderr,"Production equal targets for 8/10/12 across both sides/run orders/schedule boundaries; residual gate, bounded outputs and latching PASS\n");
+ std::fprintf(stderr,"Production equal targets for 8/10/12; retired residual bypass; bounded outputs and latching PASS\n");
 #endif
 
  std::fprintf(stderr,"20000 decision states + 32000 sequential samples; outputs=%u rejected=%u peaks=%u\n",outputs,rejected,peak_events);
@@ -200,4 +199,4 @@ with tempfile.TemporaryDirectory(prefix='motion-speed-') as tmp:
         subprocess.run(command,check=True)
         results.append(subprocess.check_output([str(p/'test')]))
     assert results[0]==results[1], 'Real decision/pulse/state outputs differ from 0.47.24'
-    print(f'0.47.24/current production methods: {len(results[0])} serialized bytes exact (NaNs canonicalized); scheduling/physical timing unverified PASS')
+    print(f'0.47.24/current decision flow with shared current model/config: {len(results[0])} serialized bytes exact (NaNs canonicalized); scheduling/physical timing unverified PASS')

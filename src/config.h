@@ -124,12 +124,14 @@ static constexpr char ATTITUDE_VALIDATION_REVISION[] = "v46aj_fixed_3ms_compensa
 // V46ak changes observation only. ATTITUDE_VALIDATION_REVISION intentionally remains V46aj.
 static constexpr char AMPLITUDE_CONTROL_OBSERVATION_REVISION[] = "v46ak_pre_input_state_observation_20260920";
 // V46al-R2 previous-peak active control begin
-static constexpr char AMPLITUDE_CONTROL_REVISION[] = "v46alr2_previous_peak_active_control_stable_rwlog_20260921";
+static constexpr char AMPLITUDE_CONTROL_REVISION[] = "fixed_foot_mekf_rate_refit_04731_20260929";
 static constexpr char AMPLITUDE_CONTROL_BASELINE_SOURCE[] =
     "atoms3r-amplitude-control-v46ak-stable@bb9c5ed07c5ca8b3c6c6b5813b6c2f1b1f57a6ec";
 static constexpr char ENERGY_CONTROL_AUTONOMOUS_PREVIOUS_PEAK_MODEL_REVISION[] =
     "V46AK_5RUN_8DEG_10TO30S_PREV_RESIDUAL_20260921";
-static constexpr bool ENERGY_CONTROL_AUTONOMOUS_PREVIOUS_PEAK_CONTROL_ENABLED = true;
+// The old residual was fitted against the retired rate baseline. Do not stack
+// it on the 0.47.31 refit; preserve its coefficients only for old-log provenance.
+static constexpr bool ENERGY_CONTROL_AUTONOMOUS_PREVIOUS_PEAK_CONTROL_ENABLED = false;
 static constexpr float ENERGY_CONTROL_AUTONOMOUS_PREVIOUS_PEAK_TARGET_DEG = 8.0f;
 static constexpr float ENERGY_CONTROL_AUTONOMOUS_PREVIOUS_PEAK_TARGET_TOLERANCE_DEG = 0.01f;
 static constexpr uint32_t ENERGY_CONTROL_AUTONOMOUS_PREVIOUS_PEAK_ENABLE_AFTER_MS = 10000UL;
@@ -322,7 +324,7 @@ static constexpr uint32_t ENERGY_CONTROL_AUTONOMOUS_MIN_ZERO_TO_PEAK_MS = 125UL;
 // V46ai free-peak prediction: nonnegative side-specific zero-cross rate formula.
 // The geometric potential remains the angle/energy conversion for the solver.
 static constexpr char ENERGY_CONTROL_AUTONOMOUS_FREE_MODEL_REVISION[] =
-    "ZERO_CROSS_RATE_ONLY_NONNEGATIVE_20260919";
+    "FIXED_FOOT_MEKF_RATE_REFIT_20260929";
 static constexpr float ENERGY_CONTROL_AUTONOMOUS_INTEGRAL_KI_MAS_PER_DEG = 0.10f;
 static constexpr uint16_t ENERGY_CONTROL_AUTONOMOUS_MAX_EVENTS = 256;
 static constexpr uint8_t ENERGY_CONTROL_AUTONOMOUS_REASON_NONE = 0;
@@ -826,7 +828,6 @@ static constexpr size_t LOG_BUFFER_BYTES = 5UL * 1024UL * 1024UL;
 static constexpr uint8_t BUFFER_WARNING_PERCENT = 90;
 
 }  // namespace Config
-
 
 
 

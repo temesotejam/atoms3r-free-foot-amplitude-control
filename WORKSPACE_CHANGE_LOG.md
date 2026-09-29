@@ -1,3 +1,14 @@
+# 2026-09-29 / 0.47.31
+
+- User supplied three fixed-foot 8/10/12-degree recordings and requested urgent amplitude correction.
+- Match 204 valid normal zero-cross commands to the next pending peak; verify side, time and recorded Q.
+- Refit the existing nonnegative rate-only MEKF predictor, keeping Q gains fixed because closed-loop inputs do not identify an independent causal gain.
+- Disable the retired baseline's 8-degree previous-peak residual; keep yaw disabled and symmetric selected targets.
+- Preserve the estimator, geometric potential, Q solver, integral gains, pulse/current limits, 3ms delay and log layout.
+- Add measured regression fixture with source SHA-256, reproducible fit and whole-run holdout checks against production C++.
+- Prediction RMSE: old recorded 1.412430 degrees, fit 0.318973 degrees, leave-one-run-out 0.497029 degrees.
+- These are one-step predictions with recorded inputs, not new closed-loop measurements. Optical/MEKF center mismatch and new hardware timing remain to be checked.
+
 # 2026-09-29 / 0.47.30
 
 - User requested temporarily stopping yaw work to adjust amplitude-control items next.

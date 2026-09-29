@@ -13,30 +13,31 @@
     <header class="hero">
       <p class="eyebrow">ATOMS3R / FREE-FOOT AMPLITUDE CONTROL</p>
       <h1>Free-foot Runtime V2<br><span>左右足角度・制御・ログを統合</span></h1>
-      <p class="lead">Free-foot Runtime V2 / 0.47.30。yaw関連機能を停止し、左右とも選択した目標角で30秒間の振幅制御を行います。起動・目標角選択・測定・ログ保存の操作は同じです。</p>
+      <p class="lead">Free-foot Runtime V2 / 0.47.31。固定足の8°・10°・12°データで次ピーク予測を調整しました。左右とも選択した目標角で30秒間の振幅制御を行います。起動・目標角選択・測定・ログ保存の操作は同じです。</p>
       <div class="badges"><span>ESP32-S3</span><span>BMI270 400/200 Hz</span><span>RWLOG v53</span><span>MEKF</span><span>左右足角度</span></div>
     </header>
     <section class="panel important">
       <h2>今回の構成</h2>
-<p>yaw自動補正、左右目標を±0.2°ずらす応答確認、独立ジャイロ方位の計算・表示を停止しました。左右とも選択した8°・10°・12°を目標にします。8°用の前回ピーク補正は、選択した目標角に応じて適用します。</p>
+<p>yaw自動補正、左右目標を±0.2°ずらす応答確認、独立ジャイロ方位の計算・表示を停止しました。左右とも選択した8°・10°・12°を目標にします。8°付近で求めた旧予測式を、今回の3測定に合わせて再調整しました。旧式用の8°専用補正も停止します。</p>
+      <p>保存済みデータの次ピーク予測は、1測定ずつ除いた検証でRMSEが約1.41°から0.50°へ改善しました。更新後の実際の振幅は次の固定足測定で確認します。<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/AMPLITUDE_MODEL_04731.md">予測式と検証結果</a></p>
       <p>横揺れのMEKF推定、固定3ms補償、300mA・最大100msパルス、30秒測定、開始・終了のLED同期を維持。白マーカーの位置から左右足角度を取得・表示・保存します。足角度は観測用で、制御入力には使用しません。</p>
       <p>RWLOGは1試料112バイト。MEKFのyaw復元用クォータニオン、地磁気、未使用の比較系列を除き、足・イベントは項目名を共有して保存します。測定後にログを確定し、CRCで検証できる4KB以下のチャンクで取得します。ブラウザの一時停止・再接続・再読み込み後も保存済みの部分を再利用できます。</p>
-      <p><strong>今回の校正はMEKFを基準にした暫定値です。係数決定に使わなかった手持ち2姿勢では、再計算上の残差が左右とも約0.26〜0.32°です。</strong>ビルドとホスト検証の範囲、実機で確認する項目は<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/FOOT_CALIBRATION_0477.md">校正の根拠</a>を参照してください。カメラは15fpsを目標に設定し、画面に実測値を表示します。</p>
-      <p>WebUIの開始ボタンの上で目標角を選択します。胴体のゼロ点から左右それぞれのピークまでの片側振幅で、初期値は8°です。8°より大きい振幅の試験は、まず10°で30秒測定し、終了後の目標角表示とRWLOG・足CSVを確認してください。既存の直前ピーク補正は8°専用で、10°・12°では適用されません。</p>
-      <p>変更前の0.47.25では、目標8°の5回で制御完了2.5 ms超過が0/60,708回でした。0.47.30の実機での処理時間は未確認です。次の通常測定で、同じ2.5 ms期限の超過回数・最大値・取得欠落を比較します。<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/README.md">変更内容と実測記録</a></p>
+      <p><strong>足角度の校正はMEKFを基準にした暫定値です。係数決定に使わなかった手持ち2姿勢では、再計算上の残差が左右とも約0.26〜0.32°です。</strong>ビルドとホスト検証の範囲、実機で確認する項目は<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/docs/FOOT_CALIBRATION_0477.md">校正の根拠</a>を参照してください。カメラは15fpsを目標に設定し、画面に実測値を表示します。</p>
+      <p>WebUIの開始ボタンの上で目標角を選択します。胴体のゼロ点から左右それぞれのピークまでの片側振幅で、初期値は8°です。8°より大きい振幅の試験は、まず10°で30秒測定し、終了後の目標角表示とRWLOG・足CSVを確認してください。新しい予測式は8°・10°・12°で共通に使用します。旧式用の直前ピーク補正は停止しています。</p>
+      <p>変更前の0.47.25では、目標8°の5回で制御完了2.5 ms超過が0/60,708回でした。0.47.31の実機での処理時間は未確認です。次の通常測定で、同じ2.5 ms期限の超過回数・最大値・取得欠落を比較します。<a href="https://github.com/temesotejam/atoms3r-free-foot-amplitude-control/blob/main/README.md">変更内容と実測記録</a></p>
       <p>公開ビルド：<code id="build-sha">取得中</code><br><a href="build-sha.txt">ビルドSHA</a> / <a href="firmware/SHA256SUMS.txt">ファームウェアSHA-256</a></p>
     </section>
     <section class="panel important">
       <h2>書き込みと測定</h2>
       <p>書き込み時はPCをインターネットにつながるWi-Fiまたは有線LANへ接続し、AtomS3RをUSBでつないでください。PC版ChromeまたはEdgeで下のボタンを押します。機体のWi-Fiへ切り替えるのは書き込み完了後です。</p>
       <esp-web-install-button manifest="manifest-freefoot-runtime-v2.json">
-        <button slot="activate" class="primary">0.47.30 振幅制御版を書き込む</button>
+        <button slot="activate" class="primary">0.47.31 振幅予測の調整版を書き込む</button>
         <span slot="unsupported" class="warning">PC版ChromeまたはEdgeを使用してください。</span>
       </esp-web-install-button>
       <ol>
         <li>測定時はバッテリーで起動し、Wi-Fi <code>AtomS3CAM_Q1_SHADOW</code>（パスワード <code>12345678</code>）へ接続します。</li>
         <li><a href="http://192.168.4.1/">http://192.168.4.1/</a>を開きます。起動時のUSB待機8秒＋従来の10秒後のLED点灯を目安に胴体と両足を直立させ、左右の白マーカーが見える状態で2秒以上静止してください。</li>
-        <li>書き換え後はWebUIを再読み込みし、0.47.30と目標角の選択欄を確認します。左右のゼロ点が確定して開始可能になったら、8°・10°・12°から選び「30秒測定を開始」を押します。</li>
+        <li>書き換え後はWebUIを再読み込みし、0.47.31と目標角の選択欄を確認します。左右のゼロ点が確定して開始可能になったら、8°・10°・12°から選び「30秒測定を開始」を押します。</li>
         <li>測定終了後は「今回の測定目標」を確認し、「RWLOGを取得・再開」と足角度CSVで保存します。</li>
         <li>次の測定には「ログを消去・次の測定へ」を使い、目標角を選び直せます。足角度のゼロ点は同じ起動中は保持され、胴体の測定ゼロ点は各Run開始時に取得します。</li>
       </ol>

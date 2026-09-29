@@ -2855,11 +2855,8 @@ void ExperimentRunner::updateEnergyControlAutonomousAtZeroCross(uint32_t t_test_
   event.rate_baseline_peak_deg = baseline.rate_deg;  // raw formula, before zero floor
   event.rate_baseline_correction_deg = NAN;  // retired P1-difference column
   event.rate_baseline_reason = static_cast<uint8_t>(baseline.reason);
-  // V46al-R2 previous-peak active control begin
-  // Keep the stable V46ak RWLOG event layout unchanged. The correction is fully
-  // reconstructible from the previous peak, side, selected mean target and
-  // zero-cross time. Steering must not toggle model eligibility; the actual
-  // side target remains the input to the solver and the latched peak error.
+  // 0.47.31: the old 8-degree residual is disabled in Config because the
+  // rate baseline has been refitted. The helper now passes the baseline through.
   const auto previous_peak_result = previous_peak_control::evaluate(
       baseline.adjusted_deg, event.previous_peak_amplitude_deg,
       event.physical_next_peak_side, energy_control_autonomous_target_peak_deg_, t_test_ms);
@@ -5850,7 +5847,6 @@ const char* ExperimentRunner::stateName() const {
   }
   return "UNKNOWN";
 }
-
 
 
 

@@ -70,7 +70,12 @@ header = converter.parse_header(data)
 metadata = converter.expand_tables(json.loads(data[110:110+header['metadata_json_size']], parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value))))
 assert metadata['metadata_json_final_bytes'] == header['metadata_json_size']
 assert not metadata['metadata_event_detail_truncated']
-assert metadata['firmware_revision']=='0.47.30-amplitude-only'
+assert metadata['firmware_revision']=='0.47.31-amplitude-refit'
+assert metadata['rate_baseline_revision']=='fixed_foot_mekf_rate_refit_04731_20260929'
+assert metadata['previous_peak_residual_enabled'] is False
+assert metadata['rate_baseline_previous_peak_used'] is False
+assert '204_matched_normal_commands' in metadata['rate_baseline_fit_source']
+assert 'not_closed_loop_validation' in metadata['rate_baseline_fit_source']
 latency=metadata['control_latency']
 assert latency['revision']=='control_latency_04724'
 details=latency['overrun_detail']
